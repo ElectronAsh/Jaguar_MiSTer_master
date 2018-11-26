@@ -1,0 +1,289 @@
+(* lego.net building blocks *)
+
+IMPORT	power,moto;
+
+DEF	FDR (q,ql:IO; d,clk,resl:IN);
+
+(* latch with synchronous clear *)
+
+BEGIN
+
+D	:=	AN2 (d1,d,resl);
+Q	:=	FD1 (q,ql,d1,clk);
+
+END;
+
+DEF	SLATCH (q:IO; d,clk,en:IN);
+
+(* synchronous latch *)
+
+BEGIN
+
+/*D	:=	MX2 (d1,q,d,en);
+**Q	:=	FD1Q (q,d1,clk);
+*/
+Q	:=	FD1E (q,qb,q,clk,d,en);
+Dummy	:=	DUMMY (qb);
+END;
+
+DEF	SLATCHC (q:IO; d,clk,en,resl:IN);
+
+(* synchronous latch with async active low clear *)
+
+BEGIN
+
+/*D	:=	MX2 (d1,q,d,en);
+**Q	:=	FD2Q (q,d1,clk,resl);
+*/
+Q	:=	FD2E (q,qb,q,clk,resl,d,en);
+Dummy	:=	DUMMY (qb);
+END;
+
+DEF	SLATCHR (q:IO; d,clk,en,resl:IN);
+
+(* synchronous latch with SYNCHRONOUS active low clear *)
+
+BEGIN
+
+D1	:=	MX2 (d1,q,d,en);
+D2	:=	AN2 (d2,d1,resl);
+Q	:=	FD1Q (q,d2,clk);
+
+END;
+
+
+DEF	SLATCHP (q:IO; d,clk,en,setl:IN);
+
+(* synchronous latch with async active low preset *)
+
+BEGIN
+
+/*D	:=	MX2 (d1,q,d,en);
+**Q	:=	FD4Q (q,d1,clk,setl);
+*/
+Q	:=	FD4E (q,qb,q,clk,setl,d,en);
+Dummy	:=	DUMMY (qb);
+END;
+
+DEF	STLATCH (d1:IO; d,clk,en:IN);
+
+(* synchronous transparent latch *)
+
+BEGIN
+
+D	:=	MX2 (d1,q,d,en);
+Q	:=	FD1Q (q,d1,clk);
+
+END;
+
+
+DEF	UPCNT (q,co:IO; d,clk,ci,ld,resl:IN);
+
+(* one bit up counter with synchronous load, enable & async reset *)
+
+BEGIN
+(*
+#GRIDCOUNT 25
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Q :=	COUNT_PRIM (q,co,d,clk,vcc,ci,ld,gnd,resl);
+Vcc :=	TIE1 (vcc);
+Gnd :=	TIE0 (gnd);
+*)
+
+Q :=	FD2Q (q,d2,clk,resl);
+D2 :=	MX2 (d2,d1,d,ld);
+D1 :=	EO (d1,q,ci);
+Co :=	AN2 (co,ci,q);
+
+END;
+
+DEF	UPCNTS (q,co:IO; d,clk,ci,ld,res:IN);
+
+(* one bit up counter with synchronous load, enable & reset *)
+(* NB active high reset *)
+
+BEGIN
+
+D1 :=	EO (d1,ci,q);
+D2 :=	MXI2 (d2,d1,d,ld);
+D3 :=	NR2 (d3,res,d2);
+Q :=	FD1Q (q,d3,clk);
+Co :=	AN2 (co,ci,q);
+
+END;
+
+DEF	DNCNT (q,co:IO; d,clk,ci,ld,resl:IN);
+
+(* one bit down counter with synchronous load, enable & async reset *)
+
+BEGIN
+(*
+#GRIDCOUNT 25
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Q :=	COUNT_PRIM (q,co,d,clk,gnd,ci,ld,gnd,resl);
+Gnd :=	TIE0 (gnd);
+*)
+
+Q :=	FD2Q (q,d2,clk,resl);
+D2 :=	MX2 (d2,d1,d,ld);
+D1 :=	EO (d1,q,ci);
+Ql :=	IV (ql,q);
+Co :=	AN2 (co,ci,ql);
+
+END;
+
+DEF	DNCNTS (q,co:IO; d,clk,ci,ld,resl:IN);
+
+(* one bit down counter with synchronous load, enable & reset *)
+
+BEGIN
+
+Q :=	FD1Q (q,d3,clk);
+D3 :=	AN2 (d3,d2,resl);
+D2 :=	MX2 (d2,d1,d,ld);
+D1 :=	EO (d1,q,ci);
+Ql :=	IV (ql,q);
+Co :=	AN2 (co,ci,ql);
+
+END;
+
+
+DEF	UPCNT1 (q,co:IO; clk,ci,resl:IN);
+
+(* one bit up counter with synchronous enable & async reset *)
+
+BEGIN
+(*
+#GRIDCOUNT 20
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Q :=	COUNT_PRIM (q,co,gnd,clk,vcc,ci,gnd,gnd,resl);
+Vcc :=	TIE1 (vcc);
+Gnd :=	TIE0 (gnd);
+*)
+
+Q :=	FD2Q (q,d1,clk,resl);
+D1 :=	EO (d1,q,ci);
+Co :=	AN2 (co,ci,q);
+
+END;
+
+DEF	UDCNT (q,co:IO; d,clk,ci,ld,up:IN);
+
+(* one bit up/down counter with synchronous load & enable *)
+
+BEGIN
+(*
+#GRIDCOUNT 26
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Q :=	COUNT_PRIM (q,co,d,clk,up,ci,ld,gnd,vcc);
+Vcc :=	TIE1 (vcc);
+Gnd :=	TIE0 (gnd);
+*)
+Q :=	FD1Q (q,d2,clk);
+D2 :=	MX2 (d2,d1,d,ld);
+D1 :=	EO (d1,q,ci);
+Q1 :=	EN (q1,q,up);
+Co :=	AN2 (co,ci,q1);
+
+END;
+
+DEF	UDCNT1 (q,co:IO; clk,ci,up,resl:IN);
+
+(* one bit up/down counter with synchronous enable and async reset *)
+
+BEGIN
+(*
+#GRIDCOUNT 26
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Q :=	COUNT_PRIM (q,co,gnd,clk,up,ci,gnd,gnd,resl);
+Vcc :=	TIE1 (vcc);
+Gnd :=	TIE0 (gnd);
+*)
+
+Q :=	FD2Q (q,d1,clk,resl);
+D1 :=	EO (d1,q,ci);
+Q1 :=	EN (q1,q,up);
+Co :=	AN2 (co,ci,q1);
+
+END;
+
+(* JK with synchronous reset *)
+
+DEF	FJKR	(q,ql:IO; j,k,clk,r:IN);
+
+BEGIN
+
+A	:=	ND2 (a,j,ql);
+B	:=	OR2 (b,k,ql);
+D	:=	ND2 (d,a,b);
+E	:=	AN2 (e,d,r);
+Q	:=	FD1 (q,ql,e,clk);
+
+END;
+
+DEF	DEC38GH	(z[0..7]:IO;a,b,c,g:IN);
+
+BEGIN
+
+Al	:=	IVH (al,a);
+Bl	:=	IVH (bl,b);
+Cl	:=	IVH (cl,c);
+Gl	:=	IVH (gl,g);
+
+Z[0]	:=	AN4P (z[0],cl,bl,al,gl);
+Z[1]	:=	AN4P (z[1],cl,bl,a,gl);
+Z[2]	:=	AN4P (z[2],cl,b,al,gl);
+Z[3]	:=	AN4P (z[3],cl,b,a,gl);
+Z[4]	:=	AN4P (z[4],c,bl,al,gl);
+Z[5]	:=	AN4P (z[5],c,bl,a,gl);
+Z[6]	:=	AN4P (z[6],c,b,al,gl);
+Z[7]	:=	AN4P (z[7],c,b,a,gl);
+
+END;
+
+(* TOSHIBA replace with D38H *)
+
+DEF	DEC38H	(z[0..7]:IO;a,b,c:IN);
+
+BEGIN
+
+G	:=	TIE0(g);
+A	:=	DEC38GH (z[0..7],a,b,c,g);
+
+END;
+
+DEF	NAND9	(z:IO;i[0..8]:IN);
+
+BEGIN
+
+Z1	:=	ND3 (z1,i[0..2]);
+Z2	:=	ND3 (z2,i[3..5]);
+Z3	:=	ND3 (z3,i[6..8]);
+Z	:=	OR3 (z,z1,z2,z3);
+
+END;
+
+DEF     TWONIV  (z:IO; a:IN);
+ 
+BEGIN
+ 
+Y :=    NIV (y,a);
+Z :=    NIV (z,y);
+ 
+END;
+

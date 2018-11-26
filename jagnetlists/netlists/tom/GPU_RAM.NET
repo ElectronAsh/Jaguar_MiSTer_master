@@ -1,0 +1,115 @@
+/******************************************************************
+gpu_ram.net
+21/2/91
+
+The GPU local RAM
+-----------------
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF GPU_RAM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+	gpu_memw	/* GPU system write enable */
+	ram_addr[2..11]	/* address to internal RAM */
+	ramen		/* RAM enable */
+	:IN);
+(* GE 18/06/2012 Added missing declarations *)
+INT10/	rama
+BEGIN
+
+/* WARNING - ensure write meets Trh requirement */
+
+/* Attempt to gain address hold margin with dbuffers */
+
+Ramad[0-9]	:= NIVNIV (ramad[0-9], ram_addr[2-11]);
+Rama		:= JOIN (rama, ramad[0..9]);
+/*Roma		:= JOIN (roma, ramad[0..9]);
+*/
+Ramwe		:= ND2 (ramwe, ramen, gpu_memw);
+
+Program		:= GPURAM (gpu_data, clk, rama, ramen, ramwe);
+/*
+**Progrom	:= GPUROM (gpu_data, clk, roma, romen);
+*/
+END;
+
+DEF GPURAM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+INT10/	rama
+	ramen		/* RAM enable */
+	ramwe		/* RAM write control */
+	:IN);
+#if TOSHIBA
+INT16/	gpudlo, gpudhi 
+:LOCAL;
+#endif
+BEGIN
+Ramcs		:= CLKGEN (ramcs, clk, ramen);
+
+#if TOSHIBA
+
+Gpudlo		:= JOIN_BUS (gpudlo, gpu_data{0..15});
+Gpudhi		:= JOIN_BUS (gpudhi, gpu_data{16..31});
+Gpu_data	:= JOIN_BUS (gpu_data, gpudlo, gpudhi);
+
+/* RAM uses 2 1024 x 16 modules */
+
+Ramlo		:= ABA016A (gpudlo, ramcs, ramwe, rama);
+Ramhi		:= ABA016B (gpudhi, ramcs, ramwe, rama);
+
+
+#endif
+#if VERILOG
+
+Ram		:= ABA032A (gpu_data, ramcs, ramwe, rama);
+
+#endif
+#if FLARE
+
+Ram		:= ABA032A (gpu_data, ramcs, ramwe, rama);
+
+#endif
+END;
+
+DEF GPUROM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+INT10/	roma
+	romen		/* ROM enable */
+	:IN);
+#if TOSHIBA
+INT16/	gpudlo, gpudhi 
+:LOCAL;
+#endif
+BEGIN
+
+Romcs		:= CLKGEN (romcs, clk, romen);
+
+#if TOSHIBA
+
+Gpudlo		:= JOIN_BUS (gpudlo, gpu_data{0..15});
+Gpudhi		:= JOIN_BUS (gpudhi, gpu_data{16..31});
+Gpu_data	:= JOIN_BUS (gpu_data, gpudlo, gpudhi);
+
+/* ROM uses 2 1024 x 16 modules */
+
+Progrom[0]	:= RAA016A (gpudlo, romcs, roma);
+Progrom[1]	:= RAA016B (gpudhi, romcs, roma);
+
+
+#endif
+#if FLARE
+Progrom		:= RAA032A (gpu_data, romcs, roma);
+#endif
+#if VERILOG
+Progrom		:= RAA032A (gpu_data, romcs, roma);
+#endif
+END;
+
+

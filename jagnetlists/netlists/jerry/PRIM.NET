@@ -1,0 +1,284 @@
+(******************************************************************
+prim.net
+14/1/91
+
+Simulation primitive definitions
+--------------------------------
+WARNING - this file must match prim.c
+******************************************************************)
+
+/* Combinational gates
+These may have up to 8 inputs, and can be of any width
+*/
+
+DEF AND_PRIM (q :OUT; a[0..7] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF NAND_PRIM (q :OUT; a[0..7] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF OR_PRIM (q :OUT; a[0..7] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF NOR_PRIM (q :OUT; a[0..7] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF XOR_PRIM (q :OUT; a[0..7] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Inverter and buffer can be any width */
+
+DEF INV_PRIM (q :OUT; a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF BUF_PRIM (q :OUT; a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF PUP_PRIM (q :TRI; a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF PDOWN_PRIM (q :TRI; a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* delay model - use with extreme care */
+
+DEF DELAY_PRIM (q :OUT; a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Multiplexers can handle any width */
+
+DEF MUX2_PRIM (q :OUT; a, b, BIT/s, BIT/ena\ :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF MUX4_PRIM (q :OUT; a, b, c, d, BIT/s[0..1], BIT/ena\ :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF MUX8_PRIM (q :OUT; a[0..7], BIT/s[0..2], BIT/ena\ :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Bit-wide tie-offs */
+
+DEF TIE1_PRIM (BIT/one :OUT);
+
+BEGIN
+#PRIMITIVE
+END;
+
+DEF TIE0_PRIM (BIT/zero :OUT);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Dummy primitive can be used to load inputs to avoid warnings */
+
+DEF DUMMY_PRIM (a :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Flip-flop and latch can be any width */
+
+DEF FLIPFLOP_PRIM (q, q\ :OUT; 
+		d, BIT/clk, BIT/pre\, BIT/clr\ :IN);
+BEGIN
+#PRIMITIVE
+END;
+
+DEF FLIPFLOPS_PRIM (q, q\ :OUT; 
+		d, BIT/clk, BIT/pre\, BIT/clr\, ti, BIT/te :IN);
+BEGIN
+#PRIMITIVE
+END;
+
+DEF LATCH_PRIM (q, qbar\ :OUT; 
+		d, BIT/g, BIT/pre\, BIT/clr\ :IN);
+BEGIN
+#PRIMITIVE
+END;
+
+(* Tri-state driver, non-inverting, active high enable *)
+
+DEF TRISTATE_PRIM (z :TRI; d, BIT/en :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+(* Tri-state driver, non-inverting, active high enable 
+Output is type OUT, for chip level tri-state outputs only *)
+
+DEF TSOUTPUT_PRIM (z :OUT; d, BIT/en :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+(* Full adder, any width *)
+
+DEF ADDER_PRIM (q, BIT/co :OUT; a, b, BIT/ci :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+(* Joining node - input count checking not performed here, 32
+inputs is the maximum  *)
+
+DEF JOIN (q :OUT; a[0..31] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Joining node for bus types */
+
+DEF JOIN_BUS (q :TRI; a[0..31] :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Multiply primitive (up to 16 times 16 bits) */
+
+DEF MULT_PRIM (q :OUT; a, b, BIT/signed_a, BIT/signed_b :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Magnitude comparator */
+
+DEF MAG_PRIM (BIT/gto, BIT/eqo, BIT/lto :OUT; 
+	BIT/gti, BIT/eqi, BIT/lti, a, b :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Barrel shifter */
+
+DEF BRL_PRIM (z :OUT; BIT/mux[0..1], sft, BIT/flin, d :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Generic ALU */
+
+DEF ALU_PRIM (q, BIT/co :OUT; a, b, BIT/ci, INT3/func :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Single port synchronous RAM (bidirectional data) */
+
+DEF RAMB_PRIM (data_out :TRI; 
+	data_in, BIT/ce, BIT/rw, address :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Dual port synchronous RAM (separate data in and out) */
+
+DEF RAMF_PRIM (adatao, bdatao :OUT; 
+	BIT/ace, BIT/arw, aaddr, adatai, BIT/bce, BIT/arw, baddr, 
+	bdatai :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+
+/* Single port synchronous ROM */
+
+DEF ROMA_PRIM (data_out :TRI; BIT/ce, address :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Single port RAM (bidirectional data) 
+Special simulation RAM, contents initialised to zero or from file,
+and are prevented from going undefined.  Setting a 1 on the dump
+input causes the contents to be written out to a file.  */
+
+DEF SIM_RAM_PRIM (data_out :TRI; 
+	data_in, BIT/ce, BIT/rw, address, BIT/dump :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* General purpose up/down loadable counter of any width
+ dir - count direction, 1 = up
+ ena - count enable
+ load - counter synchronous load with data, priority over ena
+ sreset - counter synchronous reset, priority over load and ena
+ areset\ - active low asynchronous reset, priority over everything
+*/
+
+DEF COUNT_PRIM (q, BIT/carry :OUT; data, BIT/clock, BIT/dir, 
+	BIT/ena, BIT/load, BIT/sreset, BIT/areset\ :IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Enumerator */
+
+DEF ENUM_PRIM (q:OUT; a:IN);
+
+BEGIN
+#PRIMITIVE
+END;
+
+/* Trace node */
+
+DEF TRACE_PRIM (q:OUT; a:IN);
+
+BEGIN
+#PRIMITIVE
+END;

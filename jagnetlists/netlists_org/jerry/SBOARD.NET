@@ -1,0 +1,647 @@
+/******************************************************************
+sboard.net
+18/4/91
+
+Unwritten register write-back control logic
+-------------------------------------------
+This score-board logic prevents use of data which is still being 
+computed within the GPU.  This includes:
+
+-	the destination register of an ALU computation
+-	a flags dependent instruction when an ALU operation is
+	still active
+-	the destination register of a divide operation
+-	the destination register of an external load instruction
+
+When an ALU computation or divide computation is being performed, 
+this logic pipelines a pending write and at the correct time 
+issues the write-control signals to the appropriate port of the 
+register block.  It also writes back external load data.
+
+It compares its pending address with the operands of the current 
+instruction, and if it finds a match then it will conceal the 
+write-back behind the read.  If a read is attempted at any point 
+on a register with a pending write, then execution is suspended.
+
+This is a simple score-board mechanism
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF SBOARD ( 
+INT6/	dsta 		/* destination port address */
+	sdatreq		/* program data memory cycle request */
+	dstrwen\	/* destination port write enable */
+INT32/	dstwd		/* register destination port write data */
+	resaddrldi	/* load result data as data address */
+	sbwait		/* score-board wait command */
+INT6/	srca 		/* source port address */
+	srcaddrldi	/* load source data as data address */
+	srcrwen\	/* source port write enable */
+INT32/	srcwd		/* register source port write data */
+	:OUT;
+	clk		/* processor master clock */
+	datack		/* data cycle ack from memory interface */
+	datwe		/* write enable to go with datreq */
+	datwe_raw	/* raw version for wait generation */
+	del_xld		/* delayed external load starting */
+	div_activei	/* divide active (look-ahead) */
+	div_instr	/* divide instruction decode */
+	div_start	/* divide starting */
+INT6/	dstanwi		/* current destination address, without
+			  write-back address muxed in */
+INT6/	dstat		/* op-code derived destination address */
+	dstrrd		/* dest register is read */
+	dstrrdi		/* look-ahead version */
+	dstrwr		/* dest register is directly written */
+	dstrwri		/* look-ahead version */
+	dstwen		/* dest register write enable */
+	exe		/* current instruction is being executed */
+	flag_depend	/* current instruction uses flags */
+	flagld		/* flag load command to ALU */
+	gate_active	/* gateway active */
+INT32/	immdata		/* move immediate data */
+	immld		/* data load from immediate data */
+	immwri		/* write immediate data */
+	insexei		/* exe without sbwait term */
+INT32/	load_data	/* memory load data for write-back */
+INT32/	mem_data	/* Data from memory read */
+	memrw		/* current instruction uses memory */
+	mtx_dover	/* flags current memeory cycle is matrix */
+	precomp		/* pre-compute memory address */
+INT32/	quotient	/* result from the divide unit */
+	reset\		/* master reset */
+	reswr		/* current instr. requires result write */
+INT32/	result	 	/* ALU result data */
+INT6/	srcanwi		/* source address of instruction */
+INT32/	srcdp		/* pipe-lined source read data */
+	srcrrd		/* source register is read */
+	xld_ready	/* external load data is ready */
+	:IN);
+
+INT6/	alu_wbaddr, div_wbaddr, dstwbaddr, hwbaddr, 
+INT6/	ild_wbaddr, ild_wbaddrl, imm_wbaddr, 
+INT6/	mov_wbaddr, srcwbaddr, swbaddr, xld_wbaddr, 
+INT6/	xlddst, xlddst2, zero6, dsta_reg, srca_reg
+INT6/	dstanw, srcanw
+INT32/	mxdata, xld_data, ild_data, ild_datad
+:LOCAL;
+BEGIN
+
+Datack\		:= IV (datack\, datack);
+Datwe\		:= IV (datwe\, datwe);
+Del_xld\	:= IV (del_xld\, del_xld);
+Exe\		:= IV (exe\, exe);
+Memrw\		:= IV (memrw\, memrw);
+Mtx_dover\	:= IV (mtx_dover\, mtx_dover);
+Precomp\	:= IV (precomp\, precomp);
+Zero		:= TIE0 (zero);
+Zero6		:= JOIN (zero6, zero, zero, zero, zero, zero, 
+			zero);
+
+Insexe		:= FD1Q (insexe, insexei, clk);
+Dstanw		:= FD1Q (dstanw, dstanwi, clk);
+Srcanw		:= FD1Q (srcanw, srcanwi, clk);
+
+/* destination register read or write enable */
+
+Dstren		:= OR2 (dstren, dstrrd, dstrwr);
+
+/* Register addresses for wait checking.
+The register addresses used to check against the known non-valid
+registers, for score-boarding, are modified versions of dstanw
+and srcanw.  They are modified to cope with the implicit register 
+addressing used in the (R14+offset) forms.  This replaces dstat
+on dstanw when precomp is active */
+/* 30/10/92
+There is a particular problem to do with STORE (r14+r3),r2 in
+that it requires three registers to be protected, and this is just
+not possible. However, this should be OK as r2 is not read until
+the next tick. Therefore srca_reg and dsta_reg should just follow
+srcanw and dstanw.
+*/
+/*
+**Dsta_reg	:= JOIN (dsta_reg, dstat);
+**Srca_reg	:= MX2 (srca_reg, srcanw, dstat, precomp);
+*/
+Dsta_reg	:= NIV (dsta_reg, dstanw);
+Srca_reg	:= NIV (srca_reg, srcanw);
+Dsta_reg_ena	:= JOIN (dsta_reg_ena, dstrrd);
+Srca_reg_ena	:= OR2 (srca_reg_ena, srcrrd, precomp);
+
+/* ALU calculation target 
+   ----------------------
+Destination register address pipe-line */
+
+Alu_wbaddr	:= FD2QP (alu_wbaddr, dstanw, clk, reset\);
+
+/* pending write flag for write back control */
+
+Pendwr		:= AN2 (pendwr, reswr, exe);
+Alu_wback	:= FD2QP (alu_wback, pendwr, clk, reset\);
+Alu_wback\	:= IV (alu_wback\, alu_wback);
+
+/* ALU calculation wait occurs when data that is still being 
+calculated is read, given by:
+- the operand at stage 1 of the pipe-line matches the source or 
+  destination read fields
+- there is a pending write at stage 1 of the pipe-line
+- the matched field is enabled for read
+*/
+
+Dp1cmp		:= CMP6 (dp1eq, alu_wbaddr, dsta_reg);
+Sp1cmp		:= CMP6 (sp1eq, alu_wbaddr, srca_reg);
+Aluwt		:= AOR2 (aluwt, dp1eq, dsta_reg_ena, sp1eq, 
+			srca_reg_ena);
+Aludwait	:= AN2 (aludwait, aluwt, alu_wback);
+
+/* Register to register move target 
+   --------------------------------
+*/
+
+Moveai		:= JOIN (mov_wbaddr, dstanw);
+Mov_wback\	:= ND2P (mov_wback\, dstwen, exe);
+Mov_wback	:= IVS (mov_wback, mov_wback\);
+
+/* Immediate data write target
+   ---------------------------
+Latch the destination address for immediate write when the
+condition immld and exe is true. */
+
+Immasel		:= AN2 (immasel, immld, exe);
+Imm_wbaddr	:= FDSYNC6 (imm_wbaddr, dstanw, immasel, clk);
+
+Imm_wback	:= JOIN (imm_wback, immwri);
+Imm_wback\	:= IV (imm_wback\, imm_wback);
+
+/* Internal and External load control
+   ----------------------------------
+Load operations may be from internal memory, or external.  
+External loads may take some time, and so up to two may be 
+pending at one time.  Internal loads take three ticks, but
+only one of these may be pending.  (This also applies to
+stores).
+*/
+
+/* Latch the destination address on memrw.exe */
+
+Ildwal		:= AN2 (ildwal, memrw, exe);
+Ild_wbaddr	:= MX2 (ild_wbaddr, ild_wbaddrl, dstat, ildwal);
+Ild_wbaddrl	:= FD2Q (ild_wbaddrl, ild_wbaddr, clk, reset\);
+
+/* request the write-back in the next cycle 
+18/8/92 - bug fix
+Extend the request until it is acknowledged (GPUGO poll bug)
+Latch the data
+*/
+
+Ildwbset\	:= ND4 (ildwbset\, datack, datwe\, del_xld\,
+			mtx_dover\);
+Ildwbset	:= IV (ildwbset, ildwbset\);
+Ildwbclr	:= ND2 (ildwbclr, ild_wbackh\, ild_wbacks\);
+Ildwbt		:= NR2 (ildwbt, ild_wbackd, ildwbset);
+Ild_wbacki	:= NR2 (ild_wbacki, ildwbclr, ildwbt);
+Ild_wbackd	:= FD2 (ild_wbackd, ild_wbackd\, ild_wbacki, clk, 
+			reset\);
+Ild_wback	:= ND2 (ild_wback, ildwbset\, ild_wbackd\);
+Ild_wback\	:= IV (ild_wback\, ild_wback);
+
+Ilddselt\	:= FD1Q (ilddselt\, ildwbset\, clk);
+Ilddsel\	:= NIVU (ilddsel\, ilddselt\);
+Ild_data	:= MX2 (ild_data, mem_data, ild_datad, ilddsel\);
+Ild_datad	:= FD1Q (ild_datad, ild_data, clk);
+
+/* Load control state machine */
+
+Idlet[0]	:= ND2 (idlet[0], idle, memrw\);
+Idlet[1]	:= ND2 (idlet[1], idle, exe\);
+Idlet[2]	:= ND2 (idlet[2], loading, datack);
+Idlei		:= ND3 (idlei, idlet[0..2]);
+Idle		:= FD4Q (idle, idlei, clk, reset\);
+Idle\		:= IV (idle\, idle);
+
+Comp1i		:= AN4 (comp1i, idle, memrw, precomp, exe);
+Comp1		:= FD2Q (comp1, comp1i, clk, reset\);
+
+Comp2i		:= JOIN (comp2i, comp1);
+Comp2		:= FD2Q (comp2, comp2i, clk, reset\);
+Comp2\		:= IV (comp2\, comp2);
+
+Loadingt[0]	:= ND4 (loadingt[0], idle, memrw, precomp\, exe);
+Loadingt[1]	:= IV  (loadingt[1], comp2);
+Loadingt[2]	:= ND2 (loadingt[2], loading, datack\);
+Loadingi	:= ND3 (loadingi, loadingt[0..2]);
+Loading		:= FD2Q (loading, loadingi, clk, reset\);
+
+/* generate wait if a load is decoded while this is active, or
+if an attempt is made to read the load target. */
+
+Dlacmp		:= CMP6 (dlaeq, ild_wbaddrl, dsta_reg);
+Slacmp		:= CMP6 (slaeq, ild_wbaddrl, srca_reg);
+Ldwaitt0	:= AOR2 (ldwaitt[0], dlaeq, dsta_reg_ena, slaeq, 
+			srca_reg_ena);
+Ldwaitt1	:= ND2 (ldwaitt[1], ldwaitt[0], idle\);
+Ldwaitt2	:= ND2 (ldwaitt[2], idle\, memrw);
+Ldwait		:= ND2 (ldwait, ldwaitt[1..2]);
+
+
+/* memory request is generated asynchronously on 
+	  idle . exe . memrw . /precomp
+	+ comp2
+It is held until the acknowledge, which clears it asynchronously.  
+*/
+
+Drqt[0]		:= ND4 (drqt[0], idle, exe, precomp\, memrw);
+Drqt[1]		:= ND2 (drqt[1], drqt[0], comp2\);
+Drqt[2]		:= CP_LATCH (drqt[2], drqt[1], datack, clk, 
+			reset\);
+Datreq		:= OAN1 (sdatreq, drqt[1..2], datack\);
+
+/* the memory address may be derived from the srcd field as the
+instruction is executed, or from the result field if the address
+has been computed.  */
+
+Srcaddrldi	:= AN4 (srcaddrldi, idle, exe, precomp\, memrw);
+
+/* 18/8/92 - bug fix
+the result is latched after it has gone away!
+move forward from comp2 to comp1
+*/
+
+Resaddrldi	:= JOIN (resaddrldi, comp1);
+
+/* External load target
+   --------------------
+Any load/store instruction must be held up if the gateway is
+currently active.  It must also be held up if a gateway load
+operation is active and an attempt is made to read the target
+register.  A write-back must also be generated when the load data
+is ready.
+(2/21) */
+
+/* Latch one or two pending external loads */
+
+Ld1t0		:= ND2 (ld1t[0], del_xld, ldidle);
+Ld1t1		:= ND3 (ld1t[1], oneld, del_xld\, xldd_sel\);
+Ld1t2		:= ND3 (ld1t[2], oneld, del_xld, xldd_sel);
+Ld1t3		:= ND2 (ld1t[3], twold, xldd_sel);
+Ld1t4		:= ND4 (oneldi, ld1t[0..3]);
+Oneld		:= FD2QP (oneld, oneldi, clk, reset\);
+
+Ld2t0		:= ND3 (ld2t[0], oneld, del_xld, xldd_sel\);
+Ld2t1		:= ND2 (ld2t[1], twold, xldd_sel\);
+Ld2t2		:= ND2 (twoldi, ld2t[0..1]);
+Twold		:= FD2QP (twold, twoldi, clk, reset\);
+
+Ldidle		:= NR2P (ldidle, twold, oneld);
+Ldidle\		:= IV (ldidle\, ldidle);
+
+/* Latch the destination register of a load.
+There may be two loads out-standing at any one time, and therefore
+two addresses must be stored.  The primary address is always used,
+for the write-back, the secondary forms a double-buffer when two
+loads are pending.
+
+The primary register is loaded from ild_wbaddr on:
+	  del_xld . ldidle
+	+ del_xld . oneld . xldd _sel
+it is loaded from the secondary register on
+	  xldd_sel . twold
+
+The secondary address is always loaded on del_xld
+*/
+
+Xlddt0		:= ND2 (xlddt[0], del_xld, ldidle);
+Xlddt1		:= ND3 (xlddt[1], del_xld, oneld, xldd_sel);
+Xlddt2		:= ND2P (xlddt[2], xlddt[0..1]);
+Xlddt3		:= AN2P (xlddt[3], xldd_sel, twold);
+Xlddsti		:= MX4 (xld_wbaddr, xlddst, ild_wbaddr, xlddst2, 
+			xlddst2, xlddt[2..3]);
+Xlddst		:= FD2Q (xlddst, xld_wbaddr, clk, reset\);
+
+Xlddst2		:= FDSYNCR6 (xlddst2, ild_wbaddr, del_xld, clk, 
+			reset\);
+
+/* Test for an attempt to read either,
+- the primary one is valid on oneld + twold
+- the secondary one is valid on twold
+ */
+
+Xlddmatch	:= CMP6 (xlddeq, dsta_reg, xlddst);
+Xldsmatch	:= CMP6 (xldseq, srca_reg, xlddst);
+Xldeq		:= AOR2 (xldeq, xlddeq, dsta_reg_ena, xldseq, 
+			srca_reg_ena);
+Xld2dmatch	:= CMP6 (xld2deq, dsta_reg, xlddst2);
+Xld2smatch	:= CMP6 (xld2seq, srca_reg, xlddst2);
+Xld2eq		:= AOR2 (xld2eq, xld2deq, dsta_reg_ena, xld2seq, 
+			srca_reg_ena);
+
+Xlddwait	:= AOR2 (xlddwait, ldidle\, xldeq, twold, xld2eq);
+
+/* latch the load data on xld_ready */
+
+Xld_data	:= FDSYNC32 (xld_data, load_data, xld_ready, clk);
+
+/* Flow control should also be held up if another instruction
+wants to use memory (unfortunately we cannot tell until too late
+if it is internal or external) - or if two loads are pending,
+or if a store is attempted while loads are pending.
+mbusywait	= memrw . (gate_active + twoldi)
+		+ datwe_raw . (oneldi + twoldi)
+ */
+
+Mbsywt0		:= OR2 (mbsywt[0], gate_active, twoldi);
+Mbsywt1		:= ND2 (mbsywt[1], mbsywt[0], memrw);
+Mbsywt2		:= OR2 (mbsywt[2], oneldi, twoldi);
+Mbsywt3		:= ND2 (mbsywt[3], mbsywt[2], datwe_raw);
+Mbusywait	:= ND2 (mbusywait, mbsywt[1], mbsywt[3]);
+
+/* external load write-back starts when xld_ready is active, but 
+must be held until xld_wbackh or xld_wbacks */
+
+Xwbclr		:= ND2 (xwbclr, xld_wbackh\, xld_wbacks\);
+Xwbat0		:= NR2 (xwbat[0], xld_wbackl, xld_ready);
+Xwbat1		:= NR2 (xwbat[1], xwbclr, xwbat[0]);
+Xldpend		:= FD2Q (xld_wbackl, xwbat[1], clk, reset\);
+Xld_wback	:= OR2 (xld_wback, xld_wbackl, xld_ready);
+Xld_wback\	:= IV (xld_wback\, xld_wback);
+
+/* Divide target
+   -------------
+Whilst a divide is going on any attempt to read its target will
+suspend execution until the divide has completed.
+*/
+
+Div_active	:= FD1Q (div_active, div_activei, clk);
+Div_activei\	:= IV (div_activei\, div_activei);
+
+Divdst		:= FDSYNCR6 (div_wbaddr, dstanw, div_start, clk, 
+			reset\);
+Divdmatch	:= CMP6 (divdeq, dsta_reg, div_wbaddr);
+Divsmatch	:= CMP6 (divseq, srca_reg, div_wbaddr);
+Diveq		:= AOR2 (diveq, divdeq, dsta_reg_ena, divseq, 
+			srca_reg_ena);
+Divdwait	:= AN2 (divdwait, div_active, diveq);
+
+/* divide write-back occurs in the first tick after div_active,
+and is held until div_wbackh or div_wbacks
+(1/174) */
+
+Dwbset		:= AN2 (dwbset, div_active, div_activei\);
+Dwbclr		:= ND2 (dwbclr, div_wbackh\, div_wbacks\);
+Dwbat0		:= NR2 (dwbat[0], div_wbackl, dwbset);
+Dwbat1		:= NR2 (dwbat[1], dwbat[0], dwbclr);
+Dwbat2		:= FD2Q (div_wbackl, dwbat[1], clk, reset\);
+Div_wback	:= OR2 (div_wback, div_wbackl, dwbset);
+Div_wback\	:= IV (div_wback\, div_wback);
+
+/* if another divide instruction is decoded before the previous 
+one has completed (incomplete given by div_active + div_wback),
+then assert wait */
+
+Diviwait	:= OAN1 (diviwait, div_active, div_wback, 
+			div_instr);
+
+/* Flags control
+   -------------
+If an instruction is dependent on the flags and the previous one
+changed them then it may have to wait until the flags are ready.
+*/
+
+Flag_pend	:= FD1Q (flag_pend, flagld, clk);
+Flagwait	:= AN2 (flagwait, flag_pend, flag_depend);
+
+/* Write-back control
+   ------------------
+Write-back is the process of transferring a data value, such as an
+ALU result, back into a register.  This process attempts to 
+conceal itself by occurring on either of the source or destination 
+ports.
+
+Write-backs can occur from a multiplicity of sources, and more
+than one can occur simultaneously.
+
+A write-back will be invisible, i.e. will not disturb program flow,
+when there is only one, and either the currently executed 
+instruction is not reading both source and destination ports, or
+its address matches either the source or destination port.
+
+A write-back source must provide a look-ahead version of the 
+register address to which the write-back is going to occur,
+and a look-ahead write-back request line.  This is because the
+register address has to be generated very quickly.
+
+ALU, register move, and immediate data write all occur as soon as
+they are requested. Mov and Imm write backs are automatically
+mutually exclusive because they both occur in the tick after an 
+instruction completes. Internal load, external load, and divide
+result write back may all be held up, and must be requested until
+they have completed.
+*/
+
+/* therefore, flag at least one write-back */
+/* write back is active on alu_wback, div_wback or xld_wback, in
+order of decreasing priority */
+
+Wbacki		:= ND6 (wbacki, alu_wback\, mov_wback\, 
+			imm_wback\, div_wback\, xld_wback\, 
+			ild_wback\);
+Wback		:= FD1Q (wback, wbacki, clk);
+
+/* decode the highest priority write-back */
+
+Alu_wbackh	:= IV (alu_wbackh\, alu_wback);
+Mov_wbackh	:= ND2 (mov_wbackh\, mov_wback, alu_wback\);
+Imm_wbackh	:= ND3 (imm_wbackh\, imm_wback, mov_wback\, 
+			alu_wback\);
+Ild_wbackh	:= ND4P (ild_wbackh\, ild_wback, imm_wback\, 
+			mov_wback\, alu_wback\);
+Xld_wbackh	:= ND5 (xld_wbackh\, xld_wback, ild_wback\, 
+			imm_wback\, mov_wback\, alu_wback\);
+Div_wbackh	:= ND6 (div_wbackh\, div_wback, xld_wback\, 
+			ild_wback\, imm_wback\, mov_wback\, 
+			alu_wback\);
+
+/* decode the second highest priority write back
+-	xld, div and imm write-backs are mutually exclusive, to
+	keep the size of the data multiplexers down. This means 
+	that only one of them may have an active write back on
+	either port at any time.
+-	mov and imm are implicitly exclusive
+*/
+
+/* mov is displaced here by an ALU write-back */
+Mov_wbacks	:= ND2 (mov_wbacks\, mov_wback, alu_wback);
+
+/* like-wise immediate data, displaced by mov or ALU */
+Imm_wbackst	:= ND2 (imm_wbackst, mov_wbackh\, alu_wbackh\);
+Imm_wbacks	:= ND2 (imm_wbacks\, imm_wback, imm_wbackst);
+
+/* internal load is displaced by imm, mov and alu, but must
+be held up if imm or mov are already secondary */
+Ild_wbackst	:= ND3 (ild_wbackst, imm_wbackh\, mov_wbackh\, 
+			alu_wbackh\);
+Ild_wbacks	:= ND4P (ild_wbacks\, ild_wback, ild_wbackst, 
+			imm_wbacks\, mov_wbacks\);
+Xld_wbackst	:= ND4 (xld_wbackst, ild_wbackh\, imm_wbackh\, 
+			mov_wbackh\, alu_wbackh\);
+Xld_wbacks	:= ND5 (xld_wbacks\, xld_wback, xld_wbackst,
+			imm_wback\, ild_wbacks\, mov_wbacks\);
+Div_wbackst	:= ND5 (div_wbackst, xld_wbackh\, ild_wbackh\, 
+			imm_wbackh\, mov_wbackh\, alu_wbackh\);
+Div_wbacks	:= ND6 (div_wbacks\, div_wback, div_wbackst, 
+			xld_wback\, imm_wback\, ild_wbacks\, 
+			mov_wbacks\);
+
+/* detect more than one write back */
+
+Mult_wbacki	:= ND5 (mult_wbacki, mov_wbacks\, imm_wbacks\, 
+			ild_wbacks\, xld_wbacks\, div_wbacks\);
+Mult_wback	:= FD1Q (mult_wback, mult_wbacki, clk);
+Mult_wback\	:= IV (mult_wback\, mult_wback);
+
+/* generate the highest priority write-back address */
+
+Hasel[0]	:= ND3 (hasel[0], mov_wbackh\, ild_wbackh\, 
+			div_wbackh\);
+Hasel[1]	:= ND2 (hasel[1], imm_wbackh\, ild_wbackh\);
+Hasel[2]	:= ND2 (hasel[2], xld_wbackh\, div_wbackh\);
+Hwbaddr		:= MX8P (hwbaddr, alu_wbaddr, mov_wbaddr, 
+			imm_wbaddr, ild_wbaddr, xld_wbaddr, 
+			div_wbaddr, zero6, zero6, hasel[0..2]);
+
+/* generate the second highest priority write-back address */
+
+Sasel[0]	:= ND3 (sasel[0], mov_wbacks\, ild_wbacks\, 
+			div_wbacks\);
+Sasel[1]	:= ND2 (sasel[1], imm_wbacks\, ild_wbacks\);
+Sasel[2]	:= ND2 (sasel[2], xld_wbacks\, div_wbacks\);
+Swbaddr		:= MX8 (swbaddr, alu_wbaddr, mov_wbaddr, 
+			imm_wbaddr, ild_wbaddr, xld_wbaddr, 
+			div_wbaddr, zero6, zero6, sasel[0..2]);
+
+/* generate the wait on write back - if only one write is active, 
+this is given by the primary write back address not matching 
+either the source or destination address, if both the dest and 
+source are enabled.  If two write-backs are active it is always 
+true.
+wbwait = (/wbdeq . /wbseq . bothen . wback) + mult_wback
+*/
+
+Wbdcmpt[0-5]	:= ENP (wbdcmpt[0-5], hwbaddr{0-5}, dstanwi{0-5});
+Wbdeqi\		:= ND6 (wbdeqi\, wbdcmpt[0..5]);
+Wbdeqit		:= AN4 (wbdeqit, wbdcmpt[0..3]);
+Wbdeqi		:= AN3 (wbdeqi, wbdeqit, wbdcmpt[4..5]);
+
+Wbdeq\		:= FD1Q (wbdeq\, wbdeqi\, clk);
+Wbscmp		:= CMP6I (wbseqi\, hwbaddr, srcanwi);
+Wbdsq		:= FD1Q (wbseq\, wbseqi\, clk);
+Bothen		:= AN3 (bothen, srcrrd, dstren, insexe);
+Wbwaitt		:= ND4 (wbwaitt, wbdeq\, wbseq\, bothen, wback);
+Wbwait		:= ND2 (wbwait, wbwaitt, mult_wback\);
+
+/* a write-back is made to the destination port on
+wback .	( wbdeq				concealed write-back
+	+ /(dstrrd.insexe + dstrwr.insexe + comp1.datwe)
+					dest reg idle
+	+ mult_wback			use both ports
+	)
+20/8/92 bug fix
+Added the comp1 term to prevent indexed store data being lost 
+*/
+
+Dwbt0		:= ND2P (dwbt[0], wbacki, wbdeqi);
+Dwbt4		:= ND2 (dwbt[4], comp1i, datwe);
+Dwbt5		:= ND2 (dwbt[5], insexei, dstrrdi);
+Dwbt6		:= ND2 (dwbt[6], insexei, dstrwri);
+Dwbt1		:= AN3 (dwbt[1], dwbt[4..6]);
+Dwbt2		:= ND2P (dwbt[2], wbacki, dwbt[1]);
+Dwbt3		:= ND2P (dwbt[3], wbacki, mult_wbacki);
+Dstwbwei	:= ND3 (dstwbwei,  dwbt[0], dwbt[2..3]);
+Dstwbwe		:= FD1P (dstwbwet, dstwbwe\, dstwbwei, clk);
+Dstwbweb	:= NIVM (dstwbwe, dstwbwet);
+
+/* a write-back is made to the source port on
+wback .	( /dstwbwe			dest port in use
+	+ mult_wback			use both ports
+	) 
+** Expand out this logic
+** Dstwbwei\	:= AN3 (dstwbwei\, dwbt[0], dwbt[2..3]);
+** Swbt0	:= ND2 (swbt[0], wbacki, dstwbwei\);
+*/
+
+Swbt0		:= ND4 (swbt[0], wbacki, dwbt[0], dwbt[2..3]);
+Swbt1		:= ND2 (swbt[1], wbacki, mult_wbacki);
+Srcwbwei	:= ND2 (srcwbwei, swbt[0..1]);
+Srcwbwe		:= FD1QM (srcwbwe, srcwbwei, clk);
+
+/* The destination register address */
+
+Dstwbaddr	:= FD1Q (dstwbaddr, hwbaddr, clk);
+Dsta		:= MX2 (dsta, dstanw, dstwbaddr, dstwbwe);
+
+/* the source register address */
+
+Srcwbaddr	:= FD1Q (srcwbaddr, swbaddr, clk);
+Srca		:= MX4 (srca, srcanw, srcwbaddr, srcanw, dstwbaddr,
+			srcwbwe, dstwbwe\);
+
+/* Control the write data 
+   ----------------------
+*/
+
+/* Select between external load data, the quotient, and immediate 
+data - these are the mutually exclusive terms */
+
+Xldd_selt	:= ND2 (xldd_selt, xld_wbackh\, xld_wbacks\);
+Xldd_sel	:= FD1QU (xldd_sel, xldd_selt, clk);
+Xldd_sel\	:= IV (xldd_sel\, xldd_sel);
+Divd_selt	:= ND2 (divd_selt, div_wbackh\, div_wbacks\);
+Divd_sel	:= FD1QU (divd_sel, divd_selt, clk);
+Mxdata		:= MX4 (mxdata, immdata, quotient, xld_data, 
+			xld_data, divd_sel, xldd_sel);
+
+/* Select between result, internal load data, the mutually
+exclusive data terms from above and pipe-lined source data for 
+the destination write port - this is high priority write-backs
+*/
+
+Dwselt[0]	:= ND2 (dwselt[0], alu_wbackh\, mov_wbackh\);
+Dwselt[1]	:= ND2 (dwselt[1], ild_wbackh\, mov_wbackh\);
+Dwsel[0-1]	:= FD1Q (dwsel[0-1], dwselt[0-1], clk);
+Dwselb[0-1]	:= NIVU (dwselb[0-1], dwsel[0-1]);
+Dstwdmux	:= MX4 (dstwd, mxdata, result, ild_data, srcdp, 
+			dwselb[0..1]);
+
+/* Select between result, internal load data, the mutually
+exclusive data terms from above and pipe-lined source data for 
+the source write port - this is high priority write-backs if
+dstwbwe is not active, otherwise secondary ones.
+*/
+
+Swselti[0]	:= IV (swselti[0], mov_wbacks\);
+Swselti[1]	:= ND2 (swselti[1], ild_wbacks\, mov_wbacks\);
+Swselt[0-1]	:= FD1Q (swselt[0-1], swselti[0-1], clk);
+Swsel[0-1]	:= MX2 (swsel[0-1], dwsel[0-1], swselt[0-1],
+			dstwbwe);
+Swselb[0-1]	:= NIVU (swselb[0-1], swsel[0-1]);
+Srcwdmux	:= MX4 (srcwd, mxdata, result, ild_data, srcdp, 
+			swselb[0..1]);
+
+/* Source write strobe occurs on source write-back */
+
+Srcrwen\	:= IV (srcrwen\, srcwbwe);
+
+/* Destination write strobe occurs on dest write back */
+
+Dstrwen\	:= IV (dstrwen\, dstwbwe);
+
+/* Wait from the score-board unit is the OR of the waits above */
+
+Sbwaitt0	:= NR2 (sbwaitt[0], wbwait, divdwait);
+Sbwaitt1	:= NR2 (sbwaitt[1], diviwait, aludwait);
+Sbwaitt2	:= NR2 (sbwaitt[2], flagwait, xlddwait);
+Sbwaitt3	:= NR2 (sbwaitt[3], mbusywait, ldwait);
+Sbwait		:= ND4P (sbwait, sbwaitt[0..3]);
+
+END;

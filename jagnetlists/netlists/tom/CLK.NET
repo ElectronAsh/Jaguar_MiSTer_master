@@ -1,0 +1,92 @@
+(*****************************************************************
+
+	clk.net
+
+This is the clock generator in the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT	lego,
+	tosh;		(* Toshiba gate & pad definitions *)
+
+
+DEF CLK	(resetl,pclk,vxclk,ndtest,cfg[7]:IN;
+
+	cfgw,cfgen,clk,vclk,tlw:IO);
+
+
+BEGIN
+
+#if FLARE
+Intu :=		DUMMY (internal);
+Clk1 :=		NIV (clk1,pclk);
+Clk2 :=		NIVU (clk2,clk1);
+Clk :=		DELAY (clk,clk2);
+#endif
+#if TOSHIBA
+Pclkdel :=	HDLY5B (pclkdel,pclk);
+Pclkdela := 	NIV (pclkdela, pclkdel);
+Pclkdel\ := 	ND2 (pclkdel\,pclkdela,internal);
+Clk1 :=		AN2 (clk1,pclk,pclkdel\);
+Clk2 :=		NIVU (clk2,clk1);
+Clk :=		BNIV32 (clk,clk2);
+#endif
+#if VERILOG
+Clk1 :=		NIV (clk1,pclk);
+Clk2 :=		NIVU (clk2,clk1);
+Clk :=		BNIV310 (clk,clk2);
+#endif
+
+/* tlw is used to latch data into transparent latches prior to a clock edge */
+
+Tlw :=		IVU (tlw,clk1);
+
+/* video clock */
+
+#if FLARE
+Vclk1 :=	NIVH (vclk1,vxclk);
+Vclk :=		BNIV34 (vclk,vclk1);
+#endif
+#if TOSHIBA
+Vclkdel :=	HDLY5B (vclkdel,vxclk);
+Vclkdel\ := 	IV (vclkdel\,vclkdel);
+Vclk1 :=	AN2 (vclk1,vxclk,vclkdel\);
+Vclk2 :=	NIVU (vclk2,vclk1);
+Vclk :=		BNIV32 (vclk,vclk2);
+#endif
+#if VERILOG
+Vclk1 :=	NIVH (vclk1,vxclk);
+Vclk :=		BNIV34 (vclk,vclk1);
+#endif
+
+(*
+The signals cfgw & cfgen are responsible for latching initial
+configuration data from output pins which are made into inputs during
+reset.
+The multiplexed address outputs are disabled during NAND tree testing
+
+	               _____________________________
+resetl	______________/
+	    ___     ___     ___     ___     ___
+clk	___/   \___/   \___/   \___/   \___/   \__
+	___________________
+cfgw	                   \_______________________
+	                            _______________
+cfgen	___________________________/
+
+*)
+
+
+Cfgwl :=	FD1Q (cfgwl,resetl,pclk);
+Cfgw :=		IV (cfgw,cfgwl);
+Cfgend :=	FD2Q (cfgend,cfgwl,pclk,resetl);
+Nottest :=	IV (nottest,ndtest);
+Cfgeni :=	ND2 (cfgeni,cfgend,nottest);
+Cfgen :=	IVH (cfgen,cfgeni);
+
+External :=     LDP1Q (external,cfg[7],cfgw);
+Internal :=	IV (internal,external);
+
+END;
+
+

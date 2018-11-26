@@ -1,0 +1,601 @@
+(*****************************************************************
+
+	uart2.net
+
+This module contains the comlynx and midi uarts in Jerry
+
+******************************************************************)
+
+IMPORT 	tosh;		(* Toshiba gate & pad definitions *)
+
+DEF 	UART2	(resetl,clk,din[0..15],u2psclw,u2psclr,u2drd,u2dwr,
+			u2strd,u2ctwr,serin:IN;
+
+		serout,uint:IO;
+
+		dr[0..15]:TRI);
+
+BEGIN
+
+Gnd :=		TIE0 (gnd);
+
+/************************************************************************
+This UART can be used for either COMLYNX or MIDI.
+It has a programmable prescaler to allow for different system clock 
+speeds. 
+************************************************************************/
+/*************************************************************************
+Prescaler.
+This prescaler takes the system clock and divides it by some programmable
+ammount. It outputs two signals, psen at 125kHz, and clk2.
+
+psen is used by the transmitter and clk2 is used by the receiver. 
+************************************************************************/
+
+U2prscl:=	U2PSCL(bx16,din[0..15],u2psclw,u2psclr,clk,resetl,dr[0..15]);
+
+
+/************************************************************************/
+/* Control/Status Register.						*/
+/* Data bit	Control (W)	Status (R)				*/
+/*	15	Not used	error					*/
+/*	14	Txbrk		Txbrk					*/
+/*	13	not used	Serin					*/
+/*	12	Not used	Not used				*/
+/*	11	Not used	overrun error				*/
+/*	10	Not used	framing error				*/
+/*	9	Not used	parity error				*/
+/*	8	Not used	transmit buffer empty			*/
+/*	7	Not used	receive buffer full			*/
+/*	6	clear error	not used				*/
+/*	5	rinten		rinten					*/
+/*	4	tinten		tinten					*/
+/*	3	Recv ip pol.	Recv input polarity			*/
+/*	2	Tx op pol.	Transmitter output polarity		*/
+/*	1	paren		paren					*/
+/*	0	even		even					*/
+/* 									*/
+/*									*/
+/************************************************************************/
+
+/* Control */
+
+Txbrk:=		LDP2Q(txbrk,din[14],u2ctwr,resetl);
+Clr_err:=	FD1Q(clr_err,nclr_err,clk);
+Nclr_err:=	AN2(nclr_err,din[6],u2ctwr);
+Rinten:=	LDP2Q(rinten,din[5],u2ctwr,resetl);
+Tinten:=	LDP2Q(tinten,din[4],u2ctwr,resetl);
+Rxpol:=		LDP2Q(rxpol,din[3],u2ctwr,resetl);
+Txpol:=		LDP2Q(txpol,din[2],u2ctwr,resetl);
+Paren:=		LDP2Q(paren,din[1],u2ctwr,resetl);
+Even:=		LDP2Q(even,din[0],u2ctwr,resetl);
+
+/* Status */
+
+Rerror:=	TS(dr[15],error,u2strd);
+Rtxbrk:=	TS(dr[14],txbrk,u2strd);
+Rserin:=	TS(dr[13],serin,u2strd);
+Dum:=		TS(dr[12],gnd,u2strd);
+Roe:=		TS(dr[11],oe,u2strd);
+Rfe:=		TS(dr[10],fe,u2strd);
+Rpe:=		TS(dr[9],pe,u2strd);
+Rtbe:=		TS(dr[8],tbe,u2strd);
+Rrbf:=		TS(dr[7],rbf,u2strd);
+Ntused[2]:=	TS(dr[6],gnd,u2strd);
+Rrinten:=	TS(dr[5],rinten,u2strd);
+Rtinten:=	TS(dr[4],tinten,u2strd);
+Rrxpol:=	TS(dr[3],rxpol,u2strd);
+Rtxpol:=	TS(dr[2],txpol,u2strd);
+Rparen:=	TS(dr[1],paren,u2strd);
+Reven:=		TS(dr[0],even,u2strd);
+
+/* Transmitter */
+
+Txer:=		TXER(serout,tbe,din[0..15],u2dwr,paren,even,bx16,txpol,txbrk
+			resetl,clk);
+
+/* Receiver */
+
+Rxer:=		RXER(rbf,pe,oe,fe,error,clr_err,paren,even,u2drd,rxpol,
+			serin,resetl,bx16,clk,dr[0..15]);
+
+
+
+/* Interrupt */
+Rintens:=	FD1Q(rintens,rinten,clk);	/*Synchronous versions*/
+Tintens:=	FD1Q(tintens,tinten,clk);
+
+Uint:=		OR6(uint,fep,oep,pep,rbfp,tbep,gnd);
+
+Fep:=		AN2(fep,feq,feqdL);
+Feq:=		AN2(feq,fe,rintens);
+Feqd:=		FD1(feqd,feqdL,feq,clk);
+FeqdU:=		DUMMY(feqd);
+
+Pep:=		AN2(pep,peq,peqdL);
+Peq:=		AN2(peq,pe,rintens);
+Peqd:=		FD1(peqd,peqdL,peq,clk);
+PeqdU:=		DUMMY(peqd);
+
+Oep:=		AN2(oep,oeq,oeqdL);
+Oeq:=		AN2(oeq,oe,rintens);
+Oeqd:=		FD1(oeqd,oeqdL,oeq,clk);
+OedqU:=		DUMMY(oeqd);
+
+Rbfp:=		AN2(rbfp,rbfq,rbfqdL);
+Rbfq:=		AN2(rbfq,rbf,rintens);
+Rbfqd:=		FD1(rbfqd,rbfqdL,rbfq,clk);
+RbfqdU:=	DUMMY(rbfqd);
+
+Tbep:=		AN2(tbep,tbeq,tbeqdL);
+Tbeq:=		AN2(tbeq,tbe,tintens);
+Tbeqd:=		FD1(tbeqd,tbeqdL,tbeq,clk);
+TbeqdU:=	DUMMY(tbeqd);
+END;
+
+/****************************************************************/
+/* ComLynx/MIDI Uart receiver					*/
+/****************************************************************/
+IMPORT 	tosh;		(* Toshiba gate & pad definitions *)
+
+DEF 	RXER	(rbf,pe,oe,fe,error:IO;
+		clr_err,paren,even,u2drd,rxpol,serin,resetl,bx16,clk:IN;
+		dr[0..15]:TRI;);
+	INT10/rsr,INT8/rdr,INT4/rxg,INT4/rdc:LOCAL;
+BEGIN
+Gnd :=		TIE0 (gnd);
+Vcc:=		TIE1(vcc);
+Clr_errL:=	IV(clr_errL,clr_err);
+
+
+/****************************************************************/
+/* Receive Shift Register.					*/
+/* It has 10 stages.						*/
+/*	RSR[0]	Data bit 0					*/
+/*	RSR[1]	Data bit 1					*/
+/*	RSR[2]	Data bit 2					*/
+/*	RSR[3]	Data bit 3					*/
+/*	RSR[4]	Data bit 4					*/
+/*	RSR[5]	Data bit 5					*/
+/*	RSR[6]	Data bit 6					*/
+/*	RSR[7]	Data bit 7					*/
+/*	RSR[8]	Parity						*/
+/*	RSR[9]	Stop bit					*/
+/*								*/
+/* It holds its value if SHEN is low and shifts towards the 	*/
+/* zero end when SHEN is high.					*/
+/****************************************************************/
+
+Rsr[0-9]:=	FD1(rsr[0-9],rsrL[0-9],nrsr[0-9],clk);
+Rsr:=		JOIN(rsr,rsr[0..9]);
+RsrU:=		DUMMY(rsr);
+
+Nrsr[9]:=	MX2(nrsr[9],rsr[9],rxins,shiften);
+Nrsr[0-8]:=	MX2(nrsr[0-8],rsr[0-8],rsr[1-9],shiften);
+
+Shiften:=	AN2H(shiften,shen,rxen);
+
+
+/****************************************************************/
+/* Data bus output buffers.					*/
+/****************************************************************/
+
+Dr[0-7]:=	TS(dr[0-7],rdr[0-7],u2drd);
+Dr[8-15]:=	TS(dr[8-15],gnd,u2drd);
+
+
+/****************************************************************/
+/* Receiver Data Register					*/
+/* It is 8 bits long and contains the last value loaded from 	*/
+/* the receive shift register. It is loaded with TFR.		*/
+/****************************************************************/
+
+Rdr[0-7]:=	LDP1Q(rdr[0-7],rsr[0-7],tfr);
+Rdr:=		JOIN(rdr,rdr[0..7]);
+RdrU:=		DUMMY(rdr);
+/****************************************************************/
+/* Receiver Control State Machine.				*/
+/****************************************************************/
+Tfri:=		FD1(tfri,tfrL,ntfr,clk);
+Tfr :=		NIVH (tfr,tfri);
+Ntfr:=		AN6(ntfr,resetl,tc,rxen,tfrL,shen,vcc);
+
+Sheni:=		FD1(sheni,shenL,nshen,clk);
+Shen :=		NIVH (shen,sheni);
+Nshen:=		ND3(nshen,shena,shenb,shenc);
+Shena:=		ND6(shena,resetl,rxen,tbegin,errorL,tfrL,shenL);
+Shenb:=		ND4(shenb,resetl,tcL,tfrL,shen);
+Shenc:=		ND4(shenc,resetl,rxenL,tfrL,shen);
+
+Begin:=		AN2(tbegin,go,rxbrkL);
+
+/****************************************************************/
+/* Break detection.						*/
+/* A break is defined (by me) as a zero character with no stop 	*/
+/* bit. This logic detects such an event and then holds the 	*/
+/* state machine in it's idle state until serin goes high again.*/
+/****************************************************************/
+
+Rxbrki:=	FD2(rxbrk,rxbrkLi,nrxbrk,clk,resetl);
+Rxbrk:=		NIVH (rxbrkL,rxbrkLi);
+Nrxbrk:=	ND2(nrxbrk,nrxba,nrxbb);
+Nrxba:=		ND2(nrxba,nrxbaa,nrxbab);
+Nrxbb:=		ND2(nrxbb,rxbrk,rxinsL);
+
+Nrxbaa:=	AN6(nrxbaa,rsrL[0..5]);
+Nrxbab:=	AN6(nrxbab,rsrL[6..7],tfr,rsrL[9],rxbrkL,vcc);
+
+
+
+
+/****************************************************************/
+/* Receive Data Input Synchronisation and polarity setting.	*/
+/****************************************************************/
+
+Setpol:=	EO(setpol,serin,rxpol);
+Rxins:=		FD1(rxins,rxinsL,setpol,clk);
+
+
+/****************************************************************/
+/* RXEN.							*/
+/* This block takes BX16 and produces RXEN at 1/16th the rate,	*/
+/* the four stage counter is reset to zero when a start bit is 	*/
+/* detected (SYNC). RXEN goes active for one cycle of CLK at	*/
+/* the beginning of state 8.					*/
+/****************************************************************/
+
+Rco[1-2]:=	AN3(rco[1-2],rxg[1-2],rco[0-1],bx16);
+Rco[0]:=	AN2(rco[0],rxg[0],bx16);
+Rxg[0-3]:=	FD2(rxg[0-3],rxgL[0-3],nrxg[0-3],clk,resetl);
+Rxg:=		JOIN(rxg,rxg[0..3]);
+RxgU:=		DUMMY(rxg);
+
+Nrxg[3]:=	MX2G(nrxg[3],rxg[3],rxgL[3],rco[2],sync);
+Nrxg[2]:=	MX2G(nrxg[2],rxg[2],rxgL[2],rco[1],sync);
+Nrxg[1]:=	MX2G(nrxg[1],rxg[1],rxgL[1],rco[0],sync);
+Nrxg[0]:=	MX2G(nrxg[0],rxg[0],rxgL[0],bx16,sync);
+
+Ro:=		FD1Q(ro,nro,clk);
+Nro:=		AN6(nro,resetl,rxgL[3],rxg[2],rxgL[1],rxg[0],bx16);
+
+Rod:=		FD1(rod,rodL,ro,clk);
+Urod:=		DUMMY(rod);
+
+Rxenw:=		FD1(rxenw,rxenwL,nrxen,clk);
+Nrxen:=		AN3(nrxen,resetl,ro,rodL);
+Rxen:=		NIVH(rxen,rxenw);
+RxenL:=		NIV(rxenL,rxenwL);
+
+/****************************************************************/
+/* Start Bit Detection.						*/
+/****************************************************************/
+
+Start:=		FD2Q(start,nstart,clk,resetl);
+Nstart:=	ND3(nstart,sta,stb,stc);
+Sta:=		ND4(sta,tfrL,shenL,rxinsL,rxbrkL);
+Stb:=		ND4(stb,start,shenL,errorL,rxbrkL);
+Stc:=		ND4(stc,start,rxenL,errorL,rxbrkL);
+
+
+Startd:=	FD2(startd,startdL,start,clk,resetl);
+Ustartd:=	DUMMY(startd);
+
+Sync:=		FD2Q(sync,nsync,clk,resetl);
+
+Nsync:=		AN2(nsync,start,startdL);
+
+Go:=		FD2(go,goL,ngo,clk,resetl);
+Ngo:=		ND2(ngo,ngoa,ngob);
+Ngoa:=		ND4(ngoa,shenL,go,errorL,rxbrkL);
+Ngob:=		ND4(ngob,sync,goL,errorL,rxbrkL);
+
+
+
+/****************************************************************/
+/* Data Counter.						*/
+/* Counts up to 10, 8 data + 1 parity + 1 stop. Then asserts	*/
+/* TC. It is enabled when SHEN=1 and reset when SHEN=0. It runs	*/
+/* at RXEN rate.						*/
+/****************************************************************/
+
+Rdc[0-3]:=	FD1(rdc[0-3],rdcL[0-3],nrdc[0-3],clk);
+Rdc:=		JOIN(rdc,rdc[0..3]);
+RdcU:=		DUMMY(rdc);
+
+Nrdc[1-3]:=	MX4(nrdc[1-3],gnd,rdc[1-3],gnd,rdcL[1-3],shen,co[0-2]);
+Nrdc[0]:=	MX2G(nrdc[0],rdc[0],rdcL[0],ci[0],shenL);
+
+Co[2]:=		AN3(co[2],co[1],rdc[2],rxen);
+Co[1]:=		AN3(co[1],co[0],rdc[1],rxen);
+Co[0]:=		AN2(co[0],rdc[0],rxen);
+Ci[0]:=		AN2(ci[0],shen,rxen);
+Tc:=		FD1(tc,tcL,ntc,clk);
+Ntc:=		AN6(ntc,resetl,rdc[3],rdcL[2],rdcL[1],rdc[0],vcc);
+
+
+
+/****************************************************************/
+/* Parity Generation.						*/
+/* PE is asserted when a parity error is detected.		*/
+/* The error is cleared by writing to the clr_error bit in the 	*/
+/* control register.						*/
+/****************************************************************/
+Rpar:=		FD1(rpar,rparL,nrpar,clk);
+Nrpar:=		ND4(nrpar,rpa,rpb,rpc,rpd);
+Rpa:=		ND6(rpa,resetl,paren,rxen,shenL,even,vcc);
+Rpb:=		ND6(rpb,resetl,paren,rxen,shen,rpar,rxinsL);
+Rpc:=		ND6(rpc,resetl,paren,rxen,shen,rparL,rxins);
+Rpd:=		ND4(rpd,resetl,paren,rxenL,rpar);
+
+
+/****************************************************************/
+/* Parity Error Generation.					*/
+/****************************************************************/
+Pe:=		FD1(pe,peL,npe,clk);
+Npe:=		ND2(npe,pea,peb);
+Pea:=		ND4(pea,resetl,tfr,rpar,peL);
+Peb:=		ND3(peb,resetl,pe,clr_errL);
+
+
+/****************************************************************/
+/* Framing Error Check.						*/
+/* A framing error is flagged when a non zero character is 	*/
+/* received without a stop bit in the correct slot. 		*/
+/****************************************************************/
+
+Fe:=		FD1(fe,feL,nfe,clk);
+Nfe:=		AN6(nfe,fea,feb,fec,resetl,clr_errL,vcc);
+Fea:=		ND2(fea,feaa,feab);
+Feb:=		ND3(feb,feL,tfr,rsr[9]);
+Fec:=		ND2(fec,tfrL,feL);
+
+Feaa:=		AN6(feaa,feL,tfr,rsrL[0..3]);
+Feab:=		AN6(feab,rsrL[4..9]);
+	
+
+
+/****************************************************************/
+/* Overrun Error.						*/
+/* An overrun error is generated when another character is 	*/
+/* received from the serial input before the last one had been	*/
+/* read from the data register. The error is cleared by writing */
+/* to the clr_error bit in the control register.		*/
+/****************************************************************/
+
+Oe:=		FD1(oe,oeL,noe,clk);
+Noe:=		ND2(noe,orea,oreb);
+Orea:=		ND6(orea,resetl,clr_errL,oeL,rbf,tfr,vcc);
+Oreb:=		ND3(oreb,resetl,clr_errL,oe);
+
+/****************************************************************/
+/* Error.							*/
+/* This is simply the logical or of the three error sources, 	*/
+/* allowing for a single bit test to check for no errors.	*/
+/****************************************************************/
+Error:=		OR3(error,pe,oe,fe);
+ErrorL:=	IV(errorL,error);
+
+
+/****************************************************************/
+/* Receive Buffer Full.						*/
+/* This bit is asserted when a character is transfered from the */
+/* receive shift register (RSR[0..7]) into the data register 	*/
+/* (RD[0..7]). It is negated when the data register is read.	*/
+/****************************************************************/
+
+Rbf:=		FD2Q(rbf,nnrbf,clk,resetl);
+Nnrbf:=		AN2(nnrbf,nrbf,rxbrkL);
+Nrbf:=		ND2(nrbf,tfrL,rbfa);
+Rbfa:=		ND2(rbfa,rbf,dataccL);
+
+
+Datacc:=	ND2(dataccL,rdsdL,rds);
+Rds:=		FD1Q(rds,u2drd,clk);
+Rdsd:=		FD1(rdsd,rdsdL,rds,clk);
+Urdsd:=		DUMMY(rdsd);
+END;
+
+/*************************************************************************/
+/* ComLynx/MIDI Uart transmitter					 */
+/*************************************************************************/
+IMPORT 	tosh;		(* Toshiba gate & pad definitions *)
+
+DEF 	TXER	(serout,tbe:IO;
+		din[0..15],u2dwr,paren,even,bx16,txpol,txbrk,resetl,clk:IN);
+
+	INT8/txr,INT8/sd,INT4/,bg,INT3/dc:LOCAL;
+BEGIN
+Gnd :=		TIE0 (gnd);
+Vcc:=		TIE1(vcc);
+Unused[0-7] := DUMMY (din[8-15]);
+
+EvenL:=		IV(evenL,even);
+ParenL:=	IV(parenL,paren);
+
+
+
+/*************************************************************************/
+/*			Transmit data register 				*/
+/*************************************************************************/
+
+Sd[0-7]:=	LDP1Q(sd[0-7],din[0-7],u2dwr);
+Sd:=		JOIN(sd,sd[0..7]);
+Sdu:=		DUMMY(sd);
+/*************************************************************************/
+/* 			Transmit shift register 			*/
+/*************************************************************************/
+Ntxr[0-6]:=	MX4(ntxr[0-6],txr[0-6],txr[1-7],sd[0-6],sd[0-6],shift,load);
+Ntxr[7]:=	MX4(ntxr[7],txr[7],gnd,sd[7],sd[7],shift,load);
+Txr[0-7]:=	FD1Q(txr[0-7],ntxr[0-7],clk);
+TxrL[0]:=	IV(txrL[0],txr[0]);
+Shift:=		AN2H(shift,txen,seldat);
+Load:=		AN2H(load,txen,f1);
+
+Txr:=		JOIN(txr,txr[0..7]);
+Txru:=		DUMMY(txr);
+
+/*************************************************************************/
+/* 			Transmit Control State Machine 			*/
+/*************************************************************************/
+
+F1:=		FD1(f1,f1L,nf1,clk);
+Nf1:=		ND2(nf1,nnf1,resetl);
+Nnf1:=		MX2(nnf1,f1f,f1t,f1);
+F1f:=		ND2(f1f,selpar,txen);
+F1t:=		AN2(f1t,tbeL,txen);
+
+F0:=		FD2(f0,f0L,nf0,clk,resetl);
+FoU:=		DUMMY(f0L);
+Nf0:=		MX2(nf0,f0f,txenL,f0);
+F0f:=		AN3(f0f,f1,tbeL,txen);
+
+Seldat:=	FD2(seldat,seldatL,nseldat,clk,resetl);
+Nseldat:=	MX2(nseldat,seldatf,tcL,seldat);
+Seldatf:=	AN2(seldatf,f0,txen);
+
+Selpar:=	FD2(selpar,selparL,nselpar,clk,resetl);
+SelparU:=	DUMMY(selparL);
+Nselpar:=	MX2(nselpar,selparf,txenL,selpar);
+Selparf:=	AN2(selparf,seldat,tc);
+
+
+/*************************************************************************/
+/* 			Transmit Data Multiplexer			 */
+/*************************************************************************/
+Serout:=	EO(serout,txd,txpol);
+
+TxbrkL:=	IV(txbrkL,txbrk);
+Txd:=		FD2Q(txd,ntxd,clk,txbrkL);
+Ntxd:=		ND3(ntxd,txda,txdb,f1L);
+Txda:=		ND2(txda,tpar,selpar);
+Txdb:=		ND2(txdb,seldat,txr[0]);
+
+
+/*************************************************************************/
+/* 			Parity Generation				 */
+/*************************************************************************/
+/* 
+If PAREN is 0 then the value of EVEN will be transmitted in the parity
+bit slot.
+If PAREN is 1 then odd or even parity (depending on EVEN) is inserted into
+the parity bit slot.
+*/
+
+Tpar:=		FD1(tpar,tparL,ntpar,clk);
+Ntpar:=		ND6(ntpar,tpa,tpb,tpc,tpd,tpe,vcc);
+Tpa:=		ND3(tpa,txen,evenL,seldatL);
+Tpb:=		ND3(tpb,txen,even,parenL);
+Tpc:=		ND6(tpc,txen,txrL[0],seldat,paren,tpar,vcc);
+Tpd:=		ND6(tpd,txen,txr[0],seldat,paren,tparL,vcc);
+Tpe:=		ND2(tpe,txenL,tpar);
+
+/************************************************************************/
+/* Data Counter.							*/
+/* Counts up to 7 then stops. SV enables or resets it.			*/
+/* TC is the carry out from bit 2, it indicates to the rest of the 	*/
+/* transmitter that the counter has completed.				*/
+/* It runs at TXEN rate.						*/
+/************************************************************************/
+Dc:=		JOIN(dc,dc[0..2]);
+Dcu:=		DUMMY(dc);
+
+Dc[0-2]:=	FD1(dc[0-2],dcL[0-2],ndc[0-2],clk);
+
+Ci[0]:=		AN2(ci[0],seldat,txen);
+Co[0]:=		AN3(co[0],ci[0],dc[0],txen);
+Co[1]:=		AN3(co[1],co[0],dc[1],txen);
+Tc:=		AN2(tc,co[1],dc[2]);
+TcL:=		IV(tcL,tc);
+
+Ndc[0]:=	MX4(ndc[0],dc[0],gnd,dcL[0],gnd,seldatL,ci[0]);
+Ndc[1-2]:=	MX4(ndc[1-2],dc[1-2],gnd,dcL[1-2],gnd,seldatL,co[0-1]);
+
+
+/************************************************************************/
+/* Transmit Buffer Empty.						*/
+/************************************************************************/
+
+Scs:=		FD1(scs,scsL,u2dwr,clk);	/* Synchronise the data read */
+Dscs:=		FD1Q(dscs,scs,clk);
+
+Tbe:=		FD1(tbe,tbeL,ntbe,clk);
+Ntbe:=		AN3(ntbe,tbea,tbeb,tbec);
+Tbea:=		ND3(tbea,resetl,scsL,dscs);
+Tbeb:=		ND3(tbeb,resetl,tbeL,f1);
+Tbec:=		ND3(tbec,resetl,tbeL,df1L);
+
+Df1:=		FD1(df1,df1L,f1,clk);
+Df1U:=		DUMMY(df1);
+
+
+/************************************************************************/
+/* Transmitter baud rate generation.					*/
+/* It takes BX16 from the prescaler and generates TXEN at the bit rate	*/
+/************************************************************************/
+
+/* Free running 4 bit counter */
+Bco[3]:=	AN6(bco[3],bg[3],bg[2],bg[1],bg[0],bx16,vcc);
+Bco[2]:=	AN4(bco[2],bg[2],bco[1],bco[0],bx16);
+Bco[1]:=	AN3(bco[1],bg[1],bg[0],bx16);
+Bco[0]:=	AN2(bco[0],bg[0],bx16);
+
+
+Bg[0-3]:=	FD2(bg[0-3],bgL[0-3],nbg[0-3],clk,resetl);
+Bg:=		JOIN(bg,bg[0..3]);
+Bgu:=		DUMMY(bg);
+
+Nbg[3]:=	MX2(nbg[3],bg[3],bgL[3],bco[2]);
+Nbg[2]:=	MX2(nbg[2],bg[2],bgL[2],bco[1]);
+Nbg[1]:=	MX2(nbg[1],bg[1],bgL[1],bco[0]);
+Nbg[0]:=	MX2(nbg[0],bg[0],bgL[0],bx16);
+
+Co3d:=		FD1(co3d,co3dL,bco[3],clk);
+Uco3d:=		DUMMY(co3d);
+Txenw:=		AN2(txenw,bco[3],co3dL);
+
+Txen:=		NIVH(txen,txenw);
+TxenL:=		IV(txenL,txenw);
+
+
+
+
+END;
+/*************************************************************************/
+/* ComLynx/MIDI Uart Prescaler						 */
+/*************************************************************************/
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego;		(* Martins Cells *)
+DEF 	U2PSCL	(bx16:IO;
+		din[0..15],u2psclw,u2psclr,clk,resetl:IN;
+		dr[0..15]:TRI);
+
+
+BEGIN
+Pd0[0-15] :=    LDP2Q (pd0[0-15],din[0-15],u2psclw,resetl);
+ 
+(* enabled if pit1 is nz *)
+ 
+Ten00 :=        OR8 (ten00,pd0[0..7]);
+Ten01 :=        OR8 (ten01,pd0[8..15]);
+Ten0 :=         OR2 (ten0,ten00,ten01);
+Presl0 :=       AN2U (presl0,ten0,resetl);
+ 
+(* 16 stage prescaler *)
+ 
+Tp0[0] :=       DNCNT (tp0[0],tpco0[0],pd0[0],clk,ten0,tpld0,presl0);
+Tp0[1-7] :=     DNCNT (tp0[1-7],tpco0[1-7],pd0[1-7],clk,tpco0[0-6],tpld0,presl0);
+Tp0[8] :=       DNCNT (tp0[8],tpco0[8],pd0[8],clk,tpc08,tpld0,presl0);
+Tp0[9-15] :=    DNCNT (tp0[9-15],tpco0[9-15],pd0[9-15],clk,tpco0[8-14],tpld0,presl0);
+Tpu0[0-15] :=   DUMMY (tp0[0-15]);
+Tpco0[7] :=     DUMMY (tpco0[7]);
+Tpco0[15] :=    DUMMY (tpco0[15]);
+Tplac00 :=      NR8 (tplac00,tp0[0..7]);
+Tplac01 :=      NR8 (tplac01,tp0[8..15]);
+Tpc08 :=        AN2 (tpc08,tplac00,ten0);
+Tpc016 :=       AN3 (tpc016,tplac00,tplac01,ten0);
+Bx16 :=         NIVH (bx16,tpc016);
+Dtp0[0-15] :=   TS (dr[0-15],tp0[0-15],u2psclr);
+Tpld0i :=	NR2 (tpld0i,tpc016,u2psclw);
+Tpld0 :=	IVH (tpld0,tpld0i);
+
+END;

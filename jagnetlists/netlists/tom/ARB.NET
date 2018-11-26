@@ -1,0 +1,164 @@
+(*****************************************************************
+
+	arb.net
+
+This module controls bus arbitration in Jaguar video chip.
+
+******************************************************************)
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego;	(* building blocks *)
+
+
+DEF	ARB	(bbreq[0..1],gbreq[0..1],obbreq,bglin,brlin,dbrl[0..1],refreq,
+		ihandler,ack,resetl,clk,vcc,bgain,notreadt,dreqin:IN;
+
+		bback,gback,obback,brlout,dbgl,refack,ba,
+		intbm,cpubm,intbms,intbmw:IO);
+
+(* GE 24/06/2012 - Changed comment layout *)
+(* brlout,		(* bus request to microprocessor *)
+(* bglin,		(* bus grant from microprocessor *)
+(* dbrl[0..1],	(* bus request from dsp *)
+(* dbgl,		(* bus grant to dsp *)
+(* grpbreq,grpback,(* graphics processor main bus request & ack *)
+(* obbreq,obback,	(* object processor main bus  request & ack *)
+
+
+BEGIN
+
+
+(****************** BUS ARBITRATION *************************)
+
+(*	STATE MACHINE
+
+0	Idle	if (local_bus_request & !br & !ba) goto 1
+		else goto 0
+
+1	Request	assert br
+		if (bg & !dreqin) goto 2
+		else goto 1
+
+2	Hold	assert ba
+		if (br & ack) goto 0
+		else if (!local_bus_ack & !local_bus_request & ack) goto 0
+		else goto 2
+*)
+
+Q0 :=		FD4Q (q0,d0,clk,resetl);
+Q1 :=		FD2Q (q1,d1,clk,resetl);
+Q2i :=		FD2Q (q2i,d2,clk,resetl);
+Q2 :=		NIVM (q2,q2i);
+ 
+Mt00 :=		ND2 (mt00,q0,lbrl);
+Mt01 :=         ND2 (mt01,q0,bgack);
+Mt02 :=		ND2 (mt02,q0,brs);
+Mt03 :=		ND4 (mt03,q2,lbackl,lbrl,ack);
+Mt04 :=         ND3 (mt04,q2,brs,ack);
+D0 :=           ND6 (d0,mt00,mt01,mt02,mt03,mt04,vcc);
+
+Mt10 :=		ND4 (mt10,q0,lbr,brsl,notbgack);
+Mt11 :=		ND2 (mt11,q1,bglin);
+Mt12 :=		ND2 (mt12,q1,dreqin);
+D1 :=		ND3 (d1,mt10,mt11,mt12);
+ 
+Mt20 :=		ND3 (mt20,q1,bgin,notdreqin);
+Mt21 :=		ND3 (mt21,q2,brsl,lback);
+Mt22 :=		ND3 (mt22,q2,brsl,lbr);
+Mt23 :=		ND2 (mt23,q2,ackl);
+D2 :=		ND4 (d2,mt20,mt21,mt22,mt23);
+
+Brlout :=	IV (brlout,q1);
+Bgin :=		IV (bgin,bglin);
+Ackl :=		IV (ackl,ack);
+Ba :=           NIVH (ba,q2);
+Bgack :=        IV (bgack,bgain);
+Notbgack :=     IV (notbgack,bgack);
+Notdreqin :=	IV (notdreqin,dreqin);
+
+(* synchronize daisy chained bus request *)
+
+Brin :=		IV (brin,brlin);
+Brd :=		ND2 (brd,brin,brlout);
+Brs :=		FD1 (brsl,brs,brd,clk);
+
+Req[10] :=	AN2 (req[10],q2,brs);		(* external bus master *)
+Req[9] :=	NIV (req[9],refreq);		(* refresh *)
+Req[8] :=	IV  (req[8],dbrl[1]);		(* high priority dsp *)
+Req[7] :=	NIV (req[7],gbreq[1]);		(* high priority gpu *)
+Req[6] :=	NIV (req[6],bbreq[1]);		(* high priority blitter *)
+Req[5] :=	NIV (req[5],obbreq);		(* video fetch mechanism *)
+Req[4] :=	IV  (req[4],dbrl[0]);		(* dsp *)
+Req[3] :=	NIV (req[3],ihandler);		(* cpu under interrupt *)
+Req[2] :=	NIV (req[2],gbreq[0]);		(* graphics processor *)
+Req[1] :=	NIV (req[1],bbreq[0]);		(* blitter *)
+Req[0] :=	NIV (req[0],vcc);		(* cpu (always requesting) *)
+
+Dl[10] :=	IV (dl[10],req[10]);           	(* higher requests disable *)
+Dl[1-9] :=	NR2 (dl[1-9],d[2-10],req[1-9]);	(* those below *)
+D[2-10] :=	IV (d[2-10],dl[2-10]);
+
+(* prioritized requests *)
+
+Pr[0-9] :=	AN2 (pr[0-9],req[0-9],dl[1-10]);
+
+(*
+latch the new bus acknowledge
+*)
+
+Ack[1-9] :=	SLATCHC (ack[1-9],pr[1-9],clk,arben,resetl);
+Ack[0] :=	SLATCHP (ack[0],pr[0],clk,arben,resetl);
+
+(* local bus request & ack *)
+
+Lbrl :=		NR8 (lbrl,pr[1..2],pr[4..9]);
+Lbr :=		IV (lbr,lbrl);
+Lbackl :=	NR8 (lbackl,ack[1..2],ack[4..9]);
+Lback :=	IV (lback,lbackl);
+
+(*
+Bus ownership may only be changed when the CPU has relinquished ownership
+and when the memory state machine allows it
+*)
+
+Arben :=	AN2M (arben,q2,ack);
+
+(*
+generate the various bus acks
+NB when a daisy chained bus master releases the bus it returns to the CPU
+this is unlike the normal situation where the next highest priority bus
+master takes control. This is the reason for the extra terms in cpubm
+*)
+
+Cpub1 :=	AN2 (cpub1,q0,brsl);
+Cpuback :=	OR4 (cpubm,ack[0],ack[3],q1,cpub1);
+Bback :=	OR2 (bback,ack[1],ack[6]);
+Gback :=	OR2 (gback,ack[2],ack[7]);
+Obback :=	NIVH (obback,ack[5]);
+Refack :=	NIV (refack,ack[9]);
+
+(* intbm is asserted if there is an internal bus master in the request phase *)
+(* intbms is valid during the transfer phase *)
+
+Intbm :=	OR6 (intbm,ack[1..2],ack[5..7],ack[9]);
+Intbmt :=	MX2 (intbmt,intbms,intbm,ack);
+Intbms :=	FD2Q (intbms,intbmt,clk,resetl);
+
+Intbmwd :=	ND2 (intbmwd,notreadt,intbmt);
+Intbmw :=	FD1Q (intbmw,intbmwd,clk);
+
+/* dbgl should only be asserted after current cycle is complete */
+
+Ack48 :=	OR2 (ack48,ack[4],ack[8]);
+Pr48 :=		OR2 (pr48,pr[4],pr[8]);
+
+Dbg0 :=		ND3 (dbg0,ack48,ack,pr48);
+Dbg1 :=		ND2 (dbg1,dbg,pr48);
+Dbgd :=		ND2 (dbgd,dbg0,dbg1);
+
+Dbg :=		FD2Q (dbg,dbgd,clk,resetl);
+Dbgl :=		IV (dbgl,dbg);
+
+END;
+
+

@@ -1,0 +1,93 @@
+/******************************************************************
+enumerates.net
+15/3/91
+
+Enumerated type blocks
+----------------------
+
+******************************************************************/
+
+IMPORT prim;
+
+/* Disasm
+GPU Op-code disassembler */
+
+DEF DISASM (INT6/out :OUT; INT6/in :IN);
+
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0
+
+Disasm          := ENUM_PRIM (out,in 
+<       
+add,    addc,   addq,   addqt,	sub,    subc,   subq,	subqt,	
+neg,	and,    or,     xor,    not,    btst,	bset,	bclr,
+mult,   imult,  imultn,	resmac,	imacn	div,    abs,	sh,
+shlq,   shrq,   sha,    sharq, 	rol,	rolq,   cmp,    cmpq,   
+sat8,	sat16,	move,   moveq,  moveta, movefa, movei,  loadb,  
+loadw,  load,   loadp,  load14, load15, storeb, storew, store,  
+storep, store14,store15,movepc, jump,   jr,     mmult,  mtoi,   
+normi,  nop , loadr14, loadr15, storer14, storer15, sat24, pack
+>);
+
+END;
+
+/* Node to give the inner loop state as an enumerated value */
+
+DEF SHOW_INNER (
+INT4/	value
+	:OUT;
+	idle, sreadx, szreadx, sread, szread, dread, dzread, 
+	dwrite, dzwrite :IN);
+
+INT4/	in
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0
+
+Bit0	:= OR4 (bit[0], sreadx, sread, dread, dwrite);
+Bit1	:= OR4 (bit[1], szreadx, sread, dzread, dwrite);
+Bit2	:= OR4 (bit[2], szread, dread, dzread, dwrite);
+
+In	:= JOIN (in, bit[0..2], dzwrite);
+
+Instate	:= ENUM_PRIM (value,in 
+<       idle, sreadx, szreadx, sread, szread, dread, dzread, 
+	dwrite, dzwrite, illegal, illegal, illegal, illegal, 
+	illegal, illegal, illegal
+>);
+
+Dummyi	:= DUMMY (idle);
+
+END;
+
+/* Node to give the outer loop state as an enumerated value */
+
+DEF SHOW_OUTER (
+INT3/	value
+	:OUT;
+	idle, inner, a1fupdate, a1update, a2update :IN);
+
+INT3/	out
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0
+
+Bit0		:= OR2 (bit[0], inner, a1update);
+Bit1		:= OR2 (bit[1], a1fupdate, a1update);
+
+Out		:= JOIN (out, bit[0..1], a2update);
+
+Outstate	:= ENUM_PRIM (value, out 
+<       idle, inner, a1fupdate, a1update, a2update, 
+	illegal, illegal, illegal
+>);
+
+Dummyi	:= DUMMY (idle);
+
+END;

@@ -1,0 +1,449 @@
+(*****************************************************************
+
+	vid.net
+
+This is video timing generator of the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego;
+
+
+
+DEF 	VID	(din[0..11],vmwr,hcwr,hcrd,hpwr,hbbwr,
+		hbewr,hdb1wr,hdb2wr,hdewr,
+		hswr,hvswr,vcwr,vcrd,vpwr,vbbwr,
+		vbewr,vdbwr,vdewr,vebwr,veewr,
+		vswr,viwr,lphrd,lpvrd,
+		hlock,vlock,resetl,vclk,lp,heqw,test1w,
+		test2r,test3r,wet,vgy,vey,vly,lock:IN;
+
+		start,dd,lbufa,lbufb,noths,notvs,syncen,vint,vactive,blank,
+		nextpixa,nextpixd,cry16,rgb24,rg16,rgb16,mptest,ndtest,
+		varmod,vcl[0..10],tcount,
+		incen,binc,bgw,word2,pp,lbaactive,lbbactive,hcb[10]:IO;
+
+		dr[0..15]:BUS);
+	INT11/hc,INT12/vc:IO;
+
+BEGIN
+
+/* The lock input holds the video generator in reset */
+
+Lockl :=	IVM (lockl,lock);
+
+(*
+The video mode register
+
+bit 0	enables the timebase generator
+bit 1,2 determine the video mode
+0	16 bit CRY
+1	24 bit RGB
+2	16 bit direct
+3	16 bit RGB (565)
+bit 3	enables digital genlocking
+bit 4	enables incrustation
+bit 5	enables border incrustation
+bit 6	enables csync onto vs
+bit 7	enables background writes in cry & rgb16 modes
+bit 8	enables variable colour mode 
+bits 9..11 determine pixel prescaler factor
+*)
+
+Vm[0] :=	LDP2 (viden,videnl,din[0],vmwr,resetl);
+Vm[1] :=	LDP1 (vm[1],vml[1],din[1],vmwr);
+Vm[2] :=	LDP1 (vm[2],vml[2],din[2],vmwr);
+Vm[3] :=	LDP2Q (vm[3],din[3],vmwr,resetl);
+Vm[4] :=	LDP2Q (incen,din[4],vmwr,resetl);
+Vm[5] :=	LDP1Q (binc,din[5],vmwr);
+Vm[6] :=	LDP1Q (csyncen,din[6],vmwr);
+Vm[7] :=	LDP2Q (bgwen,din[7],vmwr,resetl);
+Vm[8] :=	LDP1Q (varmod,din[8],vmwr);
+Ppn[9-11] :=	LDP2Q (ppn[0-2],din[9-11],vmwr,resetl);
+
+Cry16 :=	AN2 (cry16,vml[2],vml[1]);
+Rgb24 :=	AN2 (rgb24,vml[2],vm[1]);
+Rg16i :=	ND2 (rg16i,vm[2],vml[1]);
+Rg16 :=		IVU (rg16,rg16i);
+Rgb16 :=	AN2 (rgb16,vm[2],vm[1]);
+Syncen :=	IV (syncen,vm[3]);
+
+(* The test register
+
+bit 0		enables the vertical and horizontal counters
+bit 1		starts object processing
+bit 2		disables the CRY ROMs for testing the multipliers
+bit 3		latches the vertical count
+bit 4		enables nand tree output onto xintl
+
+*)
+
+Tcountl :=	ND2 (tcountl,test1w,din[0]);
+Tcount :=	IV (tcount,tcountl);
+Startd3 :=	ND2 (startd3,test1w,din[1]);
+Test1ws :=	AN2 (test1ws,test1w,wet);
+Mptesti :=	LDP2Q (mptesti,din[2],test1ws,resetl);
+Mptest :=	NIVH (mptest,mptesti);
+Vcl :=		AN2 (vcl,test1w,din[3]);
+Ndtesti :=	LDP2Q (ndtesti,din[4],test1ws,resetl);
+Ndtest :=	NIVH (ndtest,ndtesti);
+
+(*
+ a three bit down counter divides the video clock by up to eight 
+ in order to reduce the pixel rate while keeping the same video clock
+*)
+
+Ppresl :=	AN2 (ppresl,notstartd,resetl);
+Pp[0] :=	DNCNTS (pp[0],ppco[0],ppn[0],vclk,vcc,pp,ppresl);
+Pp[1] :=	DNCNTS (pp[1],ppco[1],ppn[1],vclk,ppco[0],pp,ppresl);
+Pp[2] :=	DNCNTS (pp[2],ppco[2],ppn[2],vclk,ppco[1],pp,ppresl);
+Pp :=		NIVM (pp,ppco[2]);
+Ppl :=		IV (ppl,pp);
+Vcc :=		TIE1 (vcc);
+Ppu[0-2] :=	DUMMY (pp[0-2]);
+
+/*
+ The signal word2 addresses one of two sixteen bit CRY pixels at each
+ line buffer address
+*/
+
+Word2d0 :=	ND2 (word2d0,word2l,pp);
+Word2d1 :=	ND2 (word2d1,word2,ppl);
+Word2d :=	ND3 (word2d,word2d0,word2d1,notstartd);
+Word2 :=	FD1 (word2,word2l,word2d,vclk);
+
+(*
+The half line counter determines the width of the video line in pixels.
+It increments from zero to the value in the horizontal period register
+twice per video line.
+The vertical counter is driven from this counter because interlaced displays
+have an odd number of half lines per field.
+The most significant bit determines the current half of the line for
+horizontal decodes
+*)
+Hc :=		JOIN (hc,hc[0..10]);
+Vc :=		JOIN (vc,vc[0..11]);
+Hcu :=		DUMMY (hc);
+Vcu :=		DUMMY (vc);
+
+Vres	 :=	ND3 (vres,lockl,viden,resetl);
+Vresl	:=	IVH (vresl,vres);
+Hlockl :=	ND2 (hlockl,vm[3],hlock);
+Hcresi :=	ND4 (hcresi,resetl,hpeql,hlockl,lockl);
+Hcres :=	NIVM (hcres,hcresi);
+Hmresl :=	ND2 (hmres,resetl,hlockl);
+Hcount :=	ND2 (hcount,videnl,tcountl);
+
+Hc[0] :=	UPCNTS (hc[0],hco[0],din[0],vclk,hcount,hcwr,hcres);
+Hc[1-9] :=	UPCNTS (hc[1-9],hco[1-9],din[1-9],vclk,hco[0-8],hcwr,hcres);
+
+Hc[10] :=	UPCNTS (hc[10],hco[10],din[10],vclk,hpeq,hcwr,hmres);
+Hcb[0-10] :=	NIVH (hcb[0-10],hc[0-10]);
+
+Hcd[0-10] :=	TS (dr[0-10],hcb[0-10],hcrd);
+
+Hco[9] :=	DUMMY (hco[9]);
+Hco[10] :=	DUMMY (hco[10]);
+
+(* The horizontal period register..this register specifies
+half the line length in pixels *)
+
+Hp[0-9] :=	LDP1Q (hp[0-9],din[0-9],hpwr);
+
+(* compare the period with the current count *)
+
+Hpe[0-9] :=	EN (hpe[0-9],hp[0-9],hcb[0-9]);
+Hpeqt :=	AND10 (hpeqt,hpe[0..9]);
+Hpeqi :=	AND11 (hpeqi,hpe[0..9],viden);
+Hpeq :=		NIV (hpeq,hpeqi);
+Hpeql :=	IV (hpeql,hpeq);
+
+(* The other horizontal registers *)
+
+Hbb :=	CREG11	(hbbeq,dr[0..10],hcb[0..10],din[0..10],hbbwr);
+Hbe :=	CREG11	(hbeeq,dr[0..10],hcb[0..10],din[0..10],hbewr);
+Hdb1 :=	CREG11	(hdb1eq,dr[0..10],hcb[0..10],din[0..10],hdb1wr);
+Hdb2 :=	CREG11	(hdb2eq,dr[0..10],hcb[0..10],din[0..10],hdb2wr);
+Hde :=	CREG11	(hdeeq,dr[0..10],hcb[0..10],din[0..10],hdewr);
+
+(*
+The horizontal sync register doesn't use CREG11 because
+two hsync decodes are needed (for hsync and vsync) 
+*)
+
+Hs[0-10] :=	LDP1Q (hs[0-10],din[0-10],hswr);
+Hse[0-10] :=	EN (hse[0-10],hs[0-10],hcb[0-10]);
+Hseq :=		AND11 (hseq,hse[0..10]);
+Hvsb :=		AND10 (hvsb,hse[0..9]);
+
+(*
+The trailing edge of vertical sync (HVS) only uses 10 bits
+because there are two pulses per line
+*)
+Hvs[0-9] :=	LDP1Q (hvs[0-9],din[0-9],hvswr);
+Hvse[0-9] :=	EN (hvse[0-9],hvs[0-9],hcb[0-9]);
+Hvse :=		AND10 (hvse,hvse[0..9]);
+
+(*
+Likewise the equalisation pulses are defined by a ten bit value
+*)
+Heq[0-9] :=	LDP1Q (heq[0-9],din[0-9],heqw);
+Heqe[0-9] :=	EN (heqe[0-9],heq[0-9],hcb[0-9]);
+Heqe :=		AND10 (heqe,heqe[0..9]);
+
+
+(*
+The vertical counter counts half lines.
+It increments from zero to the value in the vertical period register
+once per field.
+*)
+
+Nextfieldl :=	ND2 (nextfieldl,vpeq,hpeq);
+Nextfield :=	IV (nextfield,nextfieldl);
+Vlockl :=	ND2 (vlockl,vm[3],vlock);
+Vcresi :=	ND4 (vcresi,resetl,nextfieldl,vlockl,lockl);
+Vcres :=	NIVM (vcres,vcresi);
+Res :=		IV (res,resetl);
+Vcount :=	OR2 (vcount,hpeq,tcount);
+
+Vc[0] :=	UPCNTS (vc[0],vco[0],din[0],vclk,vcount,vcwr,vcres);
+Vc[1-10] :=	UPCNTS (vc[1-10],vco[1-10],din[1-10],vclk,vco[0-9],vcwr,vcres);
+Vc[11] :=	UPCNTS (vc[11],vco[11],din[11],vclk,nextfield,vcwr,res);
+Vcb[0-10] :=	NIVM (vcb[0-10],vc[0-10]);
+
+Vcd[0-11] :=	TS (dr[0-11],vc[0-11],vcrd);
+
+Vco[10] :=	DUMMY (vco[10]);
+Vco[11] :=	DUMMY (vco[11]);
+
+(* The vertical registers *)
+
+Vp[0-10] :=	LDP1Q (vp[0-10],din[0-10],vpwr);	/* VP */
+Vpe[0-10] :=	EN (vpe[0-10],vp[0-10],vcb[0-10]);
+Vpeqt :=	AND11 (vpeqt,vpe[0..10]);
+Vpeq :=		AND12 (vpeq,vpe[0..10],viden);
+
+Vbb :=	CREG11	(vbbeq,dr[0..10],vcb[0..10],din[0..10],vbbwr);
+Vbe :=	CREG11	(vbeeq,dr[0..10],vcb[0..10],din[0..10],vbewr);
+Vdb :=	CREG11	(vdbeq,dr[0..10],vcb[0..10],din[0..10],vdbwr);
+Vde :=	CREG11	(vdeeq,dr[0..10],vcb[0..10],din[0..10],vdewr);
+Veb :=	CREG11	(vebeq,dr[0..10],vcb[0..10],din[0..10],vebwr);
+Vee :=	CREG11	(veeeq,dr[0..10],vcb[0..10],din[0..10],veewr);
+Vs :=	CREG11	(vseq,dr[0..10],vcb[0..10],din[0..10],vswr);
+Vi :=	CREG11	(vieq,dr[0..10],vcb[0..10],din[0..10],viwr);
+
+(* vvactive is asserted for half lines between vdb and vde *)
+
+Vvactive :=	FJKR (vvactive,notvvactive,vdbeq,vdeeq,vclk,vresl);
+Nvvu :=		DUMMY (notvvactive);
+
+(*
+start is a synchronous decode which starts object processing
+as the two line buffers are swapped
+	   __    __    __    __
+vclk	__/  \__/  \__/  \__/  \__
+	          _____
+start	_________/     \__________
+	_________ ________________
+lbufa	_________X________________
+	          ________________
+vactive	_________/
+
+*)
+
+Startd1 :=	ND2 (startd1,hdb1eq,vvactive);
+Startd2 :=	ND2 (startd2,hdb2eq,vvactive);
+Startd :=	ND3 (startd,startd1,startd2,startd3);
+Start :=	FD2Q (start,startd,vclk,resetl);
+
+(* latch the vertical count so it doesn't change before the next start *)
+
+Vcli	:=	NR2 (vcli,vcl,start);
+Vclb	 :=	IVH (vclb,vcli);
+Vcl[0-10] :=	SLATCH (vcl[0-10],vcb[0-10],vclk,vclb);
+
+(*
+ delay vvactive by one line (or half line) so that the display doesn't
+ start until the line buffer has been prepared
+*)
+
+Startd3p :=	IV (startd3p,startd3);
+Hdb :=		OR3 (hdb,hdb1eq,hdb2eq,startd3p);
+Vdactive :=	SLATCHR (vdactive,vvactive,vclk,hdb,vresl);
+Dd :=		AN2 (dd,vdactive,hdb);
+Vactive :=	FJKR (vactive,notvactive,dd,hdeeq,vclk,vresl);
+Nvu :=		DUMMY (notvactive);
+
+Lbufai :=	FDR (lbufai,lbufbi,lbufad,vclk,vresl);
+Lbufd :=	MX2 (lbufad,lbufa,lbufb,dd);
+Lbufa :=	NIVU2 (lbufa,lbufai);
+Lbufb :=	NIVU2 (lbufb,lbufbi);
+
+Lbaai :=	ND2 (lbaai,lbufai,vactive);
+Lbbai :=	ND2 (lbbai,lbufbi,vactive);
+Lbaactive :=	IVU (lbaactive,lbaai);
+Lbbactive :=	IVU (lbbactive,lbbai);
+
+Vblank :=	FJKR (vblank,notvblank,vbbeq,vbeeq,vclk,vresl);
+Hblank :=	FJKR (hblank,nothblank,hbbeq,hbeeq,vclk,vresl);
+Blank :=	ND2 (blank,notvblank,nothblank);
+
+Unused1 :=	DUMMY (vblank);
+Unused2 :=	DUMMY (hblank);
+
+Hs :=		FJKR (hs,noths,hseq,hpeq,vclk,vresl);
+Hsu :=		DUMMY (hs);
+
+(*
+vertical sync is made from two components
+several lines of long pulses
+several more lines of equalisation pulses
+*)
+Vvsync :=	FJKR (vvs,notvvs,vseq,vpeq,vclk,vresl);
+Nvsu :=		DUMMY (notvvs);
+Hvstart :=	AN2 (hvstart,hvsb,vvs);
+Hvsync :=	FJKR (hvs,nothvs,hvstart,hvse,vclk,vresl);
+Vesync :=	FJKR (ves,notves,vebeq,veeeq,vclk,vresl);
+Nvesu :=	DUMMY (notves);
+Hestart :=	AN2 (hestart,hvsb,ves);
+Hesync :=	FJKR (hes,nothes,hestart,heqe,vclk,vresl);
+Vsync :=	AN2 (vsl,nothvs,nothes);
+Csync :=	MX2 (csync,noths,vsl,ves);
+Notvs :=	MX2 (notvs,vsl,csync,csyncen);
+Hvs :=		DUMMY (hvs);
+Hes :=		DUMMY (hes);
+
+(* The video interrupt is a syncronous decode at the end of the display *)
+
+Vintd :=	AN2 (vintd,vieq,hdeeq);
+Vint :=		FDR (vint,vintl,vintd,vclk,vresl);
+Vintl :=	DUMMY (vintl);
+
+(* Nextpixd latches the pixel data from the line buffer *)
+(* Nextpixa increments the line buffer address *)
+(* in CRY and RGB16 modes the line buffer is accessed at half speed *)
+
+Ppnz :=		OR3 (ppnz,ppn[0..2]);
+Longpix :=	NR2 (longpix,cry16,rgb16);
+Wordpix :=	IV (wordpix,longpix);
+Sxp :=		OR2 (sxp,wordpix,ppnz);
+Notstartd :=	IV (notstartd,startd);
+Nextpixd0 :=	ND2 (nextpixd0,word2,pp);
+Nextpixd1 :=	ND2 (nextpixd1,longpix,pp);
+Nextpixd :=	ND2 (nextpixd,nextpixd0,nextpixd1);
+
+(* in CRY and RGB16 modes and where the pixel prescaler is used the
+ line buffer may be cleared to a background colour in which case nextpixa
+ follows nextpixd otherwise nextpixa = nextpixd *)
+(* NB but for the last pixel to be cleared the display width must be even *)
+
+Nextpixad :=	AN2 (nextpixad,nextpixd,notstartd);
+Nextpixaq :=	FD1Q (nextpixaq,nextpixad,vclk);
+Nextpixa :=	MX2 (nextpixa,nextpixd,nextpixaq,sxp);
+Bgw :=		AN3 (bgw,bgwen,nextpixa,sxp);
+
+(* sample the lightpen and generate a load pulse from the leading edge *)
+
+Lp1 :=		FD1Q (lp1,lp,vclk);
+Lp2 :=		FD1 (lp2,lp2l,lp1,vclk);
+Lpldi :=	ND2 (lpldi,lp1,lp2l);
+Lpld :=		IVH (lpld,lpldi);
+Unused4 :=	DUMMY (lp2);
+
+Lph[0-10] :=	SLATCH (lph[0-10],hcb[0-10],vclk,lpld);
+Lpv[0-11] :=	SLATCH (lpv[0-11],vc[0-11],vclk,lpld);
+Lphd[0-10] :=	TS (dr[0-10],lph[0-10],lphrd);
+Lphd[11] :=	TS (dr[11],lpe,lphrd);
+Lpvd[0-11] :=	TS (dr[0-11],lpv[0-11],lpvrd);
+
+Lp_event :=	FJK2 (lpe,notlpe,lpld,nextfield,vclk,resetl);
+Lpeu :=		DUMMY (notlpe);
+
+(* test2 & test3 allow the video comparison logic to be tested thoroughly *)
+
+Td2[0] :=	TS (dr[0],hpeqt,test2r);
+Td2[1] :=	TS (dr[1],hbbeq,test2r);
+Td2[2] :=	TS (dr[2],hbeeq,test2r);
+Td2[3] :=	TS (dr[3],hdb1eq,test2r);
+Td2[4] :=	TS (dr[4],hdb2eq,test2r);
+Td2[5] :=	TS (dr[5],hdeeq,test2r);
+Td2[6] :=	TS (dr[6],hseq,test2r);
+Td2[7] :=	TS (dr[7],hvsb,test2r);
+Td2[8] :=	TS (dr[8],hvse,test2r);
+Td2[9] :=	TS (dr[9],heqe,test2r);
+Td2[10] :=	TS (dr[10],gnd,test2r);
+
+Td3[0] :=	TS (dr[0],vpeqt,test3r);
+Td3[1] :=	TS (dr[1],vbbeq,test3r);
+Td3[2] :=	TS (dr[2],vbeeq,test3r);
+Td3[3] :=	TS (dr[3],vdbeq,test3r);
+Td3[4] :=	TS (dr[4],vdeeq,test3r);
+Td3[5] :=	TS (dr[5],vebeq,test3r);
+Td3[6] :=	TS (dr[6],veeeq,test3r);
+Td3[7] :=	TS (dr[7],vseq,test3r);
+Td3[8] :=	TS (dr[8],vieq,test3r);
+Td3[9] :=	TS (dr[9],vgy,test3r);
+Td3[10] :=	TS (dr[10],vey,test3r);
+Td3[11] :=	TS (dr[11],vly,test3r);
+
+(*
+force dr[11..15] low when reading hc, & test2 
+force dr[12..15] low when reading vc, lpv & lph
+*)
+
+E11 :=		OR2 (e11,hcrd,test2r);
+E1215 :=	OR4 (e1215,e11,vcrd,lpvrd,lphrd);
+Gnd :=		TIE0 (gnd);
+Dr[11] :=	TS (dr[11],gnd,e11);
+Dr[12-15] :=	TS (dr[12-15],gnd,e1215);
+
+END;
+
+(* creg11 is an eleven bit register with an eleven bit comparator *)
+
+
+DEF	CREG11	(creq:IO; dout[0..10]:BUS; count[0..10],din[0..10],crwr:IN);
+
+
+BEGIN
+
+Cr[0-10] :=	LDP1Q (cr[0-10],din[0-10],crwr);
+Cre[0-10] :=	EN (cre[0-10],cr[0-10],count[0-10]);
+Creq :=		AND11 (creq,cre[0..10]);
+
+END;
+
+
+DEF	AND10	(z:IO; a[0..9]:IN);
+
+BEGIN
+
+Z1 :=	ND6 (z1,a[0..5]);
+Z2 :=	ND4 (z2,a[6..9]);
+Z :=	NR2 (z,z1,z2);
+
+END;
+
+
+DEF	AND11	(z:IO; a[0..10]:IN);
+
+BEGIN
+
+Z1 :=	ND6 (z1,a[0..5]);
+Z2 :=	ND6 (z2,a[6..10],a[10]);
+Z :=	NR2 (z,z1,z2);
+
+END;
+
+DEF	AND12	(z:IO; a[0..11]:IN);
+
+BEGIN
+
+Z1 :=	ND6 (z1,a[0..5]);
+Z2 :=	ND6 (z2,a[6..11]);
+Z :=	NR2 (z,z1,z2);
+
+END;
+
+

@@ -1,0 +1,225 @@
+/******************************************************************
+addarray
+27/11/90
+
+Blitter data adder
+------------------
+This module contains the 64-bit adder array used for performing
+blitter data arithmetic.  It performs the functions associated with
+computing Z and intensity values for 3D Gouraud shading.  These
+values are computed by adding a pre-computed value to the Z and I
+values.
+
+Updating Z values, which are unsigned, involves adding a fractional
+offset to each fractional Z part, and propagating carry from this
+into the addition of integer Z and its signed integer offset.  This
+addition should saturate rather than wrap.
+
+Updating I values is similar, except that the integer part is only 
+8 bits.  The top 8 bits are a colour value, which may be one 8-bit 
+or two 4-bit fields.  As it almost comes for free, an integer 
+colour offset is also permitted, although there is no associated 
+fractional part and no saturation, this facility may be used to 
+provide "weird" effects.
+
+It has a variety of modes:
+
+X00	16-bit normal add
+001	16-bit saturating add with carry
+010	8-bit saturating add with carry, carry into top byte is 
+	inhibited (YCrCb)
+011	8-bit saturating add with carry, carry into top byte and 
+	between top nybbles is inhibited (CRY)
+101	16-bit saturating add
+110	8-bit saturating add, carry into top byte is inhibited
+111	8-bit saturating add, carry into top byte and between top 
+	nybbles is inhibited
+
+Carry is only really defined after 16-bit operations, after 8-bit
+operations it reflects carry out of colour, which is meaningless.
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ADDARRAY (
+INT16/	addq[0..3]
+	:OUT;
+INT16/	adda[0..3]
+INT16/	addb[0..3]
+	daddmode[0..2]
+	clk[0]
+	reset\
+	:IN);
+
+BEGIN
+
+/* Adder carry in is enabled in modes 001, 010, and 011 */
+
+Cinselt		:= NR2 (cinselt, daddmode[0..1]);
+Cinsel		:= NR2P (cinsel, cinselt, daddmode[2]);
+
+/* The carry latches - carry is latched transiently */
+
+Carrylat[0-3]	:= FD2Q (carryq[0-3], co[0-3], clk[0], reset\);
+
+/* Carry in enables */
+
+Cin[0-3]	:= AN2 (cin[0-3], carryq[0-3], cinsel);
+
+/* Eight bit mode in modes X10 and X11 */
+
+Eightbit	:= JOIN (eightbit, daddmode[1]);
+
+/* Saturate in modes X01, X10 and X11 */
+
+Sat		:= OR2P (sat, daddmode[0..1]);
+
+/* Prevent carry propagation from bits 11 to 12 in mode X11 */
+
+Hicinh		:= AN2P (hicinh, daddmode[0], daddmode[1]);
+
+/* The adders */
+
+Adder1		:= ADD16SAT (addq[0], co[0], adda[0],  addb[0], 
+			cin[0], sat, eightbit, hicinh);
+
+Adder2		:= ADD16SAT (addq[1], co[1], adda[1], addb[1], 
+			cin[1], sat, eightbit, hicinh);
+
+Adder3		:= ADD16SAT (addq[2], co[2], adda[2], addb[2], 
+			cin[2], sat, eightbit, hicinh);
+
+Adder4		:= ADD16SAT (addq[3], co[3], adda[3], addb[3], 
+			cin[3], sat, eightbit, hicinh);
+
+END;
+
+
+/**  ADD16SAT - 16-bit saturating full adder  *********************
+
+This is a 16-bit adder with a part-signed saturate mode, input A
+being unsigned and input B being signed.  The result is unsigned, 
+so underflow saturation of all zeroes should be produced when 
+input B is negative and the result underflows (no carry), or 
+overflow saturation when input B is positive and the result 
+overflows (carry).  This may occur in one of two positions 
+depending on whether 8-bit mode is set or not.
+
+*/
+
+DEF ADD16SAT (
+INT16/	r		/* result */
+	co		/* carry out */
+	:IO;
+INT16/	a
+INT16/	b
+	cin
+	sat
+	eightbit
+	hicinh 
+	:IN); 
+
+BEGIN
+
+Eightbit\	:= IV (eightbit\, eightbit);
+
+#if FLARE
+Hicinh\		:= IV (hicinh\, hicinh);
+
+Add0		:= ADD4 (q[0..3], carryt, a{0..3}, b{0..3}, cin);
+Add1		:= ADD4 (q[4..7], carry[0], a{4..7}, b{4..7}, 
+			carryt);
+
+Carry[1]	:= AN2 (carry[1], eightbit\, carry[0]);
+
+Add2		:= ADD4 (q[8..11], carry[2], a{8..11}, b{8..11}, 
+			carry[1]);
+
+Carry[3]	:= AN2 (carry[3], hicinh\, carry[2]);
+
+Add3		:= ADD4 (q[12..15], co, a{12..15}, b{12..15}, 
+			carry[3]);
+#endif
+#if TOSHIBA
+Cin\		:= IV (cin\, cin);
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Add0		:= FA4CS (q[0..3], co\[0], co0\[0], co1\[0], g[0], 
+			p[0], cin\, one, zero, a{0}, b{0}, a{1}, 
+			b{1}, a{2}, b{2}, a{3}, b{3});
+Add1		:= FA4CS (q[4..7], co\[1], co0\[1], co1\[1], g[1], 
+			p[1], cin\[1], one, zero, a{4}, b{4}, a{5},
+			b{5}, a{6}, b{6}, a{7}, b{7});
+Add2		:= FA4CS (q[8..11], co\[2], co0\[2], co1\[2], g[2],
+			p[2], cin\[2], one, zero, a{8}, b{8}, a{9},
+			b{9}, a{10}, b{10}, a{11}, b{11});
+Add3		:= FA4CS (q[12..15], co\[3], co0\[3], co1\[3], 
+			g[3], p[3], cin\[3], one, zero, a{12}, 
+			b{12}, a{13}, b{13}, a{14}, b{14}, a{15}, 			b{15});
+Addcg		:= CG4 (cin\[1], cint\[2], cint\[3], g, p, 
+			cin\, g[0..3], p[0..3]);
+Cin\[2]		:= OR2 (cin\[2], eightbit, cint\[2]);
+Cin\[3]		:= OR2 (cin\[3], hicinh,   cint\[3]);
+
+Carry[0]	:= IV (carry[0], cint\[2]);
+Co		:= AOR1 (co, p, cin, g);
+
+Co\[0-3]	:= DUMMY (co\[0-3]);
+Co0\[0-3]	:= DUMMY (co0\[0-3]);
+Co1\[0-3]	:= DUMMY (co1\[0-3]);
+
+#endif
+#if VERILOG
+Cin\		:= IV (cin\, cin);
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Add0		:= FA4CS (q[0..3], co\[0], co0\[0], co1\[0], g[0], 
+			p[0], cin\, one, zero, a{0}, b{0}, a{1}, 
+			b{1}, a{2}, b{2}, a{3}, b{3});
+Add1		:= FA4CS (q[4..7], co\[1], co0\[1], co1\[1], g[1], 
+			p[1], cin\[1], one, zero, a{4}, b{4}, a{5},
+			b{5}, a{6}, b{6}, a{7}, b{7});
+Add2		:= FA4CS (q[8..11], co\[2], co0\[2], co1\[2], g[2],
+			p[2], cin\[2], one, zero, a{8}, b{8}, a{9},
+			b{9}, a{10}, b{10}, a{11}, b{11});
+Add3		:= FA4CS (q[12..15], co\[3], co0\[3], co1\[3], 
+			g[3], p[3], cin\[3], one, zero, a{12}, 
+			b{12}, a{13}, b{13}, a{14}, b{14}, a{15}, 			b{15});
+Addcg		:= CG4 (cin\[1], cint\[2], cint\[3], g, p, 
+			cin\, g[0..3], p[0..3]);
+Cin\[2]		:= OR2 (cin\[2], eightbit, cint\[2]);
+Cin\[3]		:= OR2 (cin\[3], hicinh,   cint\[3]);
+
+Carry[0]	:= IV (carry[0], cint\[2]);
+Co		:= AOR1 (co, p, cin, g);
+
+Co\[0-3]	:= DUMMY (co\[0-3]);
+Co0\[0-3]	:= DUMMY (co0\[0-3]);
+Co1\[0-3]	:= DUMMY (co1\[0-3]);
+
+#endif
+/* Top bit terms for saturation */
+
+Btop		:= MX2 (btop, b{15}, b{7}, eightbit);
+Ctop		:= MX2P (ctop, co, carry[0], eightbit);
+Ctopb		:= NIVH (ctopb, ctop);
+
+/* Saturation is sat & (btop ^ ctop) */
+
+Satt		:= EO (satt, btop, ctop);
+Saturate	:= AN2P (saturate, sat, satt);
+Saturateb	:= NIVH (saturateb, saturate);
+
+/* Version of saturation for the top 8 bits */
+
+Hisaturate	:= AN2M (hisaturate, eightbit\, saturate);
+
+/* Saturation control */
+
+R[0-7]		:= MX2P (r[0-7], q[0-7], ctopb, saturateb);
+R[8-15]		:= MX2P (r[8-15], q[8-15], ctopb, hisaturate);
+
+R		:= JOIN (r, r[0..15]);
+
+END;

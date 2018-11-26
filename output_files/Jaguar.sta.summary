@@ -1,0 +1,105 @@
+------------------------------------------------------------
+TimeQuest Timing Analyzer Summary
+------------------------------------------------------------
+
+Type  : Setup 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk'
+Slack : -7.552
+TNS   : -330.642
+
+Type  : Setup 'FPGA_CLK3_50'
+Slack : 2.422
+TNS   : 0.000
+
+Type  : Setup 'FPGA_CLK1_50'
+Slack : 4.991
+TNS   : 0.000
+
+Type  : Setup 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
+Slack : 5.344
+TNS   : 0.000
+
+Type  : Setup 'altera_reserved_tck'
+Slack : 8.537
+TNS   : 0.000
+
+Type  : Setup 'FPGA_CLK2_50'
+Slack : 11.591
+TNS   : 0.000
+
+Type  : Hold 'FPGA_CLK3_50'
+Slack : 0.258
+TNS   : 0.000
+
+Type  : Hold 'FPGA_CLK1_50'
+Slack : 0.336
+TNS   : 0.000
+
+Type  : Hold 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
+Slack : 0.402
+TNS   : 0.000
+
+Type  : Hold 'altera_reserved_tck'
+Slack : 0.431
+TNS   : 0.000
+
+Type  : Hold 'FPGA_CLK2_50'
+Slack : 0.435
+TNS   : 0.000
+
+Type  : Hold 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk'
+Slack : 0.437
+TNS   : 0.000
+
+Type  : Recovery 'FPGA_CLK3_50'
+Slack : 11.712
+TNS   : 0.000
+
+Type  : Recovery 'FPGA_CLK1_50'
+Slack : 14.022
+TNS   : 0.000
+
+Type  : Recovery 'altera_reserved_tck'
+Slack : 24.725
+TNS   : 0.000
+
+Type  : Removal 'altera_reserved_tck'
+Slack : 1.107
+TNS   : 0.000
+
+Type  : Removal 'FPGA_CLK1_50'
+Slack : 1.503
+TNS   : 0.000
+
+Type  : Removal 'FPGA_CLK3_50'
+Slack : 2.091
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|fpll_0|fpll|vcoph[0]'
+Slack : 1.122
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk'
+Slack : 1.989
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
+Slack : 4.303
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'FPGA_CLK3_50'
+Slack : 8.807
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'FPGA_CLK1_50'
+Slack : 9.169
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'FPGA_CLK2_50'
+Slack : 9.181
+TNS   : 0.000
+
+Type  : Minimum Pulse Width 'altera_reserved_tck'
+Slack : 15.329
+TNS   : 0.000
+
+------------------------------------------------------------

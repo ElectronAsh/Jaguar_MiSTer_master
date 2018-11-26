@@ -1,0 +1,835 @@
+# -------------------------------------------------------------------------- #
+#
+# Copyright (C) 1991-2009 Altera Corporation
+# Your use of Altera Corporation's design tools, logic functions 
+# and other software and tools, and its AMPP partner logic 
+# functions, and any output files from any of the foregoing 
+# (including device programming or simulation files), and any 
+# associated documentation or information are expressly subject 
+# to the terms and conditions of the Altera Program License 
+# Subscription Agreement, Altera MegaCore Function License 
+# Agreement, or other applicable license agreement, including, 
+# without limitation, that your use is for the sole purpose of 
+# programming logic devices manufactured by Altera and sold by 
+# Altera or its authorized distributors.  Please refer to the 
+# applicable agreement for further details.
+#
+# -------------------------------------------------------------------------- #
+#
+# Quartus II 64-Bit
+# Version 9.1 Build 222 10/21/2009 SJ Full Version
+# Date created = 06:44:25  April 24, 2013
+#
+# -------------------------------------------------------------------------- #
+#
+# Notes:
+#
+# 1) The default values for assignments are stored in the file:
+#		jag_s2_assignment_defaults.qdf
+#    If this file doesn't exist, see file:
+#		assignment_defaults.qdf
+#
+# 2) Altera recommends that you do not modify this file. This
+#    file is updated automatically by the Quartus II software
+#    and any changes you make may be lost or overwritten.
+#
+# -------------------------------------------------------------------------- #
+
+
+set_global_assignment -name FAMILY "Stratix II"
+set_global_assignment -name DEVICE EP2S60F672C3
+set_global_assignment -name TOP_LEVEL_ENTITY jag_s2
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 9.1
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "06:44:25  APRIL 24, 2013"
+set_global_assignment -name LAST_QUARTUS_VERSION 9.1
+set_global_assignment -name USE_GENERATED_PHYSICAL_CONSTRAINTS OFF -section_id eda_blast_fpga
+set_global_assignment -name STRATIXII_OPTIMIZATION_TECHNIQUE SPEED
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name LL_ROOT_REGION ON -section_id "Root Region"
+set_global_assignment -name LL_MEMBER_STATE LOCKED -section_id "Root Region"
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING OFF
+
+##########################################################
+#### Clocks and Resets
+##########################################################
+set_location_assignment PIN_B13 -to OSC_CLK0
+set_location_assignment PIN_P25 -to OSC_CLK1
+set_location_assignment PIN_AC13 -to OSC_CLK2
+set_location_assignment PIN_R3 -to OSC_CLK3
+set_location_assignment PIN_AA15 -to CPU_RESET_n
+set_location_assignment PIN_F14 -to FE_RESET_n
+set_location_assignment PIN_F15 -to ATA_RESET_n
+set_location_assignment PIN_E15 -to SPI_RESET_n
+
+##########################################################
+#### SPI Flash Memory Bank #0
+##########################################################
+set_location_assignment PIN_AE3 -to BANK0_SPI_CLK
+set_location_assignment PIN_AE11 -to BANK0_SPI_CS_n[3]
+set_location_assignment PIN_AD7 -to BANK0_SPI_CS_n[0]
+set_location_assignment PIN_AD8 -to BANK0_SPI_CS_n[1]
+set_location_assignment PIN_AB8 -to BANK0_SPI_CS_n[2]
+set_location_assignment PIN_W11 -to BANK0_SPI_IO[0]
+set_location_assignment PIN_W12 -to BANK0_SPI_IO[1]
+set_location_assignment PIN_AD11 -to BANK0_SPI_IO[2]
+set_location_assignment PIN_Y9 -to BANK0_SPI_IO[3]
+
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_CLK
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_CS_n[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_CS_n[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_CS_n[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_CS_n[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_IO[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_IO[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_IO[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK0_SPI_IO[3]
+
+##########################################################
+#### SPI Flash Memory Bank #1
+##########################################################
+set_location_assignment PIN_J7 -to BANK1_SPI_CLK
+set_location_assignment PIN_M1 -to BANK1_SPI_CS_n[0]
+set_location_assignment PIN_G7 -to BANK1_SPI_CS_n[1]
+set_location_assignment PIN_H8 -to BANK1_SPI_CS_n[2]
+set_location_assignment PIN_H7 -to BANK1_SPI_CS_n[3]
+set_location_assignment PIN_M2 -to BANK1_SPI_IO[0]
+set_location_assignment PIN_H6 -to BANK1_SPI_IO[1]
+set_location_assignment PIN_J6 -to BANK1_SPI_IO[2]
+set_location_assignment PIN_L3 -to BANK1_SPI_IO[3]
+
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_CLK
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_CS_n[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_CS_n[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_CS_n[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_CS_n[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_IO[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_IO[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_IO[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to BANK1_SPI_IO[3]
+
+##########################################################
+#### 32-bit SSRAM Memory (2 MB)
+##########################################################
+set_location_assignment PIN_A12 -to SSRAM_CLK
+set_location_assignment PIN_C16 -to SSRAM_CE1_n
+set_location_assignment PIN_L25 -to SSRAM_CE2
+set_location_assignment PIN_L24 -to SSRAM_CE3_n
+set_location_assignment PIN_B16 -to SSRAM_ADSC_n
+set_location_assignment PIN_J25 -to SSRAM_ADSP_n
+set_location_assignment PIN_J24 -to SSRAM_ADV_n
+set_location_assignment PIN_F17 -to SSRAM_BWE_n
+set_location_assignment PIN_J26 -to SSRAM_OE_n
+set_location_assignment PIN_G18 -to SSRAM_GW_n
+
+set_instance_assignment -name VIRTUAL_PIN ON -to SSRAM_ADDR[0]
+set_instance_assignment -name VIRTUAL_PIN ON -to SSRAM_ADDR[1]
+set_location_assignment PIN_G16 -to SSRAM_ADDR[2]
+set_location_assignment PIN_G17 -to SSRAM_ADDR[3]
+set_location_assignment PIN_E26 -to SSRAM_ADDR[4]
+set_location_assignment PIN_E25 -to SSRAM_ADDR[5]
+set_location_assignment PIN_E24 -to SSRAM_ADDR[6]
+set_location_assignment PIN_E23 -to SSRAM_ADDR[7]
+set_location_assignment PIN_F26 -to SSRAM_ADDR[8]
+set_location_assignment PIN_F25 -to SSRAM_ADDR[9]
+set_location_assignment PIN_C17 -to SSRAM_ADDR[10]
+set_location_assignment PIN_C18 -to SSRAM_ADDR[11]
+set_location_assignment PIN_C19 -to SSRAM_ADDR[12]
+set_location_assignment PIN_C20 -to SSRAM_ADDR[13]
+set_location_assignment PIN_G26 -to SSRAM_ADDR[14]
+set_location_assignment PIN_G25 -to SSRAM_ADDR[15]
+set_location_assignment PIN_G24 -to SSRAM_ADDR[16]
+set_location_assignment PIN_G23 -to SSRAM_ADDR[17]
+set_location_assignment PIN_G21 -to SSRAM_ADDR[18]
+set_location_assignment PIN_G20 -to SSRAM_ADDR[19]
+set_location_assignment PIN_H26 -to SSRAM_ADDR[20]
+#set_location_assignment PIN_H25 -to SSRAM_ADDR[23]
+#set_location_assignment PIN_H24 -to SSRAM_ADDR[24]
+
+set_location_assignment PIN_H23 -to SSRAM_BE_n[0]
+set_location_assignment PIN_J23 -to SSRAM_BE_n[1]
+set_location_assignment PIN_K24 -to SSRAM_BE_n[2]
+set_location_assignment PIN_F16 -to SSRAM_BE_n[3]
+set_location_assignment PIN_A17 -to SSRAM_DQ[0]
+set_location_assignment PIN_A18 -to SSRAM_DQ[1]
+set_location_assignment PIN_A19 -to SSRAM_DQ[2]
+set_location_assignment PIN_A20 -to SSRAM_DQ[3]
+set_location_assignment PIN_B17 -to SSRAM_DQ[4]
+set_location_assignment PIN_B18 -to SSRAM_DQ[5]
+set_location_assignment PIN_B19 -to SSRAM_DQ[6]
+set_location_assignment PIN_B20 -to SSRAM_DQ[7]
+set_location_assignment PIN_B24 -to SSRAM_DQ[8]
+set_location_assignment PIN_C22 -to SSRAM_DQ[9]
+set_location_assignment PIN_B22 -to SSRAM_DQ[10]
+set_location_assignment PIN_C21 -to SSRAM_DQ[11]
+set_location_assignment PIN_E18 -to SSRAM_DQ[12]
+set_location_assignment PIN_D18 -to SSRAM_DQ[13]
+set_location_assignment PIN_E17 -to SSRAM_DQ[14]
+set_location_assignment PIN_D17 -to SSRAM_DQ[15]
+set_location_assignment PIN_F23 -to SSRAM_DQ[16]
+set_location_assignment PIN_F22 -to SSRAM_DQ[17]
+set_location_assignment PIN_F21 -to SSRAM_DQ[18]
+set_location_assignment PIN_B23 -to SSRAM_DQ[19]
+set_location_assignment PIN_D25 -to SSRAM_DQ[20]
+set_location_assignment PIN_F24 -to SSRAM_DQ[21]
+set_location_assignment PIN_H21 -to SSRAM_DQ[22]
+set_location_assignment PIN_F19 -to SSRAM_DQ[23]
+set_location_assignment PIN_B21 -to SSRAM_DQ[24]
+set_location_assignment PIN_A21 -to SSRAM_DQ[25]
+set_location_assignment PIN_A22 -to SSRAM_DQ[26]
+set_location_assignment PIN_A24 -to SSRAM_DQ[27]
+set_location_assignment PIN_C26 -to SSRAM_DQ[28]
+set_location_assignment PIN_C25 -to SSRAM_DQ[29]
+set_location_assignment PIN_D24 -to SSRAM_DQ[30]
+set_location_assignment PIN_C23 -to SSRAM_DQ[31]
+
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_ADSC_n
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_BWE_n
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_CE1_n
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_DQ
+#set_instance_assignment -name TSU_REQUIREMENT "6 ns" -from * -to SSRAM_DQ
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_OE_n
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_ADDR
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_BE_n
+#set_instance_assignment -name TCO_REQUIREMENT "3.3 ns" -from * -to SSRAM_ADV_n
+#set_instance_assignment -name RESERVE_PIN "AS OUTPUT DRIVING VCC" -to SSRAM_ADSP_n
+#set_instance_assignment -name RESERVE_PIN "AS OUTPUT DRIVING VCC" -to SSRAM_CE2
+#set_instance_assignment -name RESERVE_PIN "AS OUTPUT DRIVING GND" -to SSRAM_CE3_n
+
+##########################################################
+#### 16-bit DDR1 Memory (32 MB)
+##########################################################
+set_location_assignment PIN_C4 -to DDR_CLK_n
+set_location_assignment PIN_C3 -to DDR_CLK_p
+set_location_assignment PIN_F13 -to DDR_CKE
+set_location_assignment PIN_E12 -to DDR_CS_n
+set_location_assignment PIN_A3 -to DDR_RAS_n
+set_location_assignment PIN_B3 -to DDR_CAS_n
+set_location_assignment PIN_B4 -to DDR_WE_n
+set_location_assignment PIN_B10 -to DDR_ADDR[0]
+set_location_assignment PIN_B9 -to DDR_ADDR[1]
+set_location_assignment PIN_B8 -to DDR_ADDR[2]
+set_location_assignment PIN_B6 -to DDR_ADDR[3]
+set_location_assignment PIN_C5 -to DDR_ADDR[4]
+set_location_assignment PIN_E11 -to DDR_ADDR[5]
+set_location_assignment PIN_E10 -to DDR_ADDR[6]
+set_location_assignment PIN_E9 -to DDR_ADDR[7]
+set_location_assignment PIN_E8 -to DDR_ADDR[8]
+set_location_assignment PIN_E7 -to DDR_ADDR[9]
+set_location_assignment PIN_F11 -to DDR_ADDR[10]
+set_location_assignment PIN_F10 -to DDR_ADDR[11]
+set_location_assignment PIN_F8 -to DDR_ADDR[12]
+set_location_assignment PIN_G10 -to DDR_BA[0]
+set_location_assignment PIN_G11 -to DDR_BA[1]
+set_location_assignment PIN_C9 -to DDR_DQS[0]
+set_location_assignment PIN_C6 -to DDR_DQS[1]
+set_location_assignment PIN_C10 -to DDR_DM[0]
+set_location_assignment PIN_B7 -to DDR_DM[1]
+set_location_assignment PIN_D9 -to DDR_DQ[0]
+set_location_assignment PIN_D8 -to DDR_DQ[1]
+set_location_assignment PIN_C8 -to DDR_DQ[2]
+set_location_assignment PIN_A9 -to DDR_DQ[3]
+set_location_assignment PIN_B11 -to DDR_DQ[4]
+set_location_assignment PIN_C11 -to DDR_DQ[5]
+set_location_assignment PIN_A10 -to DDR_DQ[6]
+set_location_assignment PIN_D10 -to DDR_DQ[7]
+set_location_assignment PIN_A5 -to DDR_DQ[8]
+set_location_assignment PIN_B5 -to DDR_DQ[9]
+set_location_assignment PIN_D6 -to DDR_DQ[10]
+set_location_assignment PIN_A6 -to DDR_DQ[11]
+set_location_assignment PIN_A8 -to DDR_DQ[12]
+set_location_assignment PIN_A7 -to DDR_DQ[13]
+set_location_assignment PIN_C7 -to DDR_DQ[14]
+set_location_assignment PIN_D7 -to DDR_DQ[15]
+
+set_instance_assignment -name OUTPUT_ENABLE_GROUP 1 -to DDR_DQS
+set_instance_assignment -name OUTPUT_ENABLE_GROUP 1 -to DDR_DM
+set_instance_assignment -name OUTPUT_ENABLE_GROUP 1 -to DDR_DQ
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS I" -to DDR_CLK_n
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS I" -to DDR_CLK_p
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_CKE
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_CS_n
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_RAS_n
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_CAS_n
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_WE_n
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[0]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[1]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[2]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[3]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[4]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[5]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[6]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[7]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[8]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[9]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[10]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[11]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_ADDR[12]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_BA[0]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_BA[1]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQS[0]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQS[1]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DM[0]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DM[1]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[0]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[1]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[2]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[3]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[4]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[5]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[6]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[7]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[8]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[9]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[10]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[11]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[12]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[13]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[14]
+set_instance_assignment -name IO_STANDARD "SSTL-2 CLASS II" -to DDR_DQ[15]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_CKE
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_CS_n
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_RAS_n
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_CAS_n
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_WE_n
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[4]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[5]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[6]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[7]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[8]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[9]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[10]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[11]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_ADDR[12]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_BA[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DDR_BA[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_CLK_n
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_CLK_p
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_CKE
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_CS_n
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_RAS_n
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_CAS_n
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_WE_n
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[0]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[2]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[3]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[4]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[5]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[6]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[7]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[8]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[9]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[10]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[11]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_ADDR[12]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_BA[0]
+set_instance_assignment -name OUTPUT_PIN_LOAD 2 -to DDR_BA[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQS[0]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQS[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DM[0]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DM[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[0]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[1]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[2]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[3]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[4]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[5]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[6]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[7]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[8]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[9]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[10]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[11]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[12]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[13]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[14]
+set_instance_assignment -name OUTPUT_PIN_LOAD 4 -to DDR_DQ[15]
+set_instance_assignment -name CUT ON -from DDR_DQS[0] -to *
+set_instance_assignment -name CUT ON -from DDR_DQS[1] -to *
+
+##########################################################
+#### Parallel Flash Memory / Fast Ethernet
+##########################################################
+
+
+
+
+##########################################################
+#### Debug : Push Buttons
+##########################################################
+set_location_assignment PIN_P4 -to SW[0]
+set_location_assignment PIN_P5 -to SW[1]
+set_location_assignment PIN_N6 -to SW[2]
+set_location_assignment PIN_N7 -to SW[3]
+
+##########################################################
+#### Debug : LEDs
+##########################################################
+set_location_assignment PIN_W15 -to LED_n[0]
+set_location_assignment PIN_V14 -to LED_n[1]
+set_location_assignment PIN_AD17 -to LED_n[2]
+set_location_assignment PIN_AA17 -to LED_n[3]
+set_location_assignment PIN_V16 -to LED_n[4]
+set_location_assignment PIN_AB17 -to LED_n[5]
+set_location_assignment PIN_AD18 -to LED_n[6]
+set_location_assignment PIN_V17 -to LED_n[7]
+
+##########################################################
+#### Debug : 7-Segment Display
+##########################################################
+set_location_assignment PIN_L8 -to HEX_0[0]
+set_location_assignment PIN_L9 -to HEX_0[1]
+set_location_assignment PIN_M7 -to HEX_0[2]
+set_location_assignment PIN_M8 -to HEX_0[3]
+set_location_assignment PIN_M5 -to HEX_0[4]
+set_location_assignment PIN_M6 -to HEX_0[5]
+set_location_assignment PIN_N4 -to HEX_0[6]
+set_location_assignment PIN_N5 -to HEX_0[7]
+set_location_assignment PIN_K8 -to HEX_1[0]
+set_location_assignment PIN_K9 -to HEX_1[1]
+set_location_assignment PIN_L4 -to HEX_1[2]
+set_location_assignment PIN_L5 -to HEX_1[3]
+set_location_assignment PIN_M3 -to HEX_1[4]
+set_location_assignment PIN_M4 -to HEX_1[5]
+set_location_assignment PIN_L6 -to HEX_1[6]
+set_location_assignment PIN_L7 -to HEX_1[7]
+
+##########################################################
+#### Parallel Flash Memory / Fast Ethernet
+##########################################################
+set_location_assignment PIN_H19 -to FLS_CS_n
+set_location_assignment PIN_H20 -to FLS_OE_n
+set_location_assignment PIN_V26 -to FLS_RW_n
+set_location_assignment PIN_W25 -to FLS_RY_BY_n
+set_location_assignment PIN_H22 -to FLS_WP_n
+set_location_assignment PIN_K18 -to FLS_BYTE_n
+
+set_location_assignment PIN_AB25 -to ENET_AEN
+set_location_assignment PIN_AA22 -to ENET_ADS_n
+set_location_assignment PIN_AA26 -to ENET_CYCLE_n
+set_location_assignment PIN_W24 -to ENET_DATACS_n
+set_location_assignment PIN_W23 -to ENET_INTR0
+set_location_assignment PIN_Y20 -to ENET_IOCHRDY
+set_location_assignment PIN_AA21 -to ENET_LCLK
+set_location_assignment PIN_Y21 -to ENET_LDEV_n
+set_location_assignment PIN_W26 -to ENET_RDYRTN_n
+set_location_assignment PIN_W20 -to ENET_SRDY_n
+set_location_assignment PIN_W19 -to ENET_VLBUS_n
+set_location_assignment PIN_AA25 -to ENET_W_R_n
+set_location_assignment PIN_Y26 -to ENET_IOR_n
+set_location_assignment PIN_Y25 -to ENET_IOW_n
+set_location_assignment PIN_AA23 -to ENET_BE_n[3]
+set_location_assignment PIN_AA24 -to ENET_BE_n[2]
+set_location_assignment PIN_Y23 -to ENET_BE_n[1]
+set_location_assignment PIN_Y24 -to ENET_BE_n[0]
+
+set_location_assignment PIN_V25 -to FE_ADDR[0]
+set_location_assignment PIN_U26 -to FE_ADDR[1]
+set_location_assignment PIN_U25 -to FE_ADDR[2]
+set_location_assignment PIN_T25 -to FE_ADDR[3]
+set_location_assignment PIN_T24 -to FE_ADDR[4]
+set_location_assignment PIN_V20 -to FE_ADDR[5]
+set_location_assignment PIN_V19 -to FE_ADDR[6]
+set_location_assignment PIN_U20 -to FE_ADDR[7]
+set_location_assignment PIN_U19 -to FE_ADDR[8]
+set_location_assignment PIN_T22 -to FE_ADDR[9]
+set_location_assignment PIN_T21 -to FE_ADDR[10]
+set_location_assignment PIN_T20 -to FE_ADDR[11]
+set_location_assignment PIN_T19 -to FE_ADDR[12]
+set_location_assignment PIN_U22 -to FE_ADDR[13]
+set_location_assignment PIN_U21 -to FE_ADDR[14]
+set_location_assignment PIN_V22 -to FE_ADDR[15]
+set_location_assignment PIN_V21 -to FE_ADDR[16]
+set_location_assignment PIN_W22 -to FE_ADDR[17]
+set_location_assignment PIN_W21 -to FE_ADDR[18]
+set_location_assignment PIN_V24 -to FE_ADDR[19]
+set_location_assignment PIN_V23 -to FE_ADDR[20]
+set_location_assignment PIN_U24 -to FE_ADDR[21]
+set_location_assignment PIN_U23 -to FE_ADDR[22]
+set_location_assignment PIN_R24 -to FE_ADDR[23]
+set_location_assignment PIN_R23 -to FE_ADDR[24]
+set_location_assignment PIN_D15 -to FE_DQ[0]
+set_location_assignment PIN_G15 -to FE_DQ[1]
+set_location_assignment PIN_E19 -to FE_DQ[2]
+set_location_assignment PIN_D20 -to FE_DQ[3]
+set_location_assignment PIN_G19 -to FE_DQ[4]
+set_location_assignment PIN_D19 -to FE_DQ[5]
+set_location_assignment PIN_E20 -to FE_DQ[6]
+set_location_assignment PIN_F20 -to FE_DQ[7]
+set_location_assignment PIN_M20 -to FE_DQ[8]
+set_location_assignment PIN_M19 -to FE_DQ[9]
+set_location_assignment PIN_N20 -to FE_DQ[10]
+set_location_assignment PIN_N19 -to FE_DQ[11]
+set_location_assignment PIN_N22 -to FE_DQ[12]
+set_location_assignment PIN_N21 -to FE_DQ[13]
+set_location_assignment PIN_M22 -to FE_DQ[14]
+set_location_assignment PIN_M21 -to FE_DQ[15]
+set_location_assignment PIN_M24 -to FE_DQ[16]
+set_location_assignment PIN_M23 -to FE_DQ[17]
+set_location_assignment PIN_L19 -to FE_DQ[18]
+set_location_assignment PIN_L18 -to FE_DQ[19]
+set_location_assignment PIN_L21 -to FE_DQ[20]
+set_location_assignment PIN_L20 -to FE_DQ[21]
+set_location_assignment PIN_L23 -to FE_DQ[22]
+set_location_assignment PIN_L22 -to FE_DQ[23]
+set_location_assignment PIN_K20 -to FE_DQ[24]
+set_location_assignment PIN_K19 -to FE_DQ[25]
+set_location_assignment PIN_K22 -to FE_DQ[26]
+set_location_assignment PIN_K21 -to FE_DQ[27]
+set_location_assignment PIN_J20 -to FE_DQ[28]
+set_location_assignment PIN_J19 -to FE_DQ[29]
+set_location_assignment PIN_J22 -to FE_DQ[30]
+set_location_assignment PIN_J21 -to FE_DQ[31]
+
+##########################################################
+#### 24-bit VGA output
+##########################################################
+set_location_assignment PIN_K7 -to VGA_CLK
+set_location_assignment PIN_AB2 -to VGA_BLANK_n
+set_location_assignment PIN_V2 -to VGA_HS
+set_location_assignment PIN_U2 -to VGA_VS
+set_location_assignment PIN_AB1 -to VGA_R[0]
+set_location_assignment PIN_AA2 -to VGA_R[1]
+set_location_assignment PIN_AA1 -to VGA_R[2]
+set_location_assignment PIN_Y2 -to VGA_R[3]
+set_location_assignment PIN_Y1 -to VGA_R[4]
+set_location_assignment PIN_W2 -to VGA_R[5]
+set_location_assignment PIN_W1 -to VGA_R[6]
+set_location_assignment PIN_V1 -to VGA_R[7]
+set_location_assignment PIN_W10 -to VGA_G[0]
+set_location_assignment PIN_W9 -to VGA_G[1]
+set_location_assignment PIN_Y10 -to VGA_G[2]
+set_location_assignment PIN_AD2 -to VGA_G[3]
+set_location_assignment PIN_Y7 -to VGA_G[4]
+set_location_assignment PIN_AD1 -to VGA_G[5]
+set_location_assignment PIN_AC3 -to VGA_G[6]
+set_location_assignment PIN_AC2 -to VGA_G[7]
+set_location_assignment PIN_AB4 -to VGA_B[0]
+set_location_assignment PIN_AA4 -to VGA_B[1]
+set_location_assignment PIN_AB3 -to VGA_B[2]
+set_location_assignment PIN_AA3 -to VGA_B[3]
+set_location_assignment PIN_Y4 -to VGA_B[4]
+set_location_assignment PIN_Y3 -to VGA_B[5]
+set_location_assignment PIN_W4 -to VGA_B[6]
+set_location_assignment PIN_W3 -to VGA_B[7]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_BLANK_n
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_HS
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_VS
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[4]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[5]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[6]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_R[7]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[4]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[5]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[6]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_G[7]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[0]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[2]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[3]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[4]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[5]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[6]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to VGA_B[7]
+
+##########################################################
+#### Stereo Audio output
+##########################################################
+set_location_assignment PIN_Y12 -to AUD_LEFT
+set_location_assignment PIN_Y11 -to AUD_RIGHT
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to AUD_LEFT
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to AUD_RIGHT
+
+set_global_assignment -name MISC_FILE "D:/FPGA/JagNetlists/quartus/s2/jag_s2.dpf"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"
+set_global_assignment -name PHYSICAL_SYNTHESIS_EFFORT NORMAL
+set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name ENABLE_ADVANCED_IO_TIMING OFF
+set_global_assignment -name TIMEQUEST_DO_CCPP_REMOVAL ON
+set_global_assignment -name USE_TIMEQUEST_TIMING_ANALYZER ON
+set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
+set_global_assignment -name VERILOG_FILE ../../verilog/s2_hq_dac.v
+set_global_assignment -name SDC_FILE jag_s2.sdc
+set_global_assignment -name VERILOG_FILE ../../verilog/j68.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jag_s2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jaguar.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/stlatch.v
+set_global_assignment -name VERILOG_FILE pll50.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/divider.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/abus.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/ack_pipe.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/acontrol.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/add4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/add16sat.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addamux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addarray.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addbmux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addradd.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addrcomp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/address.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/addrgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/alu32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/arb.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/arith.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/bank.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/barrel32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/blit.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/blitgpu.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/blitstop.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/brlshift.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/bus.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/clk.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/clkgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cmp6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cmp6i.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cmp8_int.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cnte3.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/comp_ctrl.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cp_latch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cpu.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/creg11.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/cryrgb.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/daddamux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/daddbmux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/data.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/data_mux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/datacomp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/datamux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dbus.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dcontrol.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dcount16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dec38gh.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dec38h.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dech38.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dech38el.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/decl38e.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dncnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/dncnts.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/down.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/execon.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fa23.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fa32_int.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsync.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsync6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsync16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsync24.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsync32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsynch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsyncm.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsyncr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsyncr6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsyncr32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fdsyncu.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/fjkr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gateway.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gpu_cpu.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gpu_ctrl.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gpu_mem.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gpu_ram.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/gpuram.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/graphics.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/ha9.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/hs1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/inner.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/inner_cnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/ins_exec.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/interrupt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/iodec.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/lbuf.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/lfu.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/local_mux.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/macount.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mag_4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mag_15.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mag_16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mag11.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mag12.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mcontrol.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mcount.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mem.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/memwidth.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/misc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mx6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/mx12b.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/nivniv.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/ob.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/obdata.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/outer.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/outer_cnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/pc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/pix.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/prefetch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/r1count.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/rasgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/registers.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/sadd4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/sadd8.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/saturate.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/sboard.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/slatch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/slatchc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/slatchp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/slatchr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/srcdgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/srcshift.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/state.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/subsize.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/systolic.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/tben.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/tbenw.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/tom.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/udcnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/udcnt1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/up.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/upcnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/upcnt1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/upcnts.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/vid.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/wbk.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/zedcomp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/tom/zedshift.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_add4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_agtb.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_alu32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_barrel32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_brlshift.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_clkgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_cmp6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_cmp6i.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_cnte3.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_cp_latch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dac.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_divide.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dncnt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_arith.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_ctrl.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_exec.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_fetch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_gate.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_int.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_mem.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_ram.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_dsp_slave.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_execon.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fa23.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fa32_int.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsync.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsync6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsync16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsync32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsynch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsyncr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsyncr6.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_fdsyncr32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_gpuram.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_hs1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_i2s.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jbus.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jclk.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jerry.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jiodec.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jmem.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_jmisc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_macount.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_mcount.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_pc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_pulse.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_r1count.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_registers.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_rxer.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_saturate.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_sboard.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_sinerom.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_slatch.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_slatchc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_slatchp.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_slatchr.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_srcdgen.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_stlatchc.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_subsize.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_systolic.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_tben.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_tbenw.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_txer.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_u2pscl.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_uart2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_upcnt1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/jerry/j_upcnt1s.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ab8016a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ab8616a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/aba032a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/bd.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/bt.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/cg4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/d24h.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/d38gh.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/d38h.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/d416g2l.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/d416gh.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/dly.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fa1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fa4r.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fa32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fa332.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fas16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd1e.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd1q.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd2e.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd2q.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd4e.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fd4q.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/fjk2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ha1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ldp1.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ldp1q.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ldp2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ldp2q.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/lsra.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/lsrb.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mag4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mp16.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mp1010a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx2g.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx4.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx4g.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx8.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mx8g.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/mxi2.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/osc4c.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ra6032a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ra8008a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ra8008b.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/ra8008c.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/raa016a.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/rd64x32.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/rd64x32d.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/sysclkdly.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/twoniv.v
+set_global_assignment -name VERILOG_FILE ../../verilog/base/vgalb.v
+set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

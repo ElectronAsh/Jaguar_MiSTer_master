@@ -1,0 +1,926 @@
+/******************************************************************
+duplo
+27/11/90
+
+Basic building blocks
+---------------------
+
+******************************************************************/
+
+IMPORT tosh, power;
+
+/*  ADD4 - 4-bit full adder, based on LS83 */
+DEF ADD4 (q[0..3], co :OUT; a[0..3], b[0..3], ci :IN);
+BEGIN
+/*Aab\[0-3]	:= ND2P (aab\[0-3], a[0-3], b[0-3]);
+**Aab[0-3]	:= IV (aab[0-3], aab\[0-3]);
+**Aob\[0-3]	:= NR2P (aob\[0-3], a[0-3], b[0-3]);
+**Aob[3]	:= IV (aob[3], aob\[3]);
+**Ci\		:= IVS (ci\, ci);
+**Q0t		:= NR2 (q0t, aab[0], aob\[0]);
+**Q0		:= EN (q[0], q0t, ci\);
+**Q1t[0]	:= NR2 (q1t[0], aab[1], aob\[1]);
+**Q1t[1]	:= AN2 (q1t[1], aab\[0], ci\);
+**Q1t[2]	:= NR2 (q1t[2], aob\[0], q1t[1]);
+**Q1		:= EO (q[1], q1t[0], q1t[2]);
+**Q2t[0]	:= NR2 (q2t[0], aab[2], aob\[2]);
+**Q2t[1]	:= AN2 (q2t[1], aob\[0], aab\[1]);
+**Q2t[2]	:= AN3 (q2t[2], aab\[1], aab\[0], ci\);
+**Q2t[3]	:= NR3 (q2t[3], aob\[1], q2t[1..2]);
+**Q2		:= EO (q[2], q2t[0], q2t[3]);
+**Q3t[0]	:= NR2 (q3t[0], aab[3], aob\[3]);
+**Q3t[1]	:= AN2 (q3t[1], aob\[1], aab\[2]);
+**Q3t[2]	:= AN3 (q3t[2], aob\[0], aab\[2], aab\[1]);
+**Q3t[3]	:= AN4 (q3t[3], aab\[2], aab\[1], aab\[0], ci\);
+**Q3t[4]	:= NR4 (q3t[4], aob\[2], q3t[1..3]);
+**Q3		:= EO (q[3], q3t[0], q3t[4]);
+**Cot[0]	:= ND2 (cot[0], aob\[2], aab\[3]);
+**Cot[1]	:= ND3 (cot[1], aob\[1], aab\[3], aab\[2]);
+**Cot[2]	:= ND4 (cot[2], aob\[0], aab\[3], aab\[2], 
+**			aab\[1]);
+**Cot3t		:= AN2 (cot3t, aab\[3], aab\[2]);
+**Coci\		:= IV (coci\, ci);
+**Cot[3]	:= ND4 (cot[3], cot3t, aab\[1], aab\[0], coci\);
+**Cot		:= AN2 (cot[4], aob[3], cot[0]);
+**Co		:= AN4P (co, cot[1..4]);
+*/
+Add4		:= FA4R (q[0..3], co, ci, a[0], b[0], a[1], b[1], 
+			a[2], b[2], a[3], b[3]);
+END;
+
+/*  AN5 -  5-input and gate */
+DEF AN5 (q:OUT; a[0..4] :IN);
+BEGIN
+Qt0		:= IV (qt[0], a[0]);
+Qt1		:= ND4 (qt[1], a[1..4]);
+Q		:= NR2 (q, qt[0..1]);
+END;
+DEF AN5P (q:OUT; a[0..4] :IN);
+BEGIN
+Qt0		:= IV (qt[0], a[0]);
+Qt1		:= ND4 (qt[1], a[1..4]);
+Q		:= NR2P (q, qt[0..1]);
+END;
+
+/*  AN7 -  7-input and gate */
+DEF AN7 (q:OUT; a[0..6] :IN);
+BEGIN
+One		:= TIE1 (one);
+Q		:= AN8 (q, a[0..6], one);
+END;
+/*  AN7P -  7-input and gate */
+DEF AN7P (q:OUT; a[0..6] :IN);
+BEGIN
+One		:= TIE1 (one);
+Q		:= AN8P (q, a[0..6], one);
+END;
+
+/*  AN9 -  9-input and gate */
+DEF AN9 (q:OUT; a[0..8] :IN);
+BEGIN
+Qt0		:= ND4 (qt[0], a[0..3]);
+Qt1		:= ND4 (qt[1], a[4..7]);
+Qt2		:= IV (qt[2], a[8]);
+Q		:= NR3 (q, qt[0..2]);
+END;
+
+/*  AN10 -  10-input and gate */
+DEF AN10 (q:OUT; a[0..9] :IN);
+BEGIN
+Qt0		:= ND4 (qt[0], a[0..3]);
+Qt1		:= ND4 (qt[1], a[4..7]);
+Qt2		:= ND2 (qt[2], a[8..9]);
+Q\		:= OR3 (q\, qt[0..2]);
+Q		:= IV (q, q\);
+END;
+
+/*  CLKGEN - Generate RAM clock */
+DEF CLKGEN (ramcs :OUT; clk, ena :IN);
+BEGIN
+#if TOSHIBA
+/*
+**Clkdel		:= HDLY5B (clkdel, clk);
+**Clkdel\		:= IV (clkdel\, clkdel);
+**Cst		:= ND2 (cst\, clk, clkdel\);
+**Ramcs		:= ND2P (ramcs, cst\, ena);
+*/
+Ena\		:= IV (ena\, ena);
+Ramcs		:= OR2X3 (ramcs, clk, ena\);
+#endif
+#if FLARE
+Ena\		:= IV (ena\, ena);
+Ramcs		:= OR2X3 (ramcs, clk, ena\);
+#endif
+#if VERILOG
+Ena\		:= IV (ena\, ena);
+Ramcs		:= OR2X3 (ramcs, clk, ena\);
+#endif
+END;
+
+/* 6-bit equality comparator */
+DEF CMP6 (BIT/equal :OUT; INT6/a, INT6/b :IN);
+BEGIN
+Eq[0-5]		:= EN (eq[0-5], a{0-5}, b{0-5});
+Equal		:= AN6 (equal, eq[0..5]);
+END;
+
+/* 6-bit inequality comparator */
+DEF CMP6I (BIT/equal\ :OUT; INT6/a, INT6/b :IN);
+BEGIN
+Eq[0-5]		:= EN (eq[0-5], a{0-5}, b{0-5});
+Equal\		:= ND6 (equal\, eq[0..5]);
+END;
+
+/* DECH38 - active-high 3 to 8 decoder */
+DEF DECH38 (q[0..7] :OUT; a,b,c :IN);
+BEGIN
+Abuf		:= IVDM (s\[0], s[0], a);
+Bbuf		:= IVDM (s\[1], s[1], b);
+Cbuf		:= IVDM (s\[2], s[2], c);
+Q[0]		:= AN3 (q[0], s\[0], s\[1], s\[2]);
+Q[1]		:= AN3 (q[1], s[0],  s\[1], s\[2]);
+Q[2]		:= AN3 (q[2], s\[0], s[1],  s\[2]);
+Q[3]		:= AN3 (q[3], s[0],  s[1],  s\[2]);
+Q[4]		:= AN3 (q[4], s\[0], s\[1], s[2]);
+Q[5]		:= AN3 (q[5], s[0],  s\[1], s[2]);
+Q[6]		:= AN3 (q[6], s\[0], s[1],  s[2]);
+Q[7]		:= AN3 (q[7], s[0],  s[1],  s[2]);
+END;
+
+/* DECH38EL - active-high 3 to 8 decoder with active-low enable */
+DEF DECH38EL (q[0..7] :OUT; a,b,c,en :IN);
+BEGIN
+Abuf		:= IVDM (s\[0], s[0], a);
+Bbuf		:= IVDM (s\[1], s[1], b);
+Cbuf		:= IVDM (s\[2], s[2], c);
+Ebuf		:= IVM (enb, en);
+Q[0]		:= AN4 (q[0], s\[0], s\[1], s\[2], enb);
+Q[1]		:= AN4 (q[1], s[0],  s\[1], s\[2], enb);
+Q[2]		:= AN4 (q[2], s\[0], s[1],  s\[2], enb);
+Q[3]		:= AN4 (q[3], s[0],  s[1],  s\[2], enb);
+Q[4]		:= AN4 (q[4], s\[0], s\[1], s[2],  enb);
+Q[5]		:= AN4 (q[5], s[0],  s\[1], s[2],  enb);
+Q[6]		:= AN4 (q[6], s\[0], s[1],  s[2],  enb);
+Q[7]		:= AN4 (q[7], s[0],  s[1],  s[2],  enb);
+END;
+
+/* DECL38E - active-low 3 to 8 decoder with enable */
+DEF DECL38E (q[0..7] :OUT; a,b,c,en :IN);
+BEGIN
+Abuf		:= IVDM (s\[0], s[0], a);
+Bbuf		:= IVDM (s\[1], s[1], b);
+Cbuf		:= IVDM (s\[2], s[2], c);
+Ebuf		:= NIVM (enb, en);
+Q[0]		:= ND4 (q[0], s\[0], s\[1], s\[2], enb);
+Q[1]		:= ND4 (q[1], s[0],  s\[1], s\[2], enb);
+Q[2]		:= ND4 (q[2], s\[0], s[1],  s\[2], enb);
+Q[3]		:= ND4 (q[3], s[0],  s[1],  s\[2], enb);
+Q[4]		:= ND4 (q[4], s\[0], s\[1], s[2],  enb);
+Q[5]		:= ND4 (q[5], s[0],  s\[1], s[2],  enb);
+Q[6]		:= ND4 (q[6], s\[0], s[1],  s[2],  enb);
+Q[7]		:= ND4 (q[7], s[0],  s[1],  s[2],  enb);
+END;
+
+/** FAS16_S - soft FAS16 alike (no subtract) **/
+DEF FAS16_S (q[0..15], cout\:OUT; as, cin\, a[0], b[0], a[1], b[1],
+a[2], b[2], a[3], b[3], a[4], b[4], a[5], b[5], a[6], b[6], a[7], 
+b[7], a[8], b[8], a[9], b[9], a[10], b[10], a[11], b[11], a[12], 
+b[12], a[13], b[13], a[14], b[14], a[15], b[15] :IN);
+BEGIN
+#if FLARE
+Fas16		:= FAS16 (q[0..15], cout\, as, cin\, a[0], b[0], 
+			a[1], b[1], a[2], b[2], a[3], b[3], a[4], 
+			b[4], a[5], b[5], a[6], b[6], a[7], b[7], 
+			a[8], b[8], a[9], b[9], a[10], b[10], 
+			a[11], b[11], a[12], b[12], a[13], b[13], 
+			a[14], b[14], a[15], b[15]);
+#endif
+#if TOSHIBA
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Add0		:= FA4CS (q[0..3], co\[0], co0\[0], co1\[0], g[0], 
+			p[0], cin\, one, zero, a[0], b[0], a[1], 
+			b[1], a[2], b[2], a[3], b[3]);
+Add1		:= FA4CS (q[4..7], co\[1], co0\[1], co1\[1], g[1], 
+			p[1], cin\[1], one, zero, a[4], b[4], a[5],
+			b[5], a[6], b[6], a[7], b[7]);
+Add2		:= FA4CS (q[8..11], co\[2], co0\[2], co1\[2], g[2],
+			p[2], cin\[2], one, zero, a[8], b[8], a[9],
+			b[9], a[10], b[10], a[11], b[11]);
+Add3		:= FA4CS (q[12..15], co\[3], co0\[3], co1\[3], 
+			g[3], p[3], cin\[3], one, zero, a[12], 
+			b[12], a[13], b[13], a[14], b[14], a[15], 			b[15]);
+Addcg		:= CG4 (cin\[1], cin\[2], cin\[3], g, p, 
+			cin\, g[0..3], p[0..3]);
+/* CO = G + P.CI */
+Cin		:= IV (cin, cin\);
+Cout\		:= ANR1 (cout\, cin, p, g);
+As		:= DUMMY (as);
+Co\[0-3]	:= DUMMY (co\[0-3]);
+Co0\[0-3]	:= DUMMY (co0\[0-3]);
+Co1\[0-3]	:= DUMMY (co1\[0-3]);
+#endif
+#if VERILOG
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Add0		:= FA4CS (q[0..3], co\[0], co0\[0], co1\[0], g[0], 
+			p[0], cin\, one, zero, a[0], b[0], a[1], 
+			b[1], a[2], b[2], a[3], b[3]);
+Add1		:= FA4CS (q[4..7], co\[1], co0\[1], co1\[1], g[1], 
+			p[1], cin\[1], one, zero, a[4], b[4], a[5],
+			b[5], a[6], b[6], a[7], b[7]);
+Add2		:= FA4CS (q[8..11], co\[2], co0\[2], co1\[2], g[2],
+			p[2], cin\[2], one, zero, a[8], b[8], a[9],
+			b[9], a[10], b[10], a[11], b[11]);
+Add3		:= FA4CS (q[12..15], co\[3], co0\[3], co1\[3], 
+			g[3], p[3], cin\[3], one, zero, a[12], 
+			b[12], a[13], b[13], a[14], b[14], a[15], 			b[15]);
+Addcg		:= CG4 (cin\[1], cin\[2], cin\[3], g, p, 
+			cin\, g[0..3], p[0..3]);
+/* CO = G + P.CI */
+Cin		:= IV (cin, cin\);
+Cout\		:= ANR1 (cout\, cin, p, g);
+As		:= DUMMY (as);
+Co\[0-3]	:= DUMMY (co\[0-3]);
+Co0\[0-3]	:= DUMMY (co0\[0-3]);
+Co1\[0-3]	:= DUMMY (co1\[0-3]);
+#endif
+
+END;
+
+/** FDSYNC - Synchronously loadable D-type  *********************/
+DEF FDSYNC (q :OUT; d, ld, clk :IN);
+BEGIN
+Q	:= FD1E (q, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNC6 (INT6/q :OUT; INT6/d, ld, clk :IN);
+INT6/qb :LOCAL;
+BEGIN
+Q	:= FD1E (q, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNC16 (INT16/q :OUT; INT16/d, ld, clk :IN);
+INT16/qb :LOCAL;
+BEGIN
+Q	:= FD1E (q, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNC24 (INT24/q :OUT; INT24/d, ld, clk :IN);
+INT24/qb :LOCAL;
+BEGIN
+Q	:= FD1E (q, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNC32 (INT32/q :OUT; INT32/d, ld, clk :IN);
+INT32/qb :LOCAL;
+BEGIN
+Q	:= FD1E (q, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+
+/**  FDSYNCM - Synchronously loadable strength M D-type  *********/
+DEF FDSYNCM (q :OUT; d, ld, clk :IN);
+BEGIN
+Qt	:= FD1E (qt, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+Q	:= NIVM (q, qt);
+END;
+
+/**  FDSYNCH - Synchronously loadable strength H D-type  *********/
+DEF FDSYNCH (q :OUT; d, ld, clk :IN);
+BEGIN
+Qt	:= FD1E (qt, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+Q	:= NIVH (q, qt);
+END;
+
+/**  FDSYNCU - Synchronously loadable strength U D-type  *********/
+DEF FDSYNCU (q :OUT; d, ld, clk :IN);
+BEGIN
+Qt	:= FD1E (qt, qb, q, clk, d, ld);
+Dummy	:= DUMMY (qb);
+Q	:= NIVU (q, qt);
+END;
+
+/**  FDSYNCR - Synchronously loadable D-type with reset  *********/
+DEF FDSYNCR (q :OUT; d, ld, clk, rst\ :IN);
+BEGIN
+Q	:= FD2E (q, qb, q, clk, rst\, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNCR6 (INT6/q :OUT; INT6/d, ld, clk, rst\ :IN);
+INT6/qb :LOCAL;
+BEGIN
+Q	:= FD2E (q, qb, q, clk, rst\, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+DEF FDSYNCR32 (INT32/q :OUT; INT32/d, ld, clk, rst\ :IN);
+INT32/qb :LOCAL;
+BEGIN
+Q	:= FD2E (q, qb, q, clk, rst\, d, ld);
+Dummy	:= DUMMY (qb);
+END;
+
+/*  HS1 -  Half subtractor, similar to HA1 but implicit add of 1 */
+DEF HS1 (q, co :OUT; a, ci :IN);
+BEGIN
+Q		:= EN (q, a, ci);
+Co		:= OR2P (co, a, ci);
+END;
+
+/*  MAG_4 - 4-bit magnitude comparator, based on 'LS85 
+NOTE - this daisy-chains differently to the Toshiba MAG4 */
+DEF MAG_4 (gto, eqo, lto:OUT; gti, eqi, lti, a[0..3], b[0..3]:IN);
+BEGIN
+Aab\[0-3]	:= ND2P (aab\[0-3], a[0-3], b[0-3]);
+Aoia[0-3]	:= ANR2P (aoia[0-3], b[0-3], aab\[0-3], aab\[0-3], 
+			a[0-3]);
+Aoib[0-3]	:= ANR2P (aoib[0-3], b[0-3], aab\[0-3], aab\[0-3], 
+			a[0-3]);
+Ltot0		:= ND2 (ltot[0], a[3], aab\[3]);
+Ltot1		:= ND3 (ltot[1], a[2], aab\[2], aoia[3]);
+Ltot2		:= ND4 (ltot[2], a[1], aab\[1], aoia[2..3]);
+Ltot3		:= ND5 (ltot[3], a[0], aab\[0], aoia[1..3]);
+Ltot4		:= ND5 (ltot[4], aoia[0..3], gti);
+Ltot5		:= ND5 (ltot[5], aoia[0..3], eqi);
+Ltot6		:= AN4 (ltot[6], ltot[0..3]);
+Lto		:= AN3 (lto, ltot[4..6]);
+Eqot		:= AN4 (eqot, aoia[0..3]);
+Eqo		:= AN2P (eqo, eqot, eqi);
+Gtot0		:= ND2 (gtot[0], b[3], aab\[3]);
+Gtot1		:= ND3 (gtot[1], b[2], aab\[2], aoib[3]);
+Gtot2		:= ND4 (gtot[2], b[1], aab\[1], aoib[2..3]);
+Gtot3		:= ND5 (gtot[3], b[0], aab\[0], aoib[1..3]);
+Gtot4		:= ND5 (gtot[4], aoib[0..3], lti);
+Gtot5		:= ND5 (gtot[5], aoib[0..3], eqi);
+Gtot6		:= AN4 (gtot[6], gtot[0..3]);
+Gto		:= AN3 (gto, gtot[4..6]);
+END;
+
+/*  MAG_16 - 16-bit magnitude comparator, see TI data book */
+DEF MAG_16 (gt, eq, lt :OUT; a[0..15], b[0..15] :IN);
+BEGIN
+Zeroa		:= TIE0 (zeroa);
+Zerob		:= TIE0 (zerob);
+One		:= TIE1 (one);
+
+Mag0		:= MAG_4 (gt[0], eq[0], lt[0], zeroa, one, zerob, 
+			a[0..3], b[0..3]);
+Mag1		:= MAG_4 (gt[1], eq[1], lt[1], a[4], zerob, b[4],
+			a[5..8], b[5..8]);
+Mag2		:= MAG_4 (gt[2], eq[2], lt[2], a[9], zerob, b[9],
+			a[10..13], b[10..13]);
+Mag3		:= MAG_4 (gt, eq, lt, gt[0], eq[0], lt[0], 
+			gt[1..2], a[14..15], lt[1..2], b[14..15]);
+Dummy[1-2]	:= DUMMY (eq[1-2]);
+
+/********
+Zero    := TIE0 (zero);
+One     := TIE1 (one);
+Mag3    := MAG4 (gt[3], eq[3], lt[3], zero, one, zero,
+                a[15], b[15], a[14], b[14], a[13], b[13], a[12],
+                b[12]);
+Mag2    := MAG4 (gt[2], eq[2], lt[2], gt[3], eq[3], lt[3],
+                a[11], b[11], a[10], b[10], a[9], b[9], a[8],
+                b[8]);
+Mag1    := MAG4 (gt[1], eq[1], lt[1], gt[2], eq[2], lt[2],
+                a[7], b[7], a[6], b[6], a[5], b[5], a[4],
+                b[4]);
+Mag0    := MAG4 (gt, eq, lt, gt[1], eq[1], lt[1],
+                a[3], b[3], a[2], b[2], a[1], b[1], a[0],
+                b[0]);
+********/
+END;
+
+/*  MAG_15 - 15-bit magnitude comparator, see TI data book */
+DEF MAG_15 (gt, eq, lt :OUT; a[0..14], b[0..14] :IN);
+BEGIN
+Zeroa		:= TIE0 (zeroa);
+Zerob		:= TIE0 (zerob);
+One		:= TIE1 (one);
+
+Mag0		:= MAG_4 (gt[0], eq[0], lt[0], zeroa, one, zerob, 
+			a[0..3], b[0..3]);
+Mag1		:= MAG_4 (gt[1], eq[1], lt[1], a[4], zerob, b[4],
+			a[5..8], b[5..8]);
+Mag2		:= MAG_4 (gt[2], eq[2], lt[2], a[9], zerob, b[9],
+			a[10..13], b[10..13]);
+Mag3		:= MAG_4 (gt, eq, lt, gt[0], eq[0], lt[0], 
+			gt[1..2], a[14], zerob, lt[1..2], b[14], 
+			zerob);
+Dummy[1-2]	:= DUMMY (eq[1-2]);
+
+/********
+Zero    := TIE0 (zero);
+One     := TIE1 (one);
+Mag3    := MAG4 (gt[3], eq[3], lt[3], zero, one, zero,
+                zero, zero, a[14], b[14], a[13], b[13], a[12],
+                b[12]);
+Mag2    := MAG4 (gt[2], eq[2], lt[2], gt[3], eq[3], lt[3],
+                a[11], b[11], a[10], b[10], a[9], b[9], a[8],
+                b[8]);
+Mag1    := MAG4 (gt[1], eq[1], lt[1], gt[2], eq[2], lt[2],
+                a[7], b[7], a[6], b[6], a[5], b[5], a[4],
+                b[4]);
+Mag0    := MAG4 (gt, eq, lt, gt[1], eq[1], lt[1],
+                a[3], b[3], a[2], b[2], a[1], b[1], a[0],
+                b[0]);
+********/
+END;
+
+/* 6-bit multiplexer, using the low six values */
+
+DEF MX6 (q :OUT; a[0..5], sel[0..2] :IN);
+BEGIN
+Lo4	:= MX4 (lo4, a[0..3], sel[0..1]);
+Hi2	:= MX2 (hi2, a[4..5], sel[0]);
+Q	:= MX2 (q, lo4, hi2, sel[2]);
+END;
+
+/* 12-bit multiplexer, using the low twelve values */
+
+DEF MX12B (q :OUT; a[0..11], sel[0..3] :IN);
+BEGIN
+Low8	:= MX8 (low8, a[0..7], sel[0..2]);
+Hi4	:= MX4 (hi4, a[8..11], sel[0..1]);
+Ena\	:= AN2 (ena\, sel[2..3]);
+Q	:= MX2G (q, low8, hi4, sel[3], ena\);
+END;
+
+/* 12-bit multiplexer, using the high twelve values */
+
+DEF MX12T (q :OUT; a[4..15], sel[0..3] :IN);
+BEGIN
+Low4	:= MX4 (low4, a[4..7], sel[0..1]);
+Hi8	:= MX8 (hi8, a[8..15], sel[0..2]);
+Ena\	:= NR2 (ena\, sel[2..3]);
+Q	:= MX2G (q, low4, hi8, sel[3], ena\);
+END;
+
+/* 16-bit multiplexer */
+
+DEF MX16 (q :OUT; a[0..15], sel[0..3] :IN);
+BEGIN
+Low8	:= MX8 (low8, a[0..7], sel[0..2]);
+Hi8	:= MX8 (hi8, a[8..15], sel[0..2]);
+Q	:= MX2 (q, low8, hi8, sel[3]);
+END;
+
+/* 64-bit multiplexer */
+
+DEF MX64 (q :OUT; a[0..63], sel[0..5] :IN);
+BEGIN
+Select0	:= MX8 (select[0], a[0..7],   sel[0..2]);
+Select1	:= MX8 (select[1], a[8..15],  sel[0..2]);
+Select2	:= MX8 (select[2], a[16..23], sel[0..2]);
+Select3	:= MX8 (select[3], a[24..31], sel[0..2]);
+Select4	:= MX8 (select[4], a[32..39], sel[0..2]);
+Select5	:= MX8 (select[5], a[40..47], sel[0..2]);
+Select6	:= MX8 (select[6], a[48..55], sel[0..2]);
+Select7	:= MX8 (select[7], a[56..63], sel[0..2]);
+Q	:= MX8 (q, select[0..7], sel[3..5]);
+END;
+
+/*  ND5 -  5-input nand gate */
+DEF ND5 (q:OUT; a[0..4] :IN);
+BEGIN
+Qt		:= AN4 (qt, a[0..3]);
+Q		:= ND2 (q, a[4], qt);
+END;
+DEF ND5P (q:OUT; a[0..4] :IN);
+BEGIN
+Qt		:= AN4 (qt, a[0..3]);
+Q		:= ND2P (q, a[4], qt);
+END;
+
+/*  ND7 -  7-input nand gate */
+DEF ND7 (q:OUT; a[0..6] :IN);
+BEGIN
+Qt0	:= AN3 (qt[0], a[0..2]);
+Qt1	:= AN4 (qt[1], a[3..6]);
+Q	:= ND2 (q, qt[0..1]);
+END;
+
+/*  ND7P -  7-input power nand gate */
+DEF ND7P (q:OUT; a[0..6] :IN);
+BEGIN
+Qt0	:= AN3 (qt[0], a[0..2]);
+Qt1	:= AN4 (qt[1], a[3..6]);
+Q	:= ND2P (q, qt[0..1]);
+END;
+
+/*  ND9 -  9-input nand gate */
+DEF ND9 (q:OUT; a[0..8] :IN);
+BEGIN
+P		:= AN8 (p, a[0..7]);
+Q		:= ND2 (q, p, a[8]);
+END;
+
+/*  ND10 -  10-input nand gate */
+DEF ND10 (q:OUT; a[0..9] :IN);
+BEGIN
+P		:= AN8 (p, a[0..7]);
+Q		:= ND3 (q, p, a[8..9]);
+END;
+
+/*  ND11 -  11-input NAND gate */
+DEF ND11 (q:OUT; a[0..10] :IN);
+BEGIN
+P		:= AN8 (p, a[0..7]);
+Q		:= ND4 (q, p, a[8..10]);
+END;
+
+/*  ND14 -  14-input NAND gate */
+DEF ND14 (q:OUT; a[0..13] :IN);
+BEGIN
+B	:= AN4 (b, a[0..3]);
+C	:= AN4 (c, a[4..7]);
+D	:= AN4 (d, a[8..11]);
+E	:= AN2 (e, a[12..13]);
+Q	:= ND4P (q, b, c, d, e);
+END;
+
+/*  ND15 -  15-input NAND gate */
+DEF ND15 (q:OUT; a[0..14] :IN);
+BEGIN
+B	:= AN4 (b, a[0..3]);
+C	:= AN4 (c, a[4..7]);
+D	:= AN4 (d, a[8..11]);
+E	:= AN3 (e, a[12..14]);
+Q	:= ND4P (q, b, c, d, e);
+END;
+
+/*  ND16 -  16-input NAND gate */
+DEF ND16 (q:OUT; a[0..15] :IN);
+BEGIN
+B	:= AN4 (b, a[0..3]);
+C	:= AN4 (c, a[4..7]);
+D	:= AN4 (d, a[8..11]);
+E	:= AN4 (e, a[12..15]);
+Q	:= ND4P (q, b, c, d, e);
+END;
+
+/*  ND18 -  18-input NAND gate */
+DEF ND18 (q:OUT; a[0..17] :IN);
+BEGIN
+B	:= AN4 (b, a[0..3]);
+C	:= AN4 (c, a[4..7]);
+D	:= AN4 (d, a[8..11]);
+E	:= AN4 (e, a[12..15]);
+F	:= AN3 (f, a[16..17], b);
+Q	:= ND4P (q, c, d, e, f);
+END;
+
+/*  ND19 -  19-input NAND gate */
+DEF ND19 (q:OUT; a[0..18] :IN);
+BEGIN
+B	:= AN4 (b, a[0..3]);
+C	:= AN4 (c, a[4..7]);
+D	:= AN4 (d, a[8..11]);
+E	:= AN4 (e, a[12..15]);
+F	:= AN4 (f, a[16..18], b);
+Q	:= ND4P (q, c, d, e, f);
+END;
+
+/*  ND26 -  26-input nand gate */
+DEF ND26 (q:OUT; a[0..25] :IN);
+BEGIN
+Qt0		:= AN8 (qt0, a[0..7]);
+Qt1		:= AN8 (qt1, a[8..15]);
+Qt2		:= AN8 (qt2, a[16..23]);
+Qt3		:= AN2 (qt3, a[24..25]);
+Q		:= ND4 (q, qt0, qt1, qt2, qt3);
+END;
+
+/*  NIVNIV - Two buffers in series */
+DEF NIVNIV (z :OUT; a :IN);
+BEGIN
+Y	:= NIV (y, a);
+Z	:= NIV (z, y);
+END;
+
+/*  OR5 -  5 input or gate */
+DEF OR5 (z :IO; a,b,c,d,e :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Gate		:= OR6 (z, a, b, c, d, e, zero);
+END;
+
+/*  OR7 -  7 input or gate */
+DEF OR7 (z :IO; a,b,c,d,e,f,g :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Gate		:= OR8 (z, a, b, c, d, e, f, g, zero);
+END;
+
+/*  OR9 -  9 input or gate */
+DEF OR9 (z :IO; a,b,c,d,e,f,g,h,i :IN);
+BEGIN
+Gate1		:= OR4 (y, a, b, c, d);
+Gate2		:= OR6 (z, y, e, f, g, h, i);
+END;
+
+/*  OR11 -  11 input or gate */
+DEF OR11 (z :IO; a[0..10] :IN);
+BEGIN
+Gate1		:= OR6 (y, a[0..5]);
+Gate2		:= OR6 (z, y, a[6..10]);
+END;
+
+/*  OR15 -  15 input or gate */
+DEF OR15 (z :IO; a[0..14] :IN);
+BEGIN
+Qt0	:= NR4 (qt[0], a[0..3]);
+Qt1	:= NR4 (qt[1], a[4..7]);
+Qt2	:= NR4 (qt[2], a[8..11]);
+Qt3	:= NR3 (qt[3], a[12..14]);
+Q	:= ND4 (z, qt[0..3]);
+END;
+
+/*  OR16 -  16 input or gate */
+DEF OR16 (q :OUT; a[0..15]:IN);
+BEGIN
+Qt0	:= NR4 (qt[0], a[0..3]);
+Qt1	:= NR4 (qt[1], a[4..7]);
+Qt2	:= NR4 (qt[2], a[8..11]);
+Qt3	:= NR4 (qt[3], a[12..15]);
+Q	:= ND4 (q, qt[0..3]);
+END;
+
+/*  OR23 -  23 input or gate */
+DEF OR23 (q:OUT; a[0..22]:IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Qt0		:= NR8 (qt0, a[0..7]);
+Qt1		:= NR8 (qt1, a[8..15]);
+Qt2		:= NR8 (qt2, a[16..22], zero);
+Q		:= ND3 (q, qt0, qt1, qt2);
+END;
+
+/*  OR26 -  26-input or gate */
+DEF OR26 (q:OUT; a[0..25]:IN);
+BEGIN
+Qt0		:= NR8 (qt0, a[0..7]);
+Qt1		:= NR8 (qt1, a[8..15]);
+Qt2		:= NR8 (qt2, a[16..23]);
+Qt3		:= NR2 (qt3, a[24..25]);
+Q		:= ND4 (q, qt0, qt1, qt2, qt3);
+END;
+
+/*  NR5 -  5 input nor gate */
+DEF NR5 (z :IO; a,b,c,d,e :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Gate		:= NR6 (z, a, b, c, d, e, zero);
+END;
+
+/*  NR7 -  7-input nor gate */
+DEF NR7 (q:OUT; a[0..6] :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Q		:= NR8 (q, a[0..6], zero);
+END;
+
+/*  NR11 -  11 input nor gate */
+DEF NR11 (z :IO; a[0..10] :IN);
+BEGIN
+Gate1		:= OR6 (y, a[0..5]);
+Gate2		:= NR6 (z, y, a[6..10]);
+END;
+
+/*  NR14 -  14 input nor gate */
+DEF NR14 (z :IO; a[0..13] :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+Gate1		:= OR8 (y, a[0..7]);
+Gate2		:= NR8 (z, y, a[8..13], zero);
+END;
+
+/*  NR15 -  15 input nor gate */
+DEF NR15 (z :IO; a[0..14] :IN);
+BEGIN
+Gate1		:= OR8 (y, a[0..7]);
+Gate2		:= NR8 (z, y, a[8..14]);
+END;
+
+/*  NR16 -  16 input nor gate */
+DEF NR16 (z :IO; a[0..15] :IN);
+BEGIN
+Gate1		:= NR4 (b, a[0..3]);
+Gate2		:= NR4 (c, a[4..7]);
+Gate3		:= NR4 (d, a[8..11]);
+Gate4		:= NR4 (e, a[12..15]);
+Z		:= AN4 (z, b, c, d, e);
+END;
+
+/*  NR17 -  17-input nor gate */
+DEF NR17 (q:OUT; a[0..16]:IN);
+BEGIN
+Qt0	:= OR8 (qt0, a[0..7]);
+Qt1	:= OR8 (qt1, a[8..15]);
+Q	:= NR3 (q, qt0, qt1, a[16]);
+END;
+
+/*  NR19 -  19-input nor gate */
+DEF NR19 (q:OUT; a[0..18]:IN);
+BEGIN
+Qt0	:= OR8 (qt0, a[0..7]);
+Qt1	:= OR8 (qt1, a[8..15]);
+Qt2	:= OR3 (qt2, a[16..18]);
+Q	:= NR3 (q, qt0, qt1, qt2);
+END;
+
+/*  NR26 -  26-input nor gate */
+DEF NR26 (q:OUT; a[0..25]:IN);
+BEGIN
+Qt0		:= NR8 (qt0, a[0..7]);
+Qt1		:= NR8 (qt1, a[8..15]);
+Qt2		:= NR8 (qt2, a[16..23]);
+Qt3		:= NR2 (qt3, a[24..25]);
+Q		:= AN4 (q, qt0, qt1, qt2, qt3);
+END;
+
+/* NR32 - 32-input nor gate */
+DEF NR32 (q:OUT; a[0..31]:IN);
+BEGIN
+Qt0	:= NR4 (qt[0], a[0..3]);
+Qt1	:= NR4 (qt[1], a[4..7]);
+Qt2	:= NR4 (qt[2], a[8..11]);
+Qt3	:= NR4 (qt[3], a[12..15]);
+Qt4	:= NR4 (qt[4], a[16..19]);
+Qt5	:= NR4 (qt[5], a[20..23]);
+Qt6	:= NR4 (qt[6], a[24..27]);
+Qt7	:= NR4 (qt[7], a[28..31]);
+Qt8	:= ND4 (qt[8], qt[0..3]);
+Qt9	:= ND4 (qt[9], qt[4..7]);
+Q	:= NR2 (q, qt[8..9]);
+END;
+
+
+/* CP_LATCH - Clear priority synchonous SR latch with reset */
+
+DEF CP_LATCH (BIT/q :OUT; set, clear, clock, reset\ :IN);
+BEGIN
+Ipt	:= NR2 (ipt, set, q);
+Ip	:= NR2 (ip, clear, ipt);
+Q	:= FD2Q (q, ip, clock, reset\);
+END;
+
+/**  DCOUNT16 - Down counter with load and count enable  *********/
+DEF DCOUNT16 (INT16/count :OUT; INT16/data, load, ena, clk :IN);
+BEGIN
+Cnti[0]		:= IV (cnti[0], count[0]);
+Cnti[1]		:= HS1 (cnti[1], cry[1], count[1], count[0]);
+Cnti[2-14]	:= HS1 (cnti[2-14], cry[2-14], count[2-14], 
+			cry[1-13]);
+Cnti[15]	:= EN (cnti[15], count[15], cry[14]);
+Cntj[0-15]	:= MX4 (cntj[0-15], count[0-15], cnti[0-15], 
+			data{0-15}, data{0-15}, ena, load);
+Count[0-15]	:= FD1Q (count[0-15], cntj[0-15], clk);
+Count		:= JOIN (count, count[0..15]);
+END;
+
+/* 14-bit 3-operands fast full adder, no carry terms, 15-bits out*/
+DEF FA314 (INT15/s :OUT; INT14/a, INT14/b, INT14/c :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+One		:= TIE1 (one);
+S		:= JOIN (s, s[0..14]);
+Sumb		:= FAS16 (s[0..15], carry[1], one, one, suma[0], 
+	c{0}, suma[1], c{1}, suma[2], c{2}, suma[3], c{3}, suma[4],
+	c{4}, suma[5], c{5}, suma[6], c{6}, suma[7], c{7}, suma[8],
+	c{8}, suma[9], c{9}, suma[10], c{10}, suma[11], c{11}, 
+	suma[12], c{12}, suma[13], c{13}, suma[14], zero, 
+	suma[15], zero);
+Suma		:= FAS16 (suma[0..15], carry[0], one, one, a{0}, 
+	b{0}, a{1}, b{1}, a{2}, b{2}, a{3}, b{3}, a{4}, b{4}, 
+	a{5}, b{5}, a{6}, b{6}, a{7}, b{7}, a{8}, b{8}, a{9}, 
+	b{9}, a{10}, b{10}, a{11}, b{11}, a{12}, b{12}, a{13}, 
+	b{13}, zero, zero, zero, zero);
+Unused[0-1]	:= DUMMY (carry[0-1]);
+Unused[2]	:= DUMMY (s[15]);
+END;
+
+/* 20-bit 3-operands fast full adder, no carry terms */
+/* WARNING - can this be implemented more efficiently? */
+DEF FA320 (INT20/s :OUT; INT20/a[0..2] :IN);
+INT32/  st,at[0..2];
+BEGIN
+Zero		:= TIE0 (zero);
+Zerob		:= TIE0 (zerob);
+At[0-2]		:= JOIN (at[0-2], a[0-2], zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero);
+FA320 		:= FA332_INT (st,  unused[0..1], at[0..2]);
+S		:= JOIN (s, st{0..19});
+Unused[0-1]	:= DUMMY (unused[0-1]);
+END;
+
+/* 26-bit fast full adder, no carry terms */
+/* WARNING - can this be implemented more efficiently? */
+DEF FA26 (INT26/q :OUT; INT26/a, INT26/b :IN);
+INT32/	at, bt, qt :LOCAL;
+BEGIN
+Zero		:= TIE0 (z);
+At		:= JOIN (at, a, z, z, z, z, z, z);
+Bt		:= JOIN (bt, b, z, z, z, z, z, z);
+Qt		:= FA32_INT (qt, unused[0..2], z, at, bt);
+Q		:= JOIN (q, qt{0..25});
+Unused[0-2]	:= DUMMY (unused[0-2]);
+END;
+
+/*****************************************************************/
+
+/* Integer versions of Toshiba library items */
+
+/* 32-bit fast full adder */
+DEF FA32_INT (INT32/s, BIT/co32, BIT/co31, BIT/co24, :OUT; 
+	  BIT/c, INT32/a, INT32/b :IN);
+BEGIN
+/*
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	630
+#TYPEWIDE	0
+Zero1	:= TIE0_PRIM (co24);
+Zero2	:= TIE0_PRIM (co31);
+FA32	:= ADDER_PRIM (s,co32,a,b,c);
+*/
+Adder32	:= FA32 (s[0..31], co32, co31, co24,  
+	c, a{0}, b{0}, a{1}, b{1}, a{2}, b{2}, a{3}, b{3}, 
+	a{4}, b{4}, a{5}, b{5}, a{6}, b{6}, a{7}, b{7}, a{8}, 
+	b{8}, a{9}, b{9}, a{10}, b{10}, a{11}, b{11}, a{12}, 
+	b{12}, a{13}, b{13}, a{14}, b{14}, a{15}, b{15}, a{16}, 
+	b{16}, a{17}, b{17}, a{18}, b{18}, a{19}, b{19}, a{20}, 
+	b{20}, a{21}, b{21}, a{22}, b{22}, a{23}, b{23}, a{24}, 
+	b{24}, a{25}, b{25}, a{26}, b{26}, a{27}, b{27}, a{28}, 
+	b{28}, a{29}, b{29}, a{30}, b{30}, a{31}, b{31});
+S	:= JOIN (s, s[0..31]);
+END;
+
+/* 32-bit 3-operands fast full adder */
+DEF FA332_INT (
+	INT32/s, BIT/co[0..1] :OUT; 
+	INT32/a,INT32/b,INT32/c :IN);
+BEGIN
+/*
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	780
+#TYPEWIDE	0
+FA332_1	:= ADDER_PRIM (st, co[0], a, b,  ci[0]);
+FA332_2	:= ADDER_PRIM (s,  co[1], c, st, ci[1]);
+*/
+Zero	:= TIE0 (zero);
+Add332	:= FA332 (s[0..31], co[0..1], zero, zero,   
+	a{0}, b{0}, c{0}, a{1}, b{1}, c{1}, a{2}, 
+	b{2}, c{2}, a{3}, b{3}, c{3}, a{4}, b{4}, c{4}, a{5}, 
+	b{5}, c{5}, a{6}, b{6}, c{6}, a{7}, b{7}, c{7}, a{8}, 
+	b{8}, c{8}, a{9}, b{9}, c{9}, a{10}, b{10}, c{10}, a{11}, 
+	b{11}, c{11}, a{12}, b{12}, c{12}, a{13}, b{13}, c{13}, 
+	a{14}, b{14}, c{14}, a{15}, b{15}, c{15}, a{16}, b{16}, 
+	c{16}, a{17}, b{17}, c{17}, a{18}, b{18}, c{18}, a{19}, 
+	b{19}, c{19}, a{20}, b{20}, c{20}, a{21}, b{21}, c{21}, 
+	a{22}, b{22}, c{22}, a{23}, b{23}, c{23}, a{24}, b{24}, 
+	c{24}, a{25}, b{25}, c{25}, a{26}, b{26}, c{26}, a{27}, 
+	b{27}, c{27}, a{28}, b{28}, c{28}, a{29}, b{29}, c{29}, 
+	a{30}, b{30}, c{30}, a{31}, b{31} c{31});
+S	:= JOIN (s, s[0..31]);
+END;
+
+/* 4-bit equality comparator for integers */
+
+DEF CMP4_INT (BIT/equal :OUT; INT4/a, INT4/b :IN);
+BEGIN
+/*
+#GRIDCOUNT	27
+#GATECOUNT	44
+#MEGACOUNT	0
+#TYPEWIDE	0
+Zero	:= TIE0_PRIM (zero);
+One	:= TIE1_PRIM (one);
+CMP4	:= MAG_PRIM (greater, equal, less, zero, one, zero, a, b);
+*/
+Comp	:= CMP4 (equal, a{0}, b{0}, a{1}, b{1}, a{2}, b{2}, a{3}, 
+		b{3});
+END;
+
+/* 8-bit equality comparator for integers */
+
+DEF CMP8_INT (BIT/equal :OUT; INT8/a, INT8/b :IN);
+BEGIN
+/*
+#GRIDCOUNT	53
+#GATECOUNT	90
+#MEGACOUNT	0
+#TYPEWIDE	0
+Zero	:= TIE0_PRIM (zero);
+One	:= TIE1_PRIM (one);
+CMP8	:= MAG_PRIM (greater, equal, less, zero, one, zero, a, b);
+*/
+Comp	:= CMP8 (equal, a{0}, b{0}, a{1}, b{1}, a{2}, b{2}, a{3}, 
+		b{3}, a{4}, b{4}, a{5}, b{5}, a{6}, b{6}, a{7}, 
+		b{7});
+END;
+

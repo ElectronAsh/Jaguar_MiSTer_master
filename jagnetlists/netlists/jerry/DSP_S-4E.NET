@@ -1,0 +1,99 @@
+/******************************************************************
+dsp_slave.net
+21/2/91
+
+GPU to CPU Interface
+--------------------
+This module contains logic to allow the CPU to access locations 
+within the GPU local memory space.
+
+The GPU is requested to perform a slave transfer by gpuread and
+gpuwrite, which are look-ahead synchronous signals.   Cycles must 
+be two ticks wide, with read data valid at the end of the second 
+tick.  
+
+The slave port can be either 16 or 32 bits wide.  The 32-bit slave
+port is straightforward, but special care needs to be taken when
+dealing with the 16-bit port, and little/big endian issues.  
+The port is 16 bit if A15 is low, and 32-bit if A15 is high.
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DSP_SLAVE (
+INT16/	dread		/* I/O read data */
+	:TRI;
+INT13/	cpuaddr		/* CPU access address */
+INT32/	cpudata		/* CPU access write data */
+	ioreq		/* Look-ahead IO request */
+	:OUT;
+	big_io		/* IO interface is big-endian */
+	clk[0]		/* co-processor master clock */
+	clk[2]		/* co-processor clock for latching data */
+	dwrite[0..15]	/* I/O write data */
+INT16/	io_addr		/* I/O address */
+	iord		/* Look-ahead I/O read strobe for GPU */
+	iowr		/* Look-ahead I/O write strobe for GPU */
+INT32/	mem_data	/* pipe-lined gpu_data */
+	reset\		/* system reset */
+	:IN);
+
+INT16/	cpudlo, cpudhi, dreadt, dwritelo, 
+INT16/	gpudlo, gpudhi, lodata, latrdata, latrdatai, immrdata
+:LOCAL;
+BEGIN
+
+Dwritelo	:= JOIN (dwritelo, dwrite[0..15]);
+Gpudlo		:= JOIN (gpudlo, mem_data{0..15});
+Gpudhi		:= JOIN (gpudhi, mem_data{16..31});
+Io_addr\[1]	:= IV (io_addr\[1], io_addr{1});
+
+/* Generate IO request for the bus controller when iord or iowr is
+active, with the appropriate address. */
+
+Iorqt0		:= ND2 (iorqt[0], iord, io_addr\[1]);
+Iorqt1		:= ND2 (iorqt[1], iowr, io_addr{1});
+Ioreq		:= ND2 (ioreq, iorqt[0..1]);
+
+/* Latch look-ahead versions to give read and write enable */
+
+Rden		:= FD2Q (rden, iord, clk[0], reset\);
+Rdenp		:= FD2Q (rdenp, rden, clk[0], reset\);
+Iowrite		:= FD1Q (iowrite, iowr, clk[0]);
+
+/* IO write cycles must be written low address then high address,
+if a low address write appears, latch the data.
+
+If a15 is high, 32 bit writes are permitted to the same addresses
+that would be written if it were low. 
+
+In big-endian mode, low address means high data. */
+
+Lodld		:= AN3H (lodld, iowrite, clk[2], io_addr\[1]);
+Lodata		:= LDP2Q (lodata, dwritelo, lodld, reset\);
+
+Cpudlo		:= MX2 (cpudlo, lodata, dwritelo, big_io);
+Cpudhit		:= MX2 (cpudhi, dwritelo, lodata, big_io);
+Cpudata		:= JOIN (cpudata, cpudlo, cpudhi);
+
+Cpuaddr[2-14]	:= NIV (cpuaddr[2-14], io_addr{2-14});
+Cpuaddr		:= JOIN (cpuaddr, cpuaddr[2..14]);
+
+/* IO read cycles must be read low address then high address, when 
+a low word is read, latch the high word 
+In big-endian mode, the meaning of the words reverses. */
+
+/* latched read data */
+Latrdld		:= AN3H (hidld, rdenp, clk[2], io_addr\[1]);
+Latrdatai	:= MX2 (latrdatai, gpudhi, gpudlo, big_io);
+Latrdata	:= LDP1Q (latrdata, latrdatai, hidld);
+
+/* immediate read data */
+Immrdatai	:= MX2 (immrdata, gpudlo, gpudhi, big_io);
+
+Dreadt		:= MX2 (dreadt, immrdata, latrdata, io_addr{1});
+Dreaden		:= OR2_H (dreaden, rden, rdenp);
+Dread		:= TSM (dread, dreadt, dreaden);
+
+END;

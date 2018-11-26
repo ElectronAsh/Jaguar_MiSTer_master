@@ -1,0 +1,112 @@
+/******************************************************************
+gpu.net
+6/2/91
+
+Graphics Processor top level
+----------------------------
+This is the top level of the graphics processor core
+
+******************************************************************/
+
+IMPORT arith, divide, gpu_ctrl, gpu_mem, ins_exec, registers;
+
+DEF GPU (
+INT32/	gpu_data	/* Graphics processor data bus */
+	gpu_dout[0..31]	/* GPU data bit-wise read bus */
+	:BUS;
+	big_io		/* IO interface is big-endian */
+	big_pix		/* Pixel organisation is big-endian */
+	bliten		/* blitter register enable */
+	bus_hog		/* GPU bus behaviour on external fetch */
+	cpu_int		/* GPU interrupt to CPU */
+	dma_ack		/* external DMA acknowledge */
+	external	/* external address decoded */
+	flagrd		/* flag register read */
+	flagwr		/* flag register write */
+	gateack		/* gateway transfer acknowledge */
+INT32/	gpu_addr	/* Graphics processor address bus */
+	gpu_memw	/* graphics processor bus write enable */
+	hidrd		/* read the high long-word of a phrase */
+	hidwr		/* write the high long-word of a phrase */
+	msize[0..1]	/* width of external memory cycles */
+	progserv	/* current cycle is a program fetch */
+	ram_addr[2..11]	/* address for internal RAM */
+	ramen		/* cycle into local RAM */
+	:OUT; 
+	abort		/* abort all processing on exception */
+	clk[0]		/* System clocks */
+	clk[2]
+INT11/	cpuaddr		/* CPU access address */
+INT32/	cpudata		/* CPU access write data */
+	cst		/* chip select timing */
+	gate_active	/* gateway active */
+	gatereq		/* bus transfer from external load */
+	gpu_irq[1..4]	/* Interrupt request lines */
+	ioreq		/* Look-ahead IO request */
+	iowr		/* CPU access write request */
+INT32/	load_data	/* memory load data for write-back */
+	reset\ 		/* Master reset */
+	reset_run	/* GPU should start up running */
+	xld_ready	/* external load data is ready */
+	:IN;);
+
+INT3/	alufunc, ressel
+INT6/	srca, dsta,
+INT30/	progaddr,
+INT32/	dataddr, dstd, result, srcd
+
+BEGIN
+
+Gpurega		:= JOIN (gpurega, gpu_addr{2..7});
+Ins_exec	:= INS_EXEC (gpu_data, gpu_dout[3..31], srcd, 
+			alufunc, brlmux[0..1], dataddr, datreq, 
+			datwe, div_start, dsta, dstdgate, dstmdwr, 
+			dstrwen, dstwensel, flagld, immwr, macop, 
+			msize[0..1], mtx_dover, 
+			multsel, multsign, progaddr, progreq, 
+			quotient_sel, resld, ressel, rev_sub, 
+			satsz, single_stop, srca, srcmdwr, srcren, 
+			srcrwen, xldd_sel, carry_flag, clk[0], 
+			clk[2], datack, dbgrd, del_xld, 
+			div_activei, external, flagrd, flagwr, 
+			gate_active, go, gpu_irq[0..4], gpupwr, 
+			gpurega, mtxawr, mtxcwr, nega_flag, pcrd, 
+			pcwr, progack, reset\, result, single_go, 
+			single_step, statrd, xld_ready, zero_flag);
+
+Arith		:= ARITH (gpu_dout[0..2], carry_flag, nega_flag, 
+			result, zero_flag, dstd, srcd, alufunc, 
+			brlmux[0..1], clk[0], flagld, flagrd, 
+			flagwr, gpu_data, macop, multsel, multsign, 
+			reset\, resld, ressel, rev_sub, satsz);
+
+/* the serial divide unit */
+
+Divide		:= DIVIDE (gpu_data, div_activei, quotient, clk[0], 
+			div_start, dstd, remrd, reset\, srcd);
+
+Registers	:= REGISTERS (srcd, dstd, cst, dsta, 
+			dstmdwr, dstrwen, dstwensel, 
+			gpu_data, immwr, load_data, mem_data, 
+			mtx_dover, quotient, quotient_sel, result, 
+			srca, srcmdwr, srcren, srcrwen, xldd_sel);
+
+Gpu_mem		:= GPU_MEM (gpu_data, big_io, big_pix, bliten, 
+			ctrlwr, datack, dbgrd, del_xld, external, 
+			flagrd, flagwr, gateack, gpu_addr, 
+			gpu_memw, gpupwr, hidrd, hidwr, mem_data, 
+			mtxawr, mtxcwr, pcrd, pcwr, progack, 
+			progserv, ram_addr[2..11], ramen, remrd, 
+			statrd, 
+			clk[0], clk[2], cpuaddr, cpudata, dataddr, 
+			dstd, dstdgate, datreq, datwe, gatereq, 
+			go, ioreq, iowr, progaddr, progreq, 
+			reset\);
+
+Gpu_ctrl	:= GPU_CTRL (gpu_dout[0..7], gpu_dout[11..15], 
+			bus_hog, cpu_int, dma_ack, go, gpu_irq[0], 
+			single_go, single_step, abort, clk[0], 
+			ctrlwr, gpu_data, reset\, reset_run, 
+			single_stop, statrd);
+
+END;

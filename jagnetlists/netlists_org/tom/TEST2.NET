@@ -1,0 +1,38 @@
+IMPORT tosh, power;
+DEF LOCAL_MUX (
+INT32/	local_data[0..1] /* data for addable registers */
+INT32/	load_data[0..1]	/* data for load only registers */
+	:OUT;
+INT16/	addq[0..3]
+INT32/	gpu_data
+	data[0..63]
+	blit_back	/* blitter bus acknowledge */
+	blit_breq	/* blitter bus request */
+	daddq_sel :IN); 
+
+INT32/	addqlo32, addqhi32, r_data[0..1]
+:LOCAL;
+BEGIN
+
+Blit_active	:= OR2 (blit_active, blit_breq, blit_back);
+Blit_backb	:= NIVU2 (blit_backb, blit_active);
+
+R_data[0]	:= JOIN (r_data[0], data[0..31]);
+R_data[1]	:= JOIN (r_data[1], data[32..63]);
+
+Addqlo32	:= JOIN (addqlo32, addq[0], addq[1]);
+Addqhi32	:= JOIN (addqhi32, addq[2], addq[3]);
+
+Load_data[0]	:= MX2 (load_data[0], gpu_data, r_data[0], 
+			blit_backb);
+Load_data[1]	:= MX2 (load_data[1], gpu_data, r_data[1], 
+			blit_backb);
+Daddq_selb[0-1]	:= NIVU (daddq_selb[0-1], daddq_sel);
+Local_data[0]	:= MX2 (local_data[0], load_data[0], addqlo32, 
+			daddq_selb[0]);
+Local_data[1]	:= MX2 (local_data[1], load_data[1], addqhi32, 
+			daddq_selb[1]);
+
+END;
+
+

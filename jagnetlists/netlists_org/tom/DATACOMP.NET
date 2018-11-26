@@ -1,0 +1,148 @@
+/******************************************************************
+datacomp
+23/11/90
+
+Blitter data comparators
+------------------------
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+/**  DATACOMP - Compare four or eight data pixels  ****************
+The data comparator is used to help with area-flood, to allow 
+transparent colours, etc.  It is used in either eight or sixteen
+bit pixel modes.
+
+Comparison may be made between source and pattern data, or between
+destination and pattern data.
+
+*/
+
+DEF DATACOMP (
+	dcomp[0..7]	/* data byte equal flags */
+	:OUT;
+	cmpdst		/* compare dest rather than source */
+INT32/	dstdlo
+INT32/	dstdhi
+INT32/	patdlo
+INT32/	patdhi
+INT32/	srcdlo
+INT32/	srcdhi
+	:IN);
+
+INT8/	patb[0..7], tarb[0..7]
+INT32/	tardlo, tardhi
+:LOCAL;
+BEGIN
+
+/* Select between source and dest */
+
+Cmpdstb[0-1]	:= NIVU (cmpdstb[0-1], cmpdst);
+Tardlo		:= MX2 (tardlo, srcdlo, dstdlo, cmpdstb[0]);
+Tardhi		:= MX2 (tardhi, srcdhi, dstdhi, cmpdstb[1]);
+
+Patb[0]		:= JOIN (patb[0], patdlo{0..7});
+Patb[1]		:= JOIN (patb[1], patdlo{8..15});
+Patb[2]		:= JOIN (patb[2], patdlo{16..23});
+Patb[3]		:= JOIN (patb[3], patdlo{24..31});
+Patb[4]		:= JOIN (patb[4], patdhi{0..7});
+Patb[5]		:= JOIN (patb[5], patdhi{8..15});
+Patb[6]		:= JOIN (patb[6], patdhi{16..23});
+Patb[7]		:= JOIN (patb[7], patdhi{24..31});
+
+Tarb[0]		:= JOIN (tarb[0], tardlo{0..7});
+Tarb[1]		:= JOIN (tarb[1], tardlo{8..15});
+Tarb[2]		:= JOIN (tarb[2], tardlo{16..23});
+Tarb[3]		:= JOIN (tarb[3], tardlo{24..31});
+Tarb[4]		:= JOIN (tarb[4], tardhi{0..7});
+Tarb[5]		:= JOIN (tarb[5], tardhi{8..15});
+Tarb[6]		:= JOIN (tarb[6], tardhi{16..23});
+Tarb[7]		:= JOIN (tarb[7], tardhi{24..31});
+
+Dcmp[0-7]	:= CMP8_INT (dcomp[0-7], patb[0-7], tarb[0-7]);
+
+END;
+
+
+DEF ZEDSHIFT (
+INT32/	srczlo
+INT32/	srczhi
+	:OUT;
+INT32/	srcz1lo
+INT32/	srcz1hi
+INT32/	srcz2lo
+INT32/	srcz2hi
+	srcshift[4..5]	/* source alignment shift */
+	:IN);
+INT16/	srcz[0..3], srczw[0..6]
+:LOCAL;
+BEGIN
+
+Srczw[0]	:= JOIN (srczw[0], srcz1lo{0..15});
+Srczw[1]	:= JOIN (srczw[1], srcz1lo{16..31});
+Srczw[2]	:= JOIN (srczw[2], srcz1hi{0..15});
+Srczw[3]	:= JOIN (srczw[3], srcz1hi{16..31});
+Srczw[4]	:= JOIN (srczw[4], srcz2lo{0..15});
+Srczw[5]	:= JOIN (srczw[5], srcz2lo{16..31});
+Srczw[6]	:= JOIN (srczw[6], srcz2hi{0..15});
+
+/* Align the source zed data with the destination */
+
+Srcshift4b[0-1]	:= NIVU (srcshift4b[0-1], srcshift[4]);
+Srcshift5b[0-1]	:= NIVU (srcshift5b[0-1], srcshift[5]);
+Srcz[0]		:= MX4 (srcz[0], srczw[0..3], srcshift4b[0], 
+			srcshift5b[0]);
+Srcz[1]		:= MX4 (srcz[1], srczw[1..4], srcshift4b[0], 
+			srcshift5b[0]);
+Srcz[2]		:= MX4 (srcz[2], srczw[2..5], srcshift4b[1], 
+			srcshift5b[1]);
+Srcz[3]		:= MX4 (srcz[3], srczw[3..6], srcshift4b[1], 
+			srcshift5b[1]);
+
+Srczlo		:= JOIN (srczlo, srcz[0..1]);
+Srczhi		:= JOIN (srczhi, srcz[2..3]);
+END;
+
+/**  ZEDCOMP - Compare four pixel Z values  ***********************
+The zed comparator performs a sixteen bit magnitude comparison 
+between the source and destination Z values.  
+
+Z comparison flags enable the compare output when the following 
+conditions are met
+
+0	less than
+1	equal to
+2	greater than
+
+*/
+DEF ZEDCOMP (
+	zcomp[0..3]
+	:OUT;
+INT32/	srczplo
+INT32/	srczphi
+INT32/	dstzlo
+INT32/	dstzhi
+	zmode[0..2]	/* Z comparator mode */
+	:IN);
+BEGIN
+
+/* Compare their values */
+
+Zcomp[0]	:= MAG_16 (zg[0], ze[0], zl[0], srczplo{0..15}, 
+			dstzlo{0..15});
+Zcomp[1]	:= MAG_16 (zg[1], ze[1], zl[1], srczplo{16..31}, 
+			dstzlo{16..31});
+Zcomp[2]	:= MAG_16 (zg[2], ze[2], zl[2], srczphi{0..15}, 
+			dstzhi{0..15});
+Zcomp[3]	:= MAG_16 (zg[3], ze[3], zl[3], srczphi{16..31}, 
+			dstzhi{16..31});
+
+Zlt[0-3]	:= ND2 (zlt[0-3], zl[0-3], zmode[0]);
+Zet[0-3]	:= ND2 (zet[0-3], ze[0-3], zmode[1]);
+Zgt[0-3]	:= ND2 (zgt[0-3], zg[0-3], zmode[2]);
+Zcmp[0-3]	:= ND3P (zcomp[0-3], zlt[0-3], zet[0-3], zgt[0-3]);
+
+END;
+
+

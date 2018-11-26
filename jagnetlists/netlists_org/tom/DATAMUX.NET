@@ -1,0 +1,308 @@
+/******************************************************************
+datamux
+27/11/90
+
+The blitter data path multiplexers
+----------------------------------
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+/**  DADDAMUX - Select data adder input a  ************************
+Selection code
+000   Destination data
+100   Source data (as pattern fraction)
+101   Pattern data
+110   Source zed 1
+111   Source zed 2
+*/
+
+DEF DADDAMUX (
+INT16/	adda[0..3]
+	:OUT;
+INT32/	dstd[0..1]
+INT32/	srcd[0..1]
+INT32/	patd[0..1]
+INT32/	srcz1[0..1]
+INT32/	srcz2[0..1]
+	daddasel[0..2]	/* data adder input A selection */
+	:IN);
+
+INT32/	addalo, addahi, sello, selhi
+:LOCAL;
+BEGIN
+
+Dsel0b[0-1]	:= NIVU2 (dsel0b[0-1], daddasel[0]);
+Dsel1b[0-1]	:= NIVU2 (dsel1b[0-1], daddasel[1]);
+Dsel2b[0-1]	:= NIVU2 (dsel2b[0-1], daddasel[2]);
+Sello		:= MX4 (sello, srcd[0], patd[0], srcz1[0], 
+			srcz2[0], dsel0b[0], dsel1b[0]);
+Selhi		:= MX4 (selhi, srcd[1], patd[1], srcz1[1], 
+			srcz2[1], dsel0b[1], dsel1b[1]);
+
+Addalo		:= MX2P (addalo, dstd[0], sello, dsel2b[0]);
+Addahi		:= MX2P (addahi, dstd[1], selhi, dsel2b[1]);
+
+Adda[0]		:= JOIN (adda[0], addalo{0..15});
+Adda[1]		:= JOIN (adda[1], addalo{16..31});
+Adda[2]		:= JOIN (adda[2], addahi{0..15});
+Adda[3]		:= JOIN (adda[3], addahi{16..31});
+
+END;
+
+/**  DADDBMUX - Select data adder input b  ************************
+Selection code
+000	Source data
+100	Bottom 16 bits of I inc repeated four times
+101	Top 16 bits of I inc repeated four times
+110	Bottom 16 bits of Z inc repeated four times
+111	Top 16 bits of Z inc repeated four times
+*/
+
+DEF DADDBMUX (
+INT16/	addb[0..3]
+	:OUT;
+INT32/	srcdlo
+INT32/	srcdhi
+INT32/	iinc
+INT32/	zinc
+	daddbsel[0..2]
+	:IN);
+
+INT16/	word, iinclo, iinchi, srcdw[0..3], zinclo, zinchi
+:LOCAL;
+BEGIN
+
+Iinclo		:= JOIN (iinclo, iinc{0..15});
+Iinchi		:= JOIN (iinchi, iinc{16..31});
+Zinclo		:= JOIN (zinclo, zinc{0..15});
+Zinchi		:= JOIN (zinchi, zinc{16..31});
+
+Dsel0b		:= NIVU2 (dsel0b, daddbsel[0]);
+Dsel1b		:= NIVU2 (dsel1b, daddbsel[1]);
+
+Word		:= MX4P (word, iinclo, iinchi, zinclo, zinchi,
+			dsel0b, dsel1b);
+
+Srcdw0		:= JOIN (srcdw[0], srcdlo{0..15});
+Srcdw1		:= JOIN (srcdw[1], srcdlo{16..31});
+Srcdw2		:= JOIN (srcdw[2], srcdhi{0..15});
+Srcdw3		:= JOIN (srcdw[3], srcdhi{16..31});
+
+Dsel2b[0-1]	:= NIVU (dsel2b[0-1], daddbsel[2]);
+
+Addb[0]		:= MX2P (addb[0],  srcdw[0],  word, dsel2b[0]);
+Addb[1]		:= MX2P (addb[1],  srcdw[1],  word, dsel2b[0]);
+Addb[2]		:= MX2P (addb[2],  srcdw[2],  word, dsel2b[1]);
+Addb[3]		:= MX2P (addb[3],  srcdw[3],  word, dsel2b[1]);
+
+END;
+
+/**  LOCAL_MUX - Select local data bus contents  ******************
+The signal daddq_sel selects the adder outputs overridingly,
+the signal blit_back + blit_breq selects rw_data versus the 
+gpu_din bus
+*/
+
+DEF LOCAL_MUX (
+INT32/	local_data[0..1] /* data for addable registers */
+INT32/	load_data[0..1]	/* data for load only registers */
+	:OUT;
+INT16/	addq[0..3]
+INT32/	gpu_din
+	data[0..63]
+	blit_back	/* blitter bus acknowledge */
+	blit_breq[0..1]	/* blitter bus request */
+	daddq_sel :IN); 
+
+INT32/	addqlo32, addqhi32, r_data[0..1]
+:LOCAL;
+BEGIN
+
+Blit_active	:= OR3P (blit_active, blit_breq[0..1], blit_back);
+Blit_backb	:= NIVU2 (blit_backb, blit_active);
+
+R_data[0]	:= JOIN (r_data[0], data[0..31]);
+R_data[1]	:= JOIN (r_data[1], data[32..63]);
+
+Addqlo32	:= JOIN (addqlo32, addq[0], addq[1]);
+Addqhi32	:= JOIN (addqhi32, addq[2], addq[3]);
+
+Load_data[0]	:= MX2 (load_data[0], gpu_din, r_data[0], 
+			blit_backb);
+Load_data[1]	:= MX2 (load_data[1], gpu_din, r_data[1], 
+			blit_backb);
+Daddq_selb[0-1]	:= NIVU (daddq_selb[0-1], daddq_sel);
+Local_data[0]	:= MX2P (local_data[0], load_data[0], addqlo32, 
+			daddq_selb[0]);
+Local_data[1]	:= MX2P (local_data[1], load_data[1], addqhi32, 
+			daddq_selb[1]);
+
+END;
+
+/**  DATA_MUX - Select data to be written, and tri-state drive it *
+
+Selection code:
+00	pattern data	\
+01	lfu data	 = use destination data for unchanged write
+10	adder output	/
+11	source zed	 = use destination zed for unchanged write
+
+Destination data can also be written back unchanged, so two 6-bit 
+pointers are provided which are the start and end points at which 
+changed data is to be written, outside this area unchanged 
+destination data is multiplexed in. 
+
+The start mask is the first changed pixel, and may take the 
+values 0-8, 16, 24, 32, 40, 48, or 56.
+The end mask is the one more than the last changed pixel, and may 
+take the values
+1-8, 16, 24, 32, 40, 48, 56 or 0 (for 64).
+
+The logic assumes that end > start.
+
+*/
+
+DEF DATA_MUX (
+	wdata[0..63]	/* co-processor rwrite data bus */
+	:BUS;
+INT16/	addq[0..3]
+	big_pix		/* Pixel organisation is big-endian */
+INT32/	dstdlo
+INT32/	dstdhi
+INT32/	dstzlo
+INT32/	dstzhi
+	data_sel[0..1]	/* source of write data */
+	data_ena	/* enable write data onto read/write bus */
+	dstart[0..5]	/* start of changed write data */
+	dend[0..5]	/* end of changed write data */
+	dbinh\[0..7]	/* byte oriented changed data inhibits */
+INT32/	lfu[0..1]
+INT32/	patd[0..1]
+	phrase_mode	/* phrase write mode */
+INT32/	srczlo
+INT32/	srczhi
+	:IN);
+
+INT32/	addql[0..1], ddatlo, ddathi zero32
+:LOCAL;
+BEGIN
+
+Phrase_mode\	:= IV (phrase_mode\, phrase_mode);
+Zero		:= TIE0 (zero);
+Zero32		:= JOIN (zero32, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero);
+
+/* Generate an changed data mask */
+
+Edis		:= OR6 (edis\, dend[0..5]);
+Ecoarse		:= DECL38E (e_coarse\[0..7], dend[3..5], edis\);
+E_coarse[0]	:= IV (e_coarse[0], e_coarse\[0]);
+Efine		:= DECL38E (unused[0], e_fine\[1..7], dend[0..2], 
+			e_coarse[0]);
+
+Scoarse		:= DECH38 (s_coarse[0..7], dstart[3..5]);
+Sfen\		:= IV (sfen\, s_coarse[0]);
+Sfine		:= DECH38EL (s_fine[0..7], dstart[0..2], sfen\);
+
+Maskt[0]	:= NIV (maskt[0], s_fine[0]);
+Maskt[1-7]	:= OAN1P (maskt[1-7], maskt[0-6], s_fine[1-7], 
+			e_fine\[1-7]);
+
+/* Produce a look-ahead on the ripple carry:
+masktla = s_coarse[0] . /e_coarse[0] */
+Masktla		:= AN2 (masktla, s_coarse[0], e_coarse\[0]);
+Maskt[8]	:= OAN1P (maskt[8], masktla, s_coarse[1],
+			e_coarse\[1]);
+Maskt[9-14]	:= OAN1P (maskt[9-14], maskt[8-13], s_coarse[2-7],
+			e_coarse\[2-7]);
+
+/* The bit terms are mirrored for big-endian pixels outside phrase
+mode.  The byte terms are mirrored for big-endian pixels in phrase 
+mode.  */
+
+Mirror_bit	:= AN2M (mir_bit, phrase_mode\, big_pix);
+Mirror_byte	:= AN2H (mir_byte, phrase_mode, big_pix);
+
+Masktb[14]	:= NIV (masktb[14], maskt[14]);
+Masku[0]	:= MX4 (masku[0], maskt[0], maskt[7], maskt[14], 
+			zero, mir_bit, mir_byte);
+Masku[1]	:= MX4 (masku[1], maskt[1], maskt[6], maskt[14], 
+			zero, mir_bit, mir_byte);
+Masku[2]	:= MX4 (masku[2], maskt[2], maskt[5], maskt[14], 
+			zero, mir_bit, mir_byte);
+Masku[3]	:= MX4 (masku[3], maskt[3], maskt[4], masktb[14], 
+			zero, mir_bit, mir_byte);
+Masku[4]	:= MX4 (masku[4], maskt[4], maskt[3], masktb[14], 
+			zero, mir_bit, mir_byte);
+Masku[5]	:= MX4 (masku[5], maskt[5], maskt[2], masktb[14], 
+			zero, mir_bit, mir_byte);
+Masku[6]	:= MX4 (masku[6], maskt[6], maskt[1], masktb[14], 
+			zero, mir_bit, mir_byte);
+Masku[7]	:= MX4 (masku[7], maskt[7], maskt[0], masktb[14], 
+			zero, mir_bit, mir_byte);
+Masku[8]	:= MX2 (masku[8], maskt[8], maskt[13], mir_byte);
+Masku[9]	:= MX2 (masku[9], maskt[9], maskt[12], mir_byte);
+Masku[10]	:= MX2 (masku[10], maskt[10], maskt[11], mir_byte);
+Masku[11]	:= MX2 (masku[11], maskt[11], maskt[10], mir_byte);
+Masku[12]	:= MX2 (masku[12], maskt[12], maskt[9], mir_byte);
+Masku[13]	:= MX2 (masku[13], maskt[13], maskt[8], mir_byte);
+Masku[14]	:= MX2 (masku[14], maskt[14], maskt[0], mir_byte);
+
+/* The maskt terms define the area for changed data, but the byte
+inhibit terms can override these */
+
+Mask[0-7]	:= AN2 (mask[0-7], masku[0-7], dbinh\[0]);
+Mask[8-14]	:= AN2H (mask[8-14], masku[8-14], dbinh\[1-7]);
+
+Addql[0]	:= JOIN (addql[0], addq[0..1]);
+Addql[1]	:= JOIN (addql[1], addq[2..3]);
+
+Dsel0b[0-1]	:= NIVU (dsel0b[0-1], data_sel[0]);
+Dsel1b[0-1]	:= NIVU (dsel1b[0-1], data_sel[1]);
+Ddatlo		:= MX4 (ddatlo, patd[0], lfu[0], addql[0],
+			zero32, dsel0b[0], dsel1b[0]);
+Ddathi		:= MX4 (ddathi, patd[1], lfu[1], addql[1],
+			zero32, dsel0b[1], dsel1b[1]);
+
+Zed_sel		:= AN2 (zed_sel, data_sel[0..1]);
+Zed_selb[0-1]	:= NIVU (zed_selb[0-1], zed_sel);
+
+Dat[0-7]	:= MX4 (dat[0-7], dstdlo{0-7}, ddatlo{0-7},
+			dstzlo{0-7}, srczlo{0-7}, 
+			mask[0-7], zed_selb[0]);
+Dat[8-15]	:= MX4 (dat[8-15], dstdlo{8-15}, ddatlo{8-15},
+			dstzlo{8-15}, srczlo{8-15},
+			mask[8], zed_selb[0]);
+Dat[16-23]	:= MX4 (dat[16-23], dstdlo{16-23}, ddatlo{16-23}, 
+			dstzlo{16-23}, srczlo{16-23}, 
+			mask[9], zed_selb[0]);
+Dat[24-31]	:= MX4 (dat[24-31], dstdlo{24-31}, ddatlo{24-31}, 
+			dstzlo{24-31}, srczlo{24-31}, 
+			mask[10], zed_selb[0]);
+Dat[32-39]	:= MX4 (dat[32-39], dstdhi{0-7}, ddathi{0-7}, 
+			dstzhi{0-7}, srczhi{0-7}, 
+			mask[11], zed_selb[1]);
+Dat[40-47]	:= MX4 (dat[40-47], dstdhi{8-15}, ddathi{8-15}, 
+			dstzhi{8-15}, srczhi{8-15}, 
+			mask[12], zed_selb[1]);
+Dat[48-55]	:= MX4 (dat[48-55], dstdhi{16-23}, ddathi{16-23}, 
+			dstzhi{16-23}, srczhi{16-23}, 
+			mask[13], zed_selb[1]);
+Dat[56-63]	:= MX4 (dat[56-63], dstdhi{24-31}, ddathi{24-31}, 
+			dstzhi{24-31}, srczhi{24-31}, 
+			mask[14], zed_selb[1]);
+
+Data_enab[0-1]	:= NIVU (data_enab[0-1], data_ena);
+Datadrv[0-31]	:= TS (wdata[0-31], dat[0-31], data_enab[0]);
+Datadrv[32-63]	:= TS (wdata[32-63], dat[32-63], data_enab[1]);
+
+Unused[0]	:= DUMMY (unused[0]);
+
+END;
+
+

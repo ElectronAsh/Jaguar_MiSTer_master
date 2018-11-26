@@ -1,0 +1,697 @@
+/******************************************************************
+arith.net
+28/1/91
+
+The arithmetic unit for the GPU
+-------------------------------
+This module contains all the computational elements of the
+Graphics Processor, being a hardware multiplier, a barrel shifter,
+and a general purpose ALU
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ARITH (
+	gpu_dout[0..2]	/* GPU data bit-wise read bus */
+	:TRI;
+	carry_flag	/* latched carry flag from ALU */
+	nega_flag	/* result of last op was negative */
+INT32/	result		/* result of last compute */
+	zero_flag	/* result of last op was 0 */
+	:OUT;
+INT32/	dstdp		/* destination operand */
+INT32/	srcdp		/* source operand */
+	srcd[31]	/* un pipe-lined bit 31 */
+INT3/	alufunc		/* ALU mode control */
+	brlmux[0..1] 	/* Barrel shifter mode control */
+	clk 		/* co-processor clock */
+	flagld		/* ALU flags load enable */
+	flagrd		/* flags register read enable */
+	flagwr		/* flags register write enable */
+INT32/	gpu_din		/* GPU data bus */
+	macop		/* multiply/accumulate operation in ALU */
+	multsel		/* Multiplier low/high word select */
+	multsign, 	/* Multiplier signed/unsigned control */
+	reset\		/* master reset */
+	resld		/* ALU result register load enable */
+	ressel[0..2] 	/* ALU result register input select */
+	rev_sub		/* reverse normal subtract ordering */
+	satsz[0..1]	/* saturate size selection */
+	:IN);
+
+INT3/	alufnc alufnci
+INT16/	losrcdp, hisrcdp, mula, mulb,
+INT23/	mantissa
+INT32/	alua, aluat, alub, aluq, mant, mulq, mulqp, 
+INT32/	normi, resd, satval, pack, unpack
+(* GE 13/06/2012 Added missing declarations *)
+INT32/	brlq
+INT24/	satvallo
+:LOCAL;
+BEGIN
+
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Dummy		:= DUMMY (one);
+Ressel\[0-1]	:= IV (ressel\[0-1], ressel[0-1]);
+
+/* The input to the ALU has a pipe-line stage 
+Edge triggered latches are required as the data has to be held 
+until the next clock edge. */
+
+Brlmuxp[0-1]	:= FD1Q (brlmuxp[0-1], brlmux[0-1], clk);
+Flagldp		:= FD2Q (flagldp, flagld, clk, reset\);
+Resldp		:= FD1Q (resldp, resld, clk);
+Multselp	:= FD1QH (multselp, multsel, clk);
+Multsignp	:= FD1Q (multsignp, multsign, clk);
+Resselp[0-2]	:= FD1QU (resselp[0-2], ressel[0-2], clk);
+Resselp\[0]	:= IV (resselp\[0], resselp[0]);
+Rev_subp	:= FD1Q (rev_subp, rev_sub, clk);
+Macop_p		:= FD1Q (macop_p, macop, clk);
+Macop_ppt	:= FD1Q (macop_ppt, macop_p, clk);
+Macop_pp	:= NIVU2 (macop_pp, macop_ppt);
+Satszp[0-1]	:= FD1QU (satszp[0-1], satsz[0-1], clk);
+
+/* Generate the ALU control signals on a look-ahead basis */
+
+/* Detect mantissa enable condition */
+
+Mantmodei	:= AN3 (mantmodei, ressel\[0..1], ressel[2]);
+Mantmode	:= FD1Q (mantmode, mantmodei, clk);
+
+/* Sign bit in mantissa mode forces the alu from add to subtract */
+
+Addtosubi\	:= ND2 (addtosubi\, mantmodei, srcd[31]);
+
+/* Allow mantissa generation to change the ALU from add to sub */
+
+Alufunc\[1]	:= IV (alufunc\[1], alufunc{1});
+Alufn[1]	:= ND2 (alufn[1], alufunc\[1], addtosubi\);
+Alufnc		:= JOIN (alufnci, alufunc{0}, alufn[1], 
+			alufunc{2});
+Alufncp		:= FD1QP (alufnc, alufnci, clk);
+
+/* Select between the high and low words of the source and dest
+data for the multiplier */
+
+Losrcdp		:= JOIN (losrcdp, srcdp{0..15});
+Hisrcdp		:= JOIN (hisrcdp, srcdp{16..31});
+Mulb		:= JOIN (mulb, dstdp{0..15});
+Mula		:= MX2 (mula, losrcdp, hisrcdp, multselp);
+
+/* The multiplier */
+
+Mult		:= MP16 (mulq[0..31], mula{0..15}, mulb{0..15}, 
+			multsignp, multsignp, one, zero);
+Mulq		:= JOIN (mulq, mulq[0..31]);
+
+/* Pipe-line the multiplier result for MAC operations */
+
+Mulqp		:= FD1Q (mulqp, mulq, clk);
+
+/* The floating-point mantissa to integer convertor.
+This logic treats its input as a floating-point number, and 
+extracts the mantissa field to generate an integer.
+No shifting is performed on the mantissa, so its most significant
+digit is bit 23.
+*/
+
+Mantissa	:= JOIN (mantissa, srcdp{0..22});
+Mant		:= JOIN (mant, mantissa, one, zero, zero, zero, 
+			zero, zero, zero, zero, zero);
+
+/* The normalisation integer generator
+   -----------------------------------
+This is the logic that produces a value corresponding
+to how de-normalised an unsigned integer is.
+*/
+
+Srcdp[0-31]	:= JOIN (srcdp[0-31], srcdp{0-31});
+
+/* single out the top set bit */
+
+Topset[31]	:= NIV (topset[31], srcdp[31]);
+Topset[30]	:= TBEN (topset[30], inh[30], srcdp[30], 
+			topset[31]);
+Topset[25-29]	:= TBEN (topset[25-29], inh[25-29], srcdp[25-29], 
+			inh[26-30]);
+Topset[24]	:= TBENW (topset[24], srcdp[24], inh[25]);
+Inh[24]		:= OR8 (inh[24], srcdp[24..31]);
+
+Topset[17-23]	:= TBEN (topset[17-23], inh[17-23], srcdp[17-23], 
+			inh[18-24]);
+Topset[16]	:= TBENW (topset[16], srcdp[16], inh[17]);
+Inh[16]		:= OR9 (inh[16], srcdp[16..23], inh[24]);
+
+Topset[9-15]	:= TBEN (topset[9-15], inh[9-15], srcdp[9-15], 
+			inh[10-16]);
+Topset[8]	:= TBENW (topset[8], srcdp[8], inh[9]);
+Inh[8]		:= OR9 (inh[8], srcdp[8..15], inh[16]);
+
+Topset[1-7]	:= TBEN (topset[1-7], inh[1-7], srcdp[1-7], 
+			inh[2-8]);
+Topset[0]	:= TBENW (topset[0], srcdp[0], inh[1]);
+
+/* encode which the most significant bit set is */
+
+Normi[0]	:= OR16 (normi[0], topset[30], topset[28], 
+			topset[26], topset[24], topset[22],
+			topset[20], topset[18], topset[16],
+			topset[14], topset[12], topset[10],
+			topset[8], topset[6], topset[4], 
+			topset[2], topset[0]);
+Normi[1]	:= OR16 (normi[1], topset[29..30], topset[25..26],
+			topset[21..22], topset[17..18], 
+			topset[13..14], topset[9..10],
+			topset[5..6], topset[1..2]);
+Normi[2]	:= OR16 (normi[2], topset[27..30], topset[19..22],
+			topset[11..14], topset[3..6]);
+Normi[3]	:= OR16 (normi[3], topset[31], topset[15..22],
+			topset[0..6]);
+Normi[4]	:= AN2 (normi[4], normi[5], inh[7]);
+Normi[5]	:= IVU (normi[5], inh[23]);
+Normib[5]	:= NIVU (normib[5], normi[5]);
+
+Normi		:= JOIN (normi, normi[0..5], normi[5], normi[5], 
+			normi[5], normi[5], normi[5], normi[5], 
+			normi[5], normi[5], normi[5], normi[5], 
+			normi[5], normi[5], normi[5], normi[5], 
+			normib[5], normib[5], normib[5], normib[5],
+			normib[5], normib[5], normib[5], normib[5],
+			normib[5], normib[5], normib[5], normib[5]);
+
+Dummya		:= DUMMY (topset[7]);
+Dummyb		:= DUMMY (topset[23]);
+
+/* Default input to ALU A is the destination data
+mantmode forces zero
+macop_pp selects the result 
+*/
+
+Aluamux		:= MX2 (aluat, dstdp, result, macop_pp);
+Aluazero\	:= IVU (aluazero\, mantmode);
+Alua[0-31]	:= AN2P (alua[0-31], aluat{0-31}, aluazero\);
+Alua		:= JOIN (alua, alua[0..31]);
+
+/* Default input to ALU B is the source data
+mantmode selects the mantissa
+macop_pp selects the pipe-lined product
+*/
+
+Mantmodeb	:= NIVU (mantmodeb, mantmode);
+Alubmux		:= MX4P (alub, srcdp, mulqp, mant, mant, 
+			macop_pp, mantmodeb);
+
+/* The ALU itself */
+
+Alu		:= ALU32 (aluq, alu_co, alua, alub, carry_flag, 
+			alufnc, dstdp{31}, rev_subp);
+
+/* 32-bit barrel shifter */
+
+Brl		:= BRLSHIFT (brlq, brl_carry, brlmuxp[0..1], 
+			srcdp, dstdp);
+
+/* The fit to eight or sixteen bits unit */
+
+Saturate	:= SATURATE (satvallo, dstdp, satszp[0..1]);
+Satval		:= JOIN (satval, satvallo, zero, zero, zero, 
+			zero, zero, zero, zero, zero);
+
+/* Pack and unpack pixels */
+
+Unpack		:= JOIN (unpack, 
+			dstdp{0..7}, zero, zero, zero, zero, zero, 
+			dstdp{8..11}, zero, zero, zero, zero, zero 
+			dstdp{12..15}, zero, zero, zero, zero, 
+			zero, zero);
+Pack		:= JOIN (pack, 
+			dstdp{0..7}, dstdp{13..16}, dstdp{22..25}, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero);
+
+/* The result multiplexer */
+
+Resmux		:= MX8P (resd, aluq, brlq, satval, mulq, aluq, 
+			normi, pack, unpack, resselp[0..2]);
+
+/* The result register 
+this is loaded by resldp or by macop_pp*/
+
+Resldt		:= OR2U (resldt, resldp, macop_pp);
+Resreg		:= FDSYNC32 (result, resd, resldt, clk);
+
+/* The flags latches */
+
+/* the zero flag can be loaded with zero detect or bus data */
+Zerodet		:= NR32 (zerodet, resd{0..31});
+Zfi		:= MX4 (zfi, zero_flag, zerodet, gpu_din{0}, 
+			gpu_din{0}, flagldp, flagwr);
+Zeroflag	:= FD2Q (zero_flag, zfi, clk, reset\);
+
+/* the carry flag can be loaded from the ALU, the shifter, or the
+data bus.
+cfisel0		:= (flagldp . /resselp{0}) + flagwr
+cfisel1		:= (flagldp .  resselp{0}) + flagwr
+*/
+
+Cfisel0		:= AOR1 (cfisel[0], flagldp, resselp\[0], flagwr);
+Cfisel1		:= AOR1 (cfisel[1], flagldp, resselp[0], flagwr);
+Cfi		:= MX4 (cfi, carry_flag, alu_co, brl_carry, 
+			gpu_din{1}, cfisel[0..1]);
+Carryflag	:= FD2Q (carry_flag, cfi, clk, reset\);
+
+/* the negative flag can be loaded with the sign bit or bus data */
+Nfi		:= MX4 (nfi, nega_flag, resd{31}, gpu_din{2}, 
+			gpu_din{2}, flagldp, flagwr);
+Negaflag	:= FD2Q (nega_flag, nfi, clk, reset\);
+
+/* Make them readable */
+
+Flagrd[0]	:= TS (gpu_dout[0], zero_flag, flagrd);
+Flagrd[1]	:= TS (gpu_dout[1], carry_flag, flagrd);
+Flagrd[2]	:= TS (gpu_dout[2], nega_flag, flagrd);
+
+END;
+
+/******************************************************************
+**  ALU - The simple ALU section  *********************************
+*******************************************************************
+This definition is the 32-bit ALU for the add, subtract and boolean
+functions.  The ALU functions encode as:
+	0 = add
+	1 = add with carry
+	2 = subtract
+	3 = sub with carry
+	4 = and
+	5 = or
+	6 = xor 
+	7 = sub if alua neg
+	    add if alua pos
+the rev_sub bit changes subtract from alua-alub to alub-alua
+*/
+
+DEF ALU32 (
+INT32/	aluq		/* result */
+	alu_co		/* carry / borrow out */
+	:OUT;
+INT32/	alua		/* A data input */
+INT32/	alub		/* B data input */
+	carry_flag	/* carry in for those functions */
+INT3/	alufunc		/* ALU function code */
+	dstdp[31]	/* top bit of dest operand */
+	rev_subp	/* subtract operands reversal */
+	:IN);
+
+INT32/	and, or, xor compa32 compb32
+(* GE 13/06/2012 Added missing declarations *)
+INT32/	adda, addb, sum
+:LOCAL;
+BEGIN
+
+Alufunc[0-2]	:= JOIN (alufunc[0-2], alufunc{0-2});
+Alufunc\[2]	:= IVS (alufunc\[2], alufunc[2]);
+Rev_subp\	:= IV (rev_subp\, rev_subp);
+
+/* subtract in modes 2 or 3, or mode 7 and the top bit of oprnd */
+
+Subt0		:= ND4P (subt[0], alufunc[0..2], dstdp[31]);
+Subt1		:= ND2P (subt[1], alufunc[1], alufunc\[2]);
+Subtract	:= ND2P (subtract, subt[0..1]);
+Subtractb	:= ND2P (subtractb, subt[0..1]);
+
+/* complement either input if required */
+
+Compa[0-1]	:= AN2U (compa[0-1], subtractb, rev_subp);
+Compb[0-1]	:= AN2U (compb[0-1], subtractb, rev_subp\);	
+Compa32		:= JOIN (compa32, compa[0], compa[0], compa[0], 
+			compa[0], compa[0], compa[0], compa[0], 
+			compa[0], compa[0], compa[0], compa[0], 
+			compa[0], compa[0], compa[0], compa[0], 
+			compa[0], compa[1], compa[1], compa[1], 
+			compa[1], compa[1], compa[1], compa[1], 
+			compa[1], compa[1], compa[1], compa[1], 
+			compa[1], compa[1], compa[1], compa[1], 
+			compa[1]);
+Compb32		:= JOIN (compb32, compb[0], compb[0], compb[0], 
+			compb[0], compb[0], compb[0], compb[0], 
+			compb[0], compb[0], compb[0], compb[0], 
+			compb[0], compb[0], compb[0], compb[0], 
+			compb[0], compb[1], compb[1], compb[1], 
+			compb[1], compb[1], compb[1], compb[1], 
+			compb[1], compb[1], compb[1], compb[1], 
+			compb[1], compb[1], compb[1], compb[1], 
+			compb[1]);
+
+Adda		:= EO (adda, alua, compa32);
+Addb		:= EO (addb, alub, compb32);
+
+/* carry in to the adder is given by subtract mode XOR carry in
+mode */
+
+Cint		:= AN3 (cint, alufunc[0], alufunc\[2], carry_flag);
+Cin		:= EO (cin, cint, subtract);
+
+/* add them */
+
+Sum		:= FA32_INT (sum, alu_cout, unused[0..1], cin, 
+			adda, addb);
+
+/* Compute the logic terms */
+
+And		:= AN2 (and, alua, alub);
+Or		:= OR2 (or,  alua, alub);
+Xor		:= EO  (xor, alua, alub);
+
+/* select the required output */
+
+Selt0		:= AOR1 (selt[0], alufunc[0], alufunc[2], 
+			alufunc\[2]);
+Selt1		:= AOR1 (selt[1], alufunc[1], alufunc[2], 
+			alufunc\[2]);
+Sel[0-1]	:= NIVU (sel[0-1], selt[0-1]);
+Aluq		:= MX4P (aluq, and, or, xor, sum, sel[0..1]);
+
+/* Carry is inverted for borrow in subtract mode */
+
+Alu_co		:= EO (alu_co, alu_cout, subtract);
+
+Unused[0-1]	:= DUMMY (unused[0-1]);
+
+END;
+
+/******************************************************************
+**  BRLSHIFT - The Barrel shifter block in the GPU ALU  ***********
+*******************************************************************
+This is based on the Toshiba BRL32 module, but allows shift values
+greater then 32 to be attempted - these will result in zero, or
+all ones for negative-value arithmetic shift rights.
+
+The shift value is derived from the srcdp bus, but is complemented
+as the sign of shifts required to match normalisation is the
+reverse of that provided by the Toshiba shifter.
+*/
+
+DEF BRLSHIFT (
+INT32/	brlq		/* shifted data out */
+	brl_carry	/* carry out of shift */
+	:OUT;
+	brlmux[0..1]	/* control lines */
+INT32/	srcdp		/* shift control */
+INT32/	brld		/* data to be shifted */
+	:IN);
+
+BEGIN
+
+Zero		:= TIE0 (zero);
+Brl0i		:= IV (brlmux\[0], brlmux[0]);
+Srcd\[0-4]	:= IV (srcdp\[0-4], srcdp{0-4});
+Srcd\[31]	:= IV (srcdp\[31], srcdp{31});
+
+/* complement the bottom five bits of srcdp */
+
+Srcdc[0]	:= JOIN (srcdpc[0], srcdp{0});
+Srcdc[1]	:= HA1  (srcdpc[1], scc[1], srcdp\[1], srcdp\[0]);
+Srcdc[2]	:= HA1  (srcdpc[2], scc[2], srcdp\[2], scc[1]);
+Srcdc[3]	:= HA1  (srcdpc[3], scc[3], srcdp\[3], scc[2]);
+Srcdc[4]	:= EO   (srcdpc[4],         srcdp\[4], scc[3]);
+
+/* Except for rotate functions, the shift value is saturated to the
+range -32 to +31 - if it lies outside this range, a value of 0 is
+generated, except for arithmetic shift right of a negative number.
+
+This is achieved by forcing a shift right of 32 on overflow or
+underflow, and only enabling the arithmetic mode for right shifts.
+*/
+
+Rotate\		:= ND2 (rotate\, brlmux\[0], brlmux[1]);
+Rotate		:= IV (rotate, rotate\);
+
+/* Underflow is when bit 31 is 0, and not all of bits 5-30 are 0.
+(underflow and overflow are reversed as shift value is 
+complemented) */
+
+Uflowt		:= NR26 (uflowt, srcdp{5..30});
+Uflow		:= NR2 (uflow, srcdp{31}, uflowt);
+
+/* Overflow is when bit 31 is 1 and not all of bits 5-30 are 1,
+or when bits 5-30 are all 1 and bits 0-4 are all 0 
+oflow = srcdp{31} . (/b5t30h + (b5t30h . shzero))*/
+
+B5t30h\		:= ND26 (b5t30h\, srcdp{5..30});
+B5t30h		:= IV (b5t30h, b5t30h\);
+Shzero		:= NR5 (shzero, srcdp{0..4});
+Shzero\		:= IV (shzero\, shzero);
+Oflowtt		:= AOR1 (oflowt, b5t30h, shzero, b5t30h\);
+Oflow		:= AN2 (oflow, srcdp{31}, oflowt);
+
+/* Shift amount is given by the bottom 5 bits of srcdp, unless 
+over or underflow has occurred, in which case it is forced to
+zero, except for rotates */
+
+Outflowt\	:= NR2 (outflowt\, oflow, uflow);
+Outflow		:= NR2 (outflow, outflowt\, rotate);
+Outflow\	:= IV (outflow\, outflow);
+
+Shiftcnt[0-4]	:= AN2 (shiftcnt[0-4], srcdpc[0-4], outflow\);
+
+/* Low bit of shift control is true for shift rights, given by a
+negative shift value when rotate is not active and the shift 
+distance is not zero, or by over or under flow (in both cases here 
+negative is positive due to complementing of shift value). */
+
+Mux0t		:= ND3 (mux0t, srcdp\[31], rotate\, shzero\);
+Mux0		:= ND2 (mux[0], mux0t, outflow\);
+
+/* High bit of shift control is true for rotates or arithmetic
+shift rights (given by a negative value and both brlmux bits)
+18/8/92 - bug fix
+overflow term removed Mux1 := AN2 (mux[1], mux1t, outflow\);
+*/
+
+Ashr\		:= ND3 (ashr\, srcdp\[31], brlmux[0..1]);
+Mux1t		:= ND2 (mux[1], ashr\, rotate\);
+
+#if FLARE
+Brl		:= BRL32 (z[0..31], mux[0..1], shiftcnt[0..4], 
+			zero, brld{0..31});
+#endif
+#if TOSHIBA
+Brl		:= BRL32 (z[0..31], mux[0..1], shiftcnt[0..4], 
+			zero, brld{0..31});
+#endif
+#if VERILOG
+Brl		:= BARREL32 (z[0..31], mux[0..1], shiftcnt[0..4], 
+			zero, brld{0..31});
+#endif
+Brlq		:= JOIN (brlq, z[0..31]);
+
+/* Carry is bit 0 or bit 31 depending on whether shift is left or
+right.  This is given by mux[0], 1 = right */
+
+Brl_carry	:= MX2 (brl_carry, brld{31}, brld{0}, mux[0]);
+
+END;
+
+/* One stage of the top-bit encoder */
+
+DEF TBEN (this, inho :OUT; bit, inhi :IN);
+
+BEGIN
+
+Inho		:= OR2 (inho, bit, inhi);
+Bit\		:= IV (bit\, bit);
+This		:= NR2 (this, bit\, inhi);
+
+END;
+
+/* One stage of the top-bit encoder, without inhibit output */
+
+DEF TBENW (this :OUT; bit, inhi :IN);
+
+BEGIN
+
+Bit\		:= IV (bit\, bit);
+This		:= NR2 (this, bit\, inhi);
+
+END;
+
+/******************************************************************
+**  SATURATE - signed integer saturate unit ***********************
+*******************************************************************
+This unit takes as its input a signed 32-bit integer, 
+if it is negative outputs zero, 
+or if it greater than 255 or 65535 or 16777215 outputs that
+otherwise the value
+The sixteen and twentyfour inputs are mutually exclusive
+**/
+
+DEF SATURATE (INT24/q :OUT; INT32/d, sixteen, twentyfour :IN);
+
+BEGIN
+
+Sign\		:= IVH (sign\, d{31});
+Twentyfour\	:= IV (twentyfour\, twentyfour);
+
+Oflow24		:= OR7M (oflow24, d{24..30});
+Oflow16		:= OR8 (oflow16, d{16..23});
+Oflow8		:= OR8 (oflow8,  d{8..15});
+
+/* Bits 16-23 
+twentyfour is active
+and sign is not set (force zero)
+all set if 24 bit overflow, else the bits themselves
+= twentyfour . /sign . (oflow24 + d[16-23]) 
+*/
+
+Opt[16-23]	:= OR2 (opt[16-23], oflow24, d{16-23});
+Op[16-23]	:= AN3 (op[16-23], twentyfour, sign\, opt[16-23]);
+
+/* Bits 8-15 
+twentyfour or sixteen is active
+and sign is not set (force zero)
+all set if 24 bit overflow or (16 bit overflow and sixteen mode), 
+  else the bits themselves
+ =   (twentyfour + sixteen)
+   . /sign 
+   . (oflow24 + (oflow16 . sixteen) + d[8-15]) 
+*/
+
+Op8t15t0	:= OR2 (op8t15t0, twentyfour, sixteen);
+Op8t15t1	:= AOR1P (op8t15t1, oflow16, twentyfour\, oflow24);
+Opt[8-15]	:= OR2 (opt[8-15], op8t15t1, d{8-15});
+Op[8-15]	:= AN3 (op[8-15], op8t15t0, sign\, opt[8-15]);
+
+/* Bits 0-7 
+sign is not set
+all set if 24 bit overflow, 
+   or 16 bit overflow and sixteen mode
+   or 8 bit overflow and not sixteen or twentyfour mode
+ else the bits themselves
+ =    /sign 
+   . (  oflow24
+      + (oflow16 . sixteen)
+      + (oflow8 . /(sixteen + twentyfour))
+      + d[0-7])
+*/
+
+Lobt0		:= NR2 (lobt[0], sixteen, twentyfour);
+Lobt1		:= ND2 (lobt[1], lobt[0], oflow8);
+Lobt2		:= ND2 (lobt[2], oflow16, sixteen);
+Lobt3		:= IV  (lobt[3], oflow24);
+Lobt4		:= ND3P (lobt[4], lobt[1..3]);
+Opt[0-7]	:= OR2 (opt[0-7], lobt[4], d{0-7});
+Op[0-7]		:= AN2 (op[0-7], opt[0-7], sign\);
+
+Q		:= JOIN (q, op[0..23]);
+
+END;
+
+/******************************************************************
+Toshiba BRL32 compatible
+------------------------
+
+WARNING - flin function not implemented
+
+Used for Motorola
+******************************************************************/
+
+
+DEF BARREL32 (
+	z[0..31] :OUT; 
+	mux[0..1], sft[0..4], flin, a[0..31] :IN);
+
+BEGIN
+/*
+INT5/	shift
+INT32/	f,rmask,lmask
+Shift	:= JOIN (shift, sft[0..4]);
+F	:= JOIN (f, f[0..31]);
+Rmask	:= JOIN (rmask, rmask[0..31]);
+Lmask	:= JOIN (lmask, lmask[0..31]);
+*/
+Flin		:= DUMMY (flin);
+Mux\[0-1]	:= IV (mux\[0-1], mux[0-1]);
+Sftb[0-4]	:= NIVU (sftb[0-4], sft[0-4]);
+Sft\[4]		:= IV (sft\[4], sft[4]);
+Zero		:= TIE0 (zero);
+
+/* The barrel shifter */
+
+B[0-15]		:= MX2 (b[0-15], a[0-15], a[16-31], sftb[4]);
+B[16-31]	:= MX2 (b[16-31], a[16-31], a[0-15], sftb[4]);
+
+C[0-7]		:= MX2 (c[0-7], b[0-7], b[24-31], sftb[3]);
+C[8-31]		:= MX2 (c[8-31], b[8-31], b[0-23], sftb[3]);
+
+D[0-3]		:= MX2 (d[0-3], c[0-3], c[28-31], sftb[2]);
+D[4-31]		:= MX2 (d[4-31], c[4-31], c[0-27], sftb[2]);
+
+E[0-1]		:= MX2 (e[0-1], d[0-1], d[30-31], sftb[1]);
+E[2-31]		:= MX2 (e[2-31], d[2-31], d[0-29], sftb[1]);
+
+F[0]		:= MX2 (f[0], e[0], e[31], sftb[0]);
+F[1-31]		:= MX2 (f[1-31], e[1-31], e[0-30], sftb[0]);
+
+/* Decode the shift count */
+
+Dcd0		:= D416GH (dcd[0..15], sft[0..3], sft[4]);
+Dcd1		:= D416GH (dcd[16..31], sft[0..3], sft\[4]);
+
+/* Generate the shift right mask 
+This corresponds to the bits to be masked out
+i.e.
+Shift right 1  = mask bit 31	= code 31
+Shift right 2  = mask bit 31-30	= code 30
+...
+Shift right 32 = mask all       = code 0
+*/
+
+/* look-ahead is employed */
+
+Rmask[0]	:= JOIN (rmask[0], dcd[0]);
+Rmask[1-7]	:= OR2 (rmask[1-7], rmask[0-6], dcd[1-7]);
+Rmask[8]	:= OR9 (rmask[8], dcd[0..8]);
+Rmask[9-15]	:= OR2 (rmask[9-15], rmask[8-14], dcd[9-15]);
+Rmask[16]	:= OR9 (rmask[16], rmask[8], dcd[9..16]);
+Rmask[17-23]	:= OR2 (rmask[17-23], rmask[16-22], dcd[17-23]);
+Rmask[24]	:= OR9 (rmask[24], rmask[16], dcd[17..24]);
+Rmask[25-31]	:= OR2 (rmask[25-31], rmask[24-30], dcd[25-31]);
+
+
+/* Generate the shift left mask  
+This corresponds to the bits to be masked out
+i.e.
+Shift left 0  = mask none
+Shift left 1  = mask bit 0    = code 1
+Shift left 2  = mask bit 1-0  = code 2
+...
+Shift left 31 = mask bit 30-0 = code 31
+*/
+
+Lmask[31]	:= JOIN (lmask[31], zero);
+Lmask[30]	:= JOIN (lmask[30], dcd[31]);
+Lmask[24-29]	:= OR2 (lmask[24-29], lmask[25-30], dcd[25-30]);
+Lmask[23]	:= OR8 (lmask[23], dcd[24..31]);
+Lmask[16-22]	:= OR2 (lmask[16-22], lmask[17-23], dcd[17-23]);
+Lmask[15]	:= OR9 (lmask[15], lmask[23], dcd[16..23]);
+Lmask[8-14]	:= OR2 (lmask[8-14], lmask[9-15], dcd[9-15]);
+Lmask[7]	:= OR9 (lmask[7], lmask[15], dcd[8..15]);
+Lmask[0-6]	:= OR2 (lmask[0-6], lmask[1-7], dcd[1-7]);
+
+
+/* Output control */
+
+Lsl		:= AN2U (lsl, mux\[0], mux\[1]);
+Sr		:= NIVU (sr, mux[0]);
+Asr_sign	:= AN3U (asr_sign, mux[0], mux[1], a[31]);
+
+
+Opt0[0-31]	:= ANR2 (opt0[0-31], lsl, lmask[0-31], sr, 
+			rmask[0-31]);
+Opt1[0-31]	:= AN2 (opt1[0-31], asr_sign, rmask[0-31]);
+Opt[0-31]	:= AOR1 (z[0-31], f[0-31], opt0[0-31], opt1[0-31]);
+
+END;

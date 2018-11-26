@@ -1,0 +1,246 @@
+/******************************************************************
+address
+29/11/90
+
+Blitter address generator
+-------------------------
+This is the top level of the blitter address generator.
+******************************************************************/
+
+IMPORT addradd, addrcomp, addrgen, addrmux;
+
+DEF ADDRESS (
+	gpu_dout[0..31]	/* graphics processor data bus */
+	:TRI;
+	a1_outside	/* A1 pointer is outside window bounds */
+	a1_pixsize[0..2] /* A1 pixel size */
+INT15/	a1_win_x	/* A1 window x size */
+INT16/	a1_x		/* A1 x pointer */
+	a1addx[0..1]	/* A1 address X update mode */
+	a1addy		/* A1 address Y update mode */
+	a1xsign		/* sign for A1 X address updates */
+	a1ysign		/* sign for A1 Y address updates */
+	a2_pixsize[0..2] /* A2 pixel size */
+INT16/	a2_x		/* A2 x pointer */
+	a2addx[0..1]	/* A2 address X update mode */
+	a2addy		/* A2 address Y update mode */
+	a2xsign		/* sign for A2 X address updates */
+	a2ysign		/* sign for A2 Y address updates */
+INT24/	address		/* byte address generated */
+	pixa[0..2]	/* bit part of address, un-pipe-lined */
+	:OUT;
+	addasel[0..2]	/* address adder input A select */
+	addbsel[0..1]	/* address adder input B select */
+	addqsel		/* select adder Q versus GPU data */
+	adda_xconst[0..2]	/* constants to add to X & Y */
+	adda_yconst
+	addareg		/* add register rather than constant */
+	a1baseld	/* A1 base register load */
+	a1flagld	/* A1 flags register load */
+	a1fracld	/* A1 window pointer fractions load */
+	a1incld		/* A1 pointer increment register load */
+	a1incfld	/* A1 pointer increment fraction load */
+	a1posrd		/* A1 pointer read enable */
+	a1posfrd	/* A1 pointer fraction read enable */
+	a1ptrld		/* A1 window pointer load */
+	a1stepld	/* A1 window step load */
+	a1stepfld	/* A1 window step fraction load */
+	a1winld		/* A1 window size register load */
+	a2baseld	/* A2 base register load */
+	a2flagld	/* A2 flags register load */
+	a2posrd		/* A2 pointer read enable */
+	a2ptrld		/* A2 window pointer load */
+	a2stepld	/* A2 window step load */
+	a2winld		/* A2 window size register load */
+	apipe		/* load address pipe-line latch */
+	clk		/* co-processor clock */
+	gena2		/* generate A2 as opposed to A1 */
+INT32/	gpu_din		/* GPU data bus input */
+	load_strobe	/* clk[2] derived timing for gpu_din ld */
+	modx[0..2]	/* mask low bits of X during add */
+	suba_x		/* address adder X subtract control */
+	suba_y		/* address adder Y subtract control */
+	zaddr		/* generate Z address */
+	:IN);
+
+INT15/	gpu_d_lo15, gpu_d_hi15
+INT15/	a1_win_y, 
+INT16/	a1_y, a1_frac_x, a1_frac_y, a1_inc_x,
+INT16/	a1_inc_y, a1_incf_x, a1_incf_y, a2_xm, a2_ym, a2_xr, a2_yr
+INT16/	adda_x, adda_y, addb_x, addb_y, addq_x, addq_y
+INT16/	data_x, data_y, a1_xt, a2_mask_x, a2_mask_y
+INT16/	gpu_d_lo16, gpu_d_hi16
+INT21/	a1_flags, a2_flags, gpu_d_lo21
+INT21/	a1_base, a2_base, gpu_d_m21
+(* GE 18/06/2012 Added missing declarations *)
+INT16/	a1_step_x, a1_step_y, a1_stepf_x, a1_stepf_y, a2_y
+INT16/	a2_step_x, a2_step_y
+:LOCAL;
+BEGIN
+
+Gpulo15		:= JOIN (gpu_d_lo15, gpu_din{0..14});
+Gpuhi15		:= JOIN (gpu_d_hi15, gpu_din{16..30});
+Gpulo16		:= JOIN (gpu_d_lo16, gpu_din{0..15});
+Gpuhi16		:= JOIN (gpu_d_hi16, gpu_din{16..31});
+Gpulo21		:= JOIN (gpu_d_lo21, gpu_din{0..20});
+Gpuhi29		:= JOIN (gpu_d_m21, gpu_din{3..23});
+
+/* A1 Register block *********************************************/
+
+/* Window base address register */
+
+A1baseldg	:= AN2U (a1baseldg, a1baseld, load_strobe);
+A1base		:= LDP1Q (a1_base, gpu_d_m21, a1baseldg);
+
+/* Window flags register */
+
+A1flagldg	:= AN2H (a1flagldg, a1flagld, load_strobe);
+A1flags		:= LDP1Q (a1_flags, gpu_d_lo21, a1flagldg);
+A1_pixp[0-1]	:= JOIN (a1_pitch[0-1],   a1_flags{0-1});
+A1_pixs[0-2]	:= JOIN (a1_pixsize[0-2], a1_flags{3-5});
+A1_zoff[0-1]	:= JOIN (a1_zoffset[0-1], a1_flags{6-7});
+A1unused[0]	:= JOIN (unused[0],       a1_flags{8});
+A1_wdth[0-5]	:= JOIN (a1_width[0-5],   a1_flags{9-14});
+A1unused[1]	:= JOIN (unused[1],       a1_flags{15});
+A1addx[0]	:= NIVM (a1addx[0],       a1_flags{16});
+A1addx[1]	:= NIVM (a1addx[1],       a1_flags{17});
+A1addy		:= JOIN (a1addy,          a1_flags{18});
+A1xsign		:= JOIN (a1xsign,         a1_flags{19});
+A1ysign		:= JOIN (a1ysign,         a1_flags{20});
+
+/* Window size register */
+
+A1winldg	:= AN2U (a1winldg, a1winld, load_strobe);
+A1winx		:= LDP1Q (a1_win_x, gpu_d_lo15, a1winldg);
+A1winy		:= LDP1Q (a1_win_y, gpu_d_hi15, a1winldg);
+
+/* Window pointer */
+
+A1xt		:= FDSYNC16 (a1_xt, data_x, a1ptrld, clk);
+A1x		:= NIVM (a1_x, a1_xt);
+A1y		:= FDSYNC16 (a1_y, data_y, a1ptrld, clk);
+
+/* Window step register */
+
+A1stepldg	:= AN2U (a1stepldg, a1stepld, load_strobe);
+A1stepfldg	:= AN2U (a1stepfldg, a1stepfld, load_strobe);
+A1stepx		:= LDP1Q (a1_step_x, gpu_d_lo16, a1stepldg);
+A1stepy		:= LDP1Q (a1_step_y, gpu_d_hi16, a1stepldg);
+A1stepfx	:= LDP1Q (a1_stepf_x, gpu_d_lo16, a1stepfldg);
+A1stepfy	:= LDP1Q (a1_stepf_y, gpu_d_hi16, a1stepfldg);
+
+/* Window pointer fractional parts */
+
+A1fracx		:= FDSYNC16 (a1_frac_x, data_x, a1fracld, clk);
+A1fracy		:= FDSYNC16 (a1_frac_y, data_y, a1fracld, clk);
+
+/* Window pointer increment and fractional part */
+
+A1incldg	:= AN2U (a1incldg, a1incld, load_strobe);
+A1incfldg	:= AN2U (a1incfldg, a1incfld, load_strobe);
+A1incx		:= LDP1Q (a1_inc_x, gpu_d_lo16, a1incldg);
+A1incy		:= LDP1Q (a1_inc_y, gpu_d_hi16, a1incldg);
+A1incfx		:= LDP1Q (a1_incf_x, gpu_d_lo16, a1incfldg);
+A1incfy		:= LDP1Q (a1_incf_y, gpu_d_hi16, a1incfldg);
+
+/* A2 Register block *********************************************/
+
+/* Window base address register */
+
+A2baseldg	:= AN2U (a2baseldg, a2baseld, load_strobe);
+A2base		:= LDP1Q (a2_base, gpu_d_m21, a2baseldg);
+
+/* Window flags register */
+
+A2flagldg	:= AN2H (a2flagldg, a2flagld, load_strobe);
+A2flags		:= LDP1Q (a2_flags, gpu_d_lo21, a2flagldg);
+A2_pixp[0-1]	:= JOIN (a2_pitch[0-1],   a2_flags{0-1});
+A2_pixs[0-2]	:= JOIN (a2_pixsize[0-2], a2_flags{3-5});
+A2_zoff[0-1]	:= JOIN (a2_zoffset[0-1], a2_flags{6-7});
+A2unused[2]	:= JOIN (unused[2],       a2_flags{8});
+A2_wdth[0-5]	:= JOIN (a2_width[0-5],   a2_flags{9-14});
+A2_mask		:= NIVU (a2_mask,	  a2_flags{15});
+A2addx[0-1]	:= JOIN (a2addx[0-1],     a2_flags{16-17});
+A2addy		:= JOIN (a2addy,          a2_flags{18});
+A2xsign		:= JOIN (a2xsign,         a2_flags{19});
+A2ysign		:= JOIN (a2ysign,         a2_flags{20});
+
+
+/* Window mask register */
+
+A2winldg	:= AN2U (a2winldg, a2winld, load_strobe);
+A2winx		:= LDP1Q (a2_mask_x, gpu_d_lo16, a2winldg);
+A2winy		:= LDP1Q (a2_mask_y, gpu_d_hi16, a2winldg);
+
+/* Window pointer */
+
+A2x		:= FDSYNC16 (a2_xr, data_x, a2ptrld, clk);
+A2y		:= FDSYNC16 (a2_yr, data_y, a2ptrld, clk);
+
+/* use the masking mechanism if required */
+
+A2_xm		:= AN2 (a2_xm, a2_xr, a2_mask_x);
+A2_x		:= MX2 (a2_x, a2_xr, a2_xm, a2_mask);
+A2_ym		:= AN2 (a2_ym, a2_yr, a2_mask_y);
+A2_y		:= MX2 (a2_y, a2_yr, a2_ym, a2_mask);
+
+/* Window step register */
+
+A2stepldg	:= AN2U (a2stepldg, a2stepld, load_strobe);
+A2stepx		:= LDP1Q (a2_step_x, gpu_d_lo16, a2stepldg);
+A2stepy		:= LDP1Q (a2_step_y, gpu_d_hi16, a2stepldg);
+
+/* Address adder input multiplexers and the adder iself */
+
+Addamux		:= ADDAMUX (adda_x, adda_y, addasel[0..2], 
+			a1_step_x, a1_step_y, a1_stepf_x, 
+			a1_stepf_y, a2_step_x, a2_step_y,
+			a1_inc_x, a1_inc_y, a1_incf_x, a1_incf_y, 
+			adda_xconst[0..2], adda_yconst, 
+			addareg, suba_x, suba_y);
+
+Addbmux		:= ADDBMUX (addb_x, addb_y, addbsel[0..1], a1_x, 
+			a1_y, a2_x, a2_y, a1_frac_x, a1_frac_y);
+
+Addradd		:= ADDRADD (addq_x, addq_y, a1fracld, 
+			adda_x, adda_y, addb_x, addb_y, clk, 
+			modx[0..2], suba_x, suba_y);
+
+/* Address adder data bus multiplexer */
+
+Datamux		:= DATAMUX (data_x, data_y, gpu_din, addq_x, 
+			addq_y, addqsel);
+
+/* Address generator */
+
+Addrgen		:= ADDRGEN (address, pixa[0..2], a1_x, a1_y, 
+			a1_base, a1_pitch[0..1], a1_pixsize[0..2], 
+			a1_width[0..5], a1_zoffset[0..1], 
+			a2_x, a2_y, a2_base, 
+			a2_pitch[0..1], a2_pixsize[0..2], 
+			a2_width[0..5], a2_zoffset[0..1], apipe, 
+			clk, gena2, zaddr);
+
+/* Address window bounds comparator */
+
+Addrcomp	:= ADDRCOMP (a1_outside, a1_x, a1_y, a1_win_x, 
+			a1_win_y);
+
+/* Make the registers that are added to readable */
+
+A1_pos[0-15]	:= JOIN (a1_pos[0-15], a1_x{0-15});
+A1_pos[16-31]	:= JOIN (a1_pos[16-31], a1_y{0-15});
+A1_posf[0-15]	:= JOIN (a1_posf[0-15], a1_frac_x{0-15});
+A1_posf[16-31]	:= JOIN (a1_posf[16-31], a1_frac_y{0-15});
+A2_pos[0-15]	:= JOIN (a2_pos[0-15], a2_x{0-15});
+A2_pos[16-31]	:= JOIN (a2_pos[16-31], a2_y{0-15});
+
+Grdt0[0-31]	:= MX2 (grdt0[0-31], a1_pos[0-31], a1_posf[0-31], 
+			a1posfrd);
+Grdt1[0-31]	:= MX2 (grdt1[0-31], grdt0[0-31], a2_pos[0-31], 
+			a2posrd);
+Grden		:= OR3U (grden, a1posrd, a1posfrd, a2posrd);
+Grd[0-31]	:= TS (gpu_dout[0-31], grdt1[0-31], grden);
+
+Unused[0-2]	:= DUMMY (unused[0-2]);
+END;

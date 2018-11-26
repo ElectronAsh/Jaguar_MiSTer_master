@@ -1,0 +1,34 @@
+IMPORT prim;
+
+DEF BU36B531 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT      6
+#GATECOUNT      1
+#MEGACOUNT      0
+#TYPEWIDE       1
+Buf1    := BUF_PRIM (z,a);
+END;
+DEF BU33IP7C (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT      6
+#GATECOUNT      1
+#MEGACOUNT      0
+#TYPEWIDE       1
+Buf1    := BUF_PRIM (z,a);
+END;
+DEF BU36B52E (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT      6
+#GATECOUNT      1
+#MEGACOUNT      0
+#TYPEWIDE       1
+Buf1    := BUF_PRIM (z,a);
+END;
+DEF BU36DA3M (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT      6
+#GATECOUNT      1
+#MEGACOUNT      0
+#TYPEWIDE       1
+Buf1    := BUF_PRIM (z,a);
+END;

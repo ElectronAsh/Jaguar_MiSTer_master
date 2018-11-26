@@ -1,0 +1,304 @@
+(*****************************************************************
+
+	jmem.net
+
+This is the memory interface in Jerry 
+
+******************************************************************)
+
+
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego;
+
+DEF	JMEM	(resetl,clk,dbgl,bigend,dsp16,
+                w[0..2],rw,mreq,dtackl,dspcsl,wel[0],oel[0],
+		testen,at[15],internal,dbrl[0..1],aout[0..1],
+		ndtest:IN;
+ 
+                ack,den,aen,siz[0..1],
+                dreql,dmuxu[0..1],dmuxd[0..1],dren,xdsrc,
+		iordl,iowrl,dspread,dspwrite,dinlatch[0..1],
+		ainen,seta1,reads,dbrls[0..1],dspen,masterdata:IO);
+ 
+/*
+WARNING check when DSP performs transfers to JERRY
+master and slave state machines may conflict
+*/
+
+BEGIN
+
+
+/* bus arbitration & memory controller state machine
+
+
+0	idle	assert ack
+		if (dbg & mreq) goto 1
+		else goto 0
+
+1	dreq	assert dreq
+		if (dtack && dbg) { 
+			if (split){
+				if (read) assert dinlatch[0]
+				goto 2
+			}
+			else {
+				if (read) assert dinlatch[0..1]
+				assert ack
+				if (mreq) goto 4
+				else goto 0
+			}
+		}
+		else goto 1
+
+2	pause	if (dtack) goto 2
+		else goto 3 
+
+3	dreq	set a[1];
+                assert dreq
+		if (dtack && dbg) { 
+			assert ack
+                        if (read) assert dinlatch[1]
+			if (mreq) goto 4
+			else goto 0
+                }
+                else goto 3
+
+4	pending	assert ack
+		if (dbg) goto 1
+		else goto 4
+
+*/
+		
+Q0	:=	FD4Q (q0,d0,clk,resetl);
+Q1	:=	FD2Q (q1,d1,clk,resetl);
+Q2	:=	FD2Q (q2,d2,clk,resetl);
+Q3	:=	FD2Q (q3,d3,clk,resetl);
+Q4	:=	FD2Q (q4,d4,clk,resetl);
+Q1b	:=	NIVM (q1b,q1);
+Q3b	:=	NIVM (q3b,q3);
+
+D00	:=	ND2 (d00,q0,dbgl);
+D01	:=	ND2 (d01,q0,notmreq);
+D02	:=	ND6 (d02,q1b,dbg,dtack,notsplit,notmreq,vcc);
+D03	:=	ND4 (d03,q3b,dbg,dtack,notmreq);
+D0	:=	ND4 (d0,d00,d01,d02,d03);
+
+D10	:=	ND3 (d10,q0,dbg,mreq);
+D11	:=	ND2 (d11,q1b,dbgl);
+D12	:=	ND2 (d12,q1b,dtackl);
+D13	:=	ND2 (d13,q4,dbg);
+D1	:=	ND4 (d1,d10,d11,d12,d13);
+
+D20	:=	ND4 (d20,q1b,dbg,dtack,split);
+D21	:=	ND2 (d21,q2,dtack);
+D2	:=	ND2 (d2,d20,d21);
+
+D30	:=	ND2 (d30,q2,dtackl);
+D31	:=	ND2 (d31,q3b,dbgl);
+D32	:=	ND2 (d32,q3b,dtackl);
+D3	:=	ND3 (d3,d30,d31,d32);
+
+D40	:=	ND6 (d40,q1b,dbg,dtack,notsplit,mreq,vcc);
+D41	:=	ND4 (d41,q3b,dbg,dtack,mreq);
+D42	:=	ND2 (d42,q4,dbgl);
+D4	:=	ND3 (d4,d40,d41,d42);
+
+Ack0	:=	IV (ack0,q0);
+Ack1	:=	IV (ack1,q4);
+Acki	:=	ND4 (acki,d02,d03,ack0,ack1);
+Ack	:=	NIVU (ack,acki);
+Dreql	:=	NR2 (dreql,q1b,q3b);
+
+/* write data is latched during first cycle of transfer */
+
+Notrw :=        IV (notrw,rw);
+Dol :=          ND3 (doll,ack,notrw,mreq);
+Lwd :=          FD1Q (lwdl,doll,clk);
+
+Readsi	:=	SLATCH (readsi,rw,clk,ack);
+Reads :=	NIVH (reads,readsi);
+Writes	:=	IV (writes,reads);
+
+Dl00	:=	ND3 (dl00,q1b,reads,notsplit);
+Dl01	:=	ND4 (dl01,q1b,reads,split,littleend);
+Dl02	:=	ND3 (dl02,q3b,reads,bigend);
+Dinlatchi[0] :=	ND4 (dinlatchi[0],dl00,dl01,dl02,lwdl);
+
+Dl11	:=	ND4 (dl11,q1b,reads,split,bigend);
+Dl12	:=	ND3 (dl12,q3b,reads,littleend);
+Dinlatchi[1] :=	ND4 (dinlatchi[1],dl00,dl11,dl12,lwdl);
+
+Dinlatch[0-1] := NIVH (dinlatch[0-1],dinlatchi[0-1]);
+
+Reset :=	IV (reset,resetl);
+Aeni :=		NR3 (aeni,dbgl,ndtest,reset);
+Aen :=		NIVU (aen,aeni);
+
+/* den is asserted
+
+ internal bus master writing
+ internal read
+
+*/
+
+Den0 :=		ND6 (den0,dbg,writes,testen,notndtest,resetl,vcc);
+Den1 :=		ND6 (den1,oe[0],internal,testen,notndtest,resetl,vcc);
+Deni :=		ND2 (deni,den0,den1);
+Den :=		NIVU (den,deni);
+Drenl :=	ND2 (drenl,oe[0],internal);
+Dren :=		IVH (dren,drenl);
+Ainen :=	NIVU (ainen,dbgl);
+Notndtest :=	IV (notndtest,ndtest);
+
+Iordl :=	OR2 (iordl,dspcsl,oel[0]);
+Iowrl :=	OR2 (iowrl,dspcsl,wel[0]);
+
+/*
+xdsrc is not asserted
+when an internal bus master is writing
+*/
+
+Xdsrci :=       ND2 (xdsrci,dbg,writes);
+Xdsrc :=        NIVU (xdsrc,xdsrci);
+
+/*
+ dmuxu[1] is set
+ when reading the most significant word in a split cycle
+ when writing word or byte
+*/
+
+Du0 :=		ND2 (du0,writes,wsl[2]);
+Dmuxui :=	ND3 (dmuxui,dl11,dl12,du0);
+Dmuxu[1] :=	NIVH (dmuxu[1],dmuxui);
+
+/*
+ dmuxd[1] is set
+ when writing the most significant word in a split cycle
+ when reading word or byte and a[1] set & dsp32
+*/
+
+Dd0 :=		ND4 (dd0,q1b,writes,split,bigend);
+Dd1 :=		ND3 (dd1,q3b,writes,littleend);
+Dd2 :=		ND4 (dd2,wsl[2],reads,ax[1],dsp32);
+Dmuxdi :=	ND3 (dmuxdi,dd0,dd1,dd2);
+Dmuxd[1] :=	NIVH (dmuxd[1],dmuxdi);
+
+/*
+ dmuxu[0] is set when writing bytes
+*/
+
+Dmuxu0i :=	ND3 (dmuxu0i,writes,wsl[2],wsl[1]);
+Dmuxu[0] :=	IVH (dmuxu[0],dmuxu0i);
+
+/*
+ dmuxd[0] is set when reading bytes and a[0] set
+*/
+
+Dmuxd0i :=	ND4 (dmuxd0i,reads,wsl[2],wsl[1],ax[0]);
+Dmuxd[0] :=	IVH (dmuxd[0],dmuxd0i);
+
+Ax[0-1] :=	EO (ax[0-1],aout[0-1],bigend);
+
+/*
+ masterdata is asserted
+ when no slave access
+ when master writing
+*/
+
+Md0 :=		ND2 (md0,dbg,writes);
+Mdi :=		ND2 (masterdatai,md0,dspcs);
+Masterdata :=	NIVH (masterdata,masterdatai);
+
+/*
+ encode the DSP cycle width into the siz[0..1] bits
+ only byte,word and long transfers are legal and must be aligned
+ if the DSP is 16 bits long transfers are split
+
+
+	w[2] w[1] w[0] siz[1] siz[0]
+
+	 0    0    1      0      1
+         0    1    0      1      0
+         1    0    0      1      1
+*/
+
+Split :=	AN2 (split,dsp16,ws[2]);
+Notsplit :=	IV (notsplit,split);
+Long :=		AN2 (long,dsp32,ws[2]);
+Dsp32 :=	IV (dsp32,dsp16);
+
+Siz[0] :=	OR2 (siz[0],ws[0],long);
+Siz[1] :=	OR2 (siz[1],ws[1],ws[2]);
+
+Seta1 :=	NIV (seta1,q3b);
+
+Notmreq :=	IV (notmreq,mreq);
+Dbg :=		IVH (dbg,dbgl);	 
+Dtack :=	IV (dtack,dtackl);
+Littlend :=	IV (littleend,bigend);
+
+/* latch w[0..2],dbrl during request phase */
+
+Ws[0-2] :=	SLATCH (ws[0-2],w[0-2],clk,ack);
+Dbrls[0-1] :=	SLATCHP (dbrls[0-1],dbrl[0-1],clk,ack,resetl);
+Wsl[1-2] :=	IV (wsl[1-2],ws[1-2]);
+
+/*
+ a second state machine is used to control slave cycles
+
+
+10	idle	if (dspcs && (oel || wel) goto 11
+		else goto 10
+
+11	request	if (at[15] && oel) assert dspread
+		if (at[15] && wel) assert dpswrite
+		assert ack
+		goto 12
+
+12	first	assert dinlatch[0], goto 13
+
+13	second	assert dinlatch[0]
+		if (oel || wel) goto 14
+		else goto 10
+
+14	last	if (oel || wel) goto 14
+		else goto 10
+
+*/
+
+Qs0	:=	FD4Q (qs0,ds0,clk,resetl);
+Qs1	:=	FD2Q (qs1,ds1,clk,resetl);
+Qs2	:=	FD2Q (qs2,qs1,clk,resetl);
+Qs3	:=	FD2Q (qs3,qs2,clk,resetl);
+Qs4	:=	FD2Q (qs4,ds4,clk,resetl);
+
+Ds00	:=	ND2 (ds00,qs0,dspcsl);
+Ds01	:=	ND2 (ds01,qs0,notstrobe);
+Ds02	:=	ND2 (ds02,qs3,notstrobe);
+Ds03	:=	ND2 (ds03,qs4,notstrobe);
+Ds0	:=	ND4 (ds0,ds00,ds01,ds02,ds03);
+
+Ds1	:=	AN3 (ds1,qs0,dspcs,strobe);
+
+Ds40	:=	ND2 (ds40,qs3,strobe);
+Ds41	:=	ND2 (ds41,qs4,strobe);
+Ds4	:=	ND2 (ds4,ds40,ds41);
+
+Strobe	:=	ND2 (strobe,oel[0],wel[0]);
+Notstrobe :=	IV (notstrobe,strobe);
+
+Dspread :=	AN3 (dspread,qs1,at[15],oe[0]);
+Dspwrite :=	AN3 (dspwrite,qs1,at[15],we[0]);
+
+Oe[0] :=	IV (oe[0],oel[0]);
+We[0] :=	IV (we[0],wel[0]);
+Dspcs :=	IV (dspcs,dspcsl);
+
+Dspen0 :=	ND3 (dspen0,oe[0],qs2,at[15]);
+Dspen1 :=	ND3 (dspen1,oe[0],qs3,at[15]);
+Dspen :=	ND2 (dspen,dspen0,dspen1);
+
+Vcc :=		TIE1 (vcc);
+
+END;

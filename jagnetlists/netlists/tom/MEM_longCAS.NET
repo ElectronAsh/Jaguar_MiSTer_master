@@ -1,0 +1,771 @@
+(*****************************************************************
+
+	mem.net
+
+This is the memory interface in the Jaguar video chip.
+
+******************************************************************)
+
+
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego,
+	arb,
+	memwidth,
+	bus,
+	cpu;
+
+
+DEF	MEM	(bbreq[0..1],gbreq[0..1],obbreq,sizin[0..1],dbrl[0..1],
+		dreqin,rwin,bs[0..3],match,intdev,dram,
+		fextdev,fintdev,fdram,from,cpu32,refreq,
+		dspd[0..1],romspd[0..1],iospd[0..1],
+		a[0..2],mw[0..1],ourack,
+		resetl,clk,vcc,gnd,
+		bglin,brlin,ihandler,bigend,bgain,abs[2..3],
+		testen,waitl,fastrom,m68k,pclk:IN;
+
+		ack,bback,gback,obback,
+		romcsl[0..1],rasl[0..1],casl[0..1],oel[0..2],
+		wel[0..7],sizout[0..2],
+		den[0..2],aen,dtackl,
+		brlout,dbgl,dreqlout,d7a,readt,
+
+		dinlatch[0..7],
+		dmuxu[0..2],dmuxd[0..2],dren,
+		xdsrc,
+		maska[0..2],at[0..2],
+		ainen,newrow,resrow,
+		mux,refack,reads,wet,oet,
+		ba,intswe,intwe,dspcsl:IO;
+
+        	w[0..3],rw,mreq,justify:BUS);
+
+
+BEGIN
+
+(*
+
+
+den[0..2],	data bus output enables
+		den[0] enables the low 16 pins
+		den[1] enables the next 16 pins
+		den[2] enables the top 32 pins
+		these are required because the cpu could be 16 or 32
+		bits wide and the bus is 64 bits 
+aen,		address bus output enable
+oel[0..2],	memory output enables
+wel[0..7],	memory write enables 
+sizin[0..1],	cycle size in 
+sizout[0..2],	cycle size out 
+rwin,
+dreqlin,	dreq in (from CPU) 
+dreqlout,	dreq out
+dtackl,
+brlout,		bus request to microprocessor 
+bg,		bus grant from microprocessor or system 
+dbrl[0..1],	bus request from dsp 
+dbgl,		bus grant to dsp 
+rw,		main bus rw 
+mreq,		main bus cycle request 
+w[0..3],	main bus cycle width 
+a[0..2]	byte address of main bus cycle 
+ack,		main bus cycle ack 
+grpbreq,grpback,graphics processor main bus request & ack 
+obbreq,obback,	object processor main bus  request & ack 
+dmux[0..2],	moves high order long,word,byte down for writes to narrow
+		memory dmuxd[2] swaps long, dmuxd[1] swaps word, etc.
+		also moves low order long,word,byte up for reads from narrow
+		memory dmuxu[2] swaps long, dmuxu[1] swaps word, etc 
+dren,		enables internal memory data onto dout 
+dinlatch[0..7],	enables eight byte wide input latches 
+maskw[0..3],	data width in bytes for memory sub- cycle 
+maska[0..2],	start address in bytes for memory sub- cycle
+ba[0..2],	byte address compensated for big-endian/little endian
+		0 always refers to d[0..7]
+aoutlatch,	latches address & cycle type from main bus 
+newrow,		latches current row address into current bank
+resrow,		invalidates all row addresses 
+mux,		selects row address over column 
+bs[0..3],	identifies memory bank of the current cycle 
+match,		indicates that the main address corresponds to an
+		active ROW in DRAM (only valid if DRAM set) 
+extdev,		indicates that current memory cycle is to fast external IO 
+intdev,		indicates that current memory cycle is to fast internal IO
+fintdev,	requested cycle is non-system,internal,io 
+fextdev
+fdram,from,	transient flags which indicate that the currently requested
+		cycle is is to DRAM or ROM 
+ainen		enables external address onto internal 
+nextc,		marks the end of a memory subcycle 
+lastcycle,	indicates that the current subcycle is the last 
+allrasoff	synchronously clears all ras outputs
+rason		synchronously sets the ras specified by bs[2..3]
+startcas	starts a cas cycle on one cas specified by bs[2..3]
+oet             asserts the oel outputs determined by mws[], maska and maskw
+dinlatch	latches read data into some/all
+		of the read data latches determined by maska,maskw
+startwe		starts a we cycle on the we signals specified by maska,maskw
+reads		synchronously latched rw, clocked by ack, determines direction
+		of the current cycle
+mw[0..1]	memory width in next cycle
+mws[0..1]	synchronously latched memory width
+dram		synchronously latched fdram
+*)
+
+Arb :=	ARB	(bbreq[0..1],gbreq[0..1],obbreq,bglin,brlin,dbrl[0..1],refreq,
+		ihandler,ack,resetl,clk,vcc,bgain,notreadt,dreqin,
+
+		bback,gback,obback,brlout,dbgl,refack,ba,
+		intbm,cpubm,intbms,intbmw);
+
+
+Mw :=	MEMWIDTH (w[0..3],a[0..2],mwt[0..1],ack,nextc,
+		clk,vcc,gnd,bigend,
+
+		maskw[0..3],maska[0..2],at[0..2],lastcycle,lastc,bm[0..7]);
+
+
+Bus :=	BUS	(reads,ack,intdev,cpu32,ba[0..2],
+		mws64,mws16,mws8,dbgl,ourack,
+		w[0..3],erd,justify,intbm,intbms,cpubm,clk,
+		testen,intbmw,resetl,idle,
+
+		den[0..2],aen,
+		dmuxu[0..2],dmuxd[0..2],dren,
+		xdsrc,
+		ainen);
+
+Cpu :=	CPU     (sizin[0..1],rwin,notack,
+		ack,dreqin,resetl,clk,
+		intbm,intbms,m68k,ba,
+		dbgl,
+
+		dtackl,erd,
+
+        	w[0..3],rw,mreq,justify);
+
+
+(*
+
+Memory controller state machine
+
+**************** IDLE *******************
+
+0	assert ack,nextc
+	if (!mreq) goto 0
+	else if (mreq && refack) allrasoff, goto 4a 
+	else if (mreq && fdram && !match) rasoff, goto 1a
+	else if (mreq && fdram && match) goto 3a
+	else if (mreq && from) goto 5a
+	else if (mreq && fintdev) goto 7
+	else if (mreq && fextdev) goto 8a
+	else if (mreq && ourack) goto 10
+
+************* RAS PRECHARGE *************
+
+1a	assert newrow
+	if (dramspeed == 0 || dramspeed == 1) goto 1b
+	else if (dramspeed == 2) goto 1c
+	else goto 1d
+1b	goto 1c
+1c	goto 1d
+1d	assert rason,mux, goto 2a
+
+************* RAS ACCESS *************
+
+2a	assert mux
+	if (dramspeed == 0 || dramspeed == 1) goto 2b
+	else if (dramspeed == 2) goto 2c
+	else goto 3a
+2b	goto 2c
+2c	goto 3a
+
+************* STATIC COLUMN ************
+
+3a	assert startcas
+	if (!reads) assert startwe
+	else if (reads) assert oet
+	goto 3b
+3b	if (reads) assert oet, dinlatch
+	assert nextc
+	if (!lastcycle)  goto 3a
+	if (lastcycle){
+		assert ack
+                branch as 0
+	}
+
+********** CAS before RAS refresh **********
+
+4a	assert resrow
+	if (dramspeed == 0 || dramspeed == 1) goto 4b
+	else if (dramspeed == 2) goto 4c
+	else goto 4d
+4b	goto 4c
+4c	goto 4d
+4d	assert allrason, allcas, goto 4e
+4e	assert allcas
+	if (dramspeed == 0) goto 4f
+	else if (dramspeed == 1 || dramspeed == 2) goto 4g
+	else goto 4h
+4f	goto 4g
+4g	goto 4h
+4h	goto 4i
+4i	assert allrasoff, ack, branch as zero
+
+*************** ROM **********************
+
+5a		if (reads) assert oet
+		else assert startwe
+		if (fastrom) goto 5c
+		else if(romspeed == 0) assert wait7
+		else if (romspeed == 1) assert wait5
+		else if (romspeed == 2) assert wait3
+		else assert wait2
+		goto 5b
+5b		if (reads) assert oet
+		else assert startwe
+		if (waitdone) goto 5c
+		else goto 5b
+5c		assert nextc
+		if (reads) assert oet,dinlatch
+		if (!lastcycle) goto 5a
+		else assert ack, branch as zero
+
+********** INTERNAL MEMORY  & IACK ****************
+
+7a		if (reads) assert oet,goto 7b
+		else {
+			assert int_we
+			assert nextc
+			if (!lastcycle) goto 7a
+			else assert ack, branch as zero
+		}
+
+7b		assert oet
+		assert nextc
+		if (!lastcycle) goto 7a
+		else assert ack, branch as zero
+
+************* EXTERNAL DEVICES ****************
+
+8a		assert iocs
+		if (iospeed == 0) assert wait15, goto 8b
+		else if (iospeed == 1) assert wait7, goto 8b
+		else if (iospeed == 2) assert wait1, goto 8b
+		else if (iospeed == 3) assert wait3, goto 8b
+8b		assert iocs
+		if (reads) assert oet
+		else assert startwe
+		if (waitdone) goto 8c
+		else goto 8b
+8c		assert iocs, nextc
+		if (reads) assert oet,dinlatch
+		if (!lastcycle) goto 8a
+		else assert ack, branch as zero
+
+************ IACK ****************
+
+
+10		assert ack, branch as zero
+
+*)
+
+
+Q0 :=		FD4Q (idle,d0,clk,resetl);
+Q1a :=		FD2Q (q1a,d1a,clk,resetl);
+Q1b :=		FD2Q (q1b,d1b,clk,resetl);
+Q1c :=		FD2Q (q1c,d1c,clk,resetl);
+Q1d :=		FD2Q (q1d,d1d,clk,resetl);
+Q2a :=		FD2Q (q2a,q1d,clk,resetl);
+Q2b :=		FD2Q (q2b,d2b,clk,resetl);
+Q2c :=		FD2Q (q2c,d2c,clk,resetl);
+Q3a :=		FD2Q (q3a,d3a,clk,resetl);
+
+(* GE Q3b :=		FD2Q (q3b,q3a,clk,resetl); *)
+Q3b1 :=		FD2Q (q3b1,q3a,clk,resetl);
+Q3b2 :=		FD2Q (q3b2,q3b1,clk,resetl);
+Q3b3 :=		FD2Q (q3b3,q3b2,clk,resetl);
+Q3b :=		FD2Q (q3b,q3b3,clk,resetl);
+
+Q4a :=		FD2Q (q4a,d4a,clk,resetl);
+Q4b :=		FD2Q (q4b,d4b,clk,resetl);
+Q4c :=		FD2Q (q4c,d4c,clk,resetl);
+Q4d :=		FD2Q (q4d,d4d,clk,resetl);
+Q4e :=		FD2Q (q4e,q4d,clk,resetl);
+Q4f :=		FD2Q (q4f,d4f,clk,resetl);
+Q4g :=		FD2Q (q4g,d4g,clk,resetl);
+Q4h :=		FD2Q (q4h,d4h,clk,resetl);
+Q4i :=		FD2Q (q4i,q4h,clk,resetl);
+Q5ai :=		FD2Q (q5ai,d5a,clk,resetl);
+Q5b :=		FD2Q (q5b,d5b,clk,resetl);
+Q5c :=		FD2Q (q5c,d5c,clk,resetl);
+Q7a :=		FD2Q (q7a,d7a,clk,resetl);
+Q7b :=		FD2Q (q7b,d7b,clk,resetl);
+Q8a :=		FD2Q (q8a,d8a,clk,resetl);
+Q8b :=		FD2Q (q8b,d8b,clk,resetl);
+Q8c :=		FD2Q (q8c,d8c,clk,resetl);
+Q10 :=		FD2Q (q10,d10,clk,resetl);
+
+Q5a :=		NIV (q5a,q5ai);
+
+Q10u :=		DUMMY (q10);
+
+(* The complex branch during idle may also be taken during states
+  3b, 4i, 5c, 6c, 7, 8c, 9 & 10*)
+(* Mtb is asserted whenever this branch must be taken *)
+(* this signal is pipelined to improve the timing of ack *)
+
+Mtb0 :=		IV (mtb0,d0);
+
+(* GE Mtb1 :=		ND2 (mtb1,q3a,lastcycle); *)
+Mtb1 :=		ND2 (mtb1,q3b3,lastcycle);
+
+Mtb2 :=		IV (mtb2,q4h);
+Mtb3 :=		ND2 (mtb3,d5c,lastcycle);
+Mtb5 :=		ND3 (mtb5,d7a,lastc,notreadt);
+Mtb6 :=		ND2 (mtb6,d8c,lastcycle);
+Mtb8 :=		IV (mtb8,d10);
+Mtb9 :=		ND2 (mtb9,d7b,lastcycle);
+Notreadt :=	IVM (notreadt,readt);
+
+Mtba :=		AN6 (mtba,mtb0,mtb1,mtb2,mtb3,vcc,mtb5);
+Mtbb :=		AN3 (mtbb,mtb6,mtb8,mtb9);
+Mtbd :=		ND2 (mtbd,mtba,mtbb);
+Mtb :=		FD4Q (mtb,mtbd,clk,resetl);
+Ack :=		NIVU2 (ack,mtb);
+
+D0 :=		AN2 (d0,ack,notmreq);
+D1a :=		AN6 (d1a,ack,mreqb,fdram,notmatch,notrefack,notourack);
+
+Mt1b0 :=	ND2 (mt1b0,q1a,dramspeed0);
+Mt1b1 :=	ND2 (mt1b1,q1a,dramspeed1);
+D1b :=		ND2 (d1b,mt1b0,mt1b1);
+
+Mt1c0 :=	ND2 (mt1c0,q1a,dramspeed2);
+Mt1c1 :=	IV (mt1c1,q1b);
+D1c :=		ND2 (d1c,mt1c0,mt1c1);
+
+Mt1d0 :=	ND2 (mt1d0,q1a,dramspeed3);
+Mt1d1 :=	IV (mt1d1,q1c);
+D1d :=		ND2 (d1d,mt1d0,mt1d1);
+
+Mt2b0 :=	ND2 (mt2b0,q2a,dramspeed0);
+Mt2b1 :=	ND2 (mt2b1,q2a,dramspeed1);
+D2b :=		ND2 (d2b,mt2b0,mt2b1);
+
+Mt2c0 :=	ND2 (mt2c0,q2a,dramspeed2);
+Mt2c1 :=	IV (mt2c1,q2b);
+D2c :=		ND2 (d2c,mt2c0,mt2c1);
+
+Mt3a0 :=	ND6 (mt3a0,ack,mreqb,fdram,match,notrefack,notourack);
+Mt3a1 :=	ND2 (mt3a1,q2a,dramspeed3);
+Mt3a2 :=	IV (mt3a2,q2c);
+Mt3a3 :=	ND2 (mt3a3,q3b,notlastcycle);
+D3a :=		ND4 (d3a,mt3a0,mt3a1,mt3a2,mt3a3);
+
+D4a :=		AN3 (d4a,ack,mreqb,refack);
+
+Mt4b0 :=	ND2 (mt4b0,q4a,dramspeed0);
+Mt4b1 :=	ND2 (mt4b1,q4a,dramspeed1);
+D4b :=		ND2 (d4b,mt4b0,mt4b1);
+
+Mt4c0 :=	ND2 (mt4c0,q4a,dramspeed2);
+Mt4c1 :=	IV (mt4c1,q4b);
+D4c :=		ND2 (d4c,mt4c0,mt4c1);
+
+Mt4d0 :=	ND2 (mt4d0,q4a,dramspeed3);
+Mt4d1 :=	IV (mt4d1,q4c);
+D4d :=		ND2 (d4d,mt4d0,mt4d1);
+
+D4f 	:=	AN2 (d4f,q4e,dramspeed0);
+
+Mt4g0 :=	ND2 (mt4g0,q4e,dramspeed1);
+Mt4g1 :=	ND2 (mt4g1,q4e,dramspeed2);
+Mt4g2 :=	IV (mt4g2,q4f);
+D4g :=		ND3 (d4g,mt4g0,mt4g1,mt4g2);
+
+Mt4h0 :=	ND2 (mt4h0,q4e,dramspeed3);
+Mt4h1 :=	IV (mt4h1,q4g);
+D4h :=		ND2 (d4h,mt4h0,mt4h1);
+
+Mt5a0 :=	ND6 (mt5a0,ack,mreqb,from,notrefack,notourack,vcc);
+Mt5a1 :=	ND2 (mt5a1,q5c,notlastcycle);
+D5a :=		ND2 (d5a,mt5a0,mt5a1);
+
+Mt5b0 :=	ND2 (mt5b0,q5a,slowrom);
+Mt5b1 :=	ND2 (mt5b1,q5b,notwaitdone);
+D5b :=		ND2 (d5b,mt5b0,mt5b1);
+
+Slowrom :=	IV (slowrom,fastrom);
+Mt5c0 :=	ND2 (mt5c0,q5a,fastrom);
+Mt5c1 :=	ND2 (mt5c1,q5b,waitdone);
+D5c :=		ND2 (d5c,mt5c0,mt5c1);
+
+Mt7a0 :=	ND6 (mt7a0,ack,mreqb,fintdev,notrefack,notourack,vcc); 
+Mt7a1 :=	ND3 (mt7a1,q7a,notreads,notlastcycle); 
+Mt7a2 :=	ND2 (mt7a2,q7b,notlastcycle); 
+D7a :=		ND3 (d7a,mt7a0,mt7a1,mt7a2);
+
+D7b :=		AN2 (d7b,q7a,reads); 
+
+Mt8a0 :=	ND6 (mt8a0,ack,mreqb,fextdev,notrefack,notourack,vcc);
+Mt8a1 :=	ND2 (mt8a1,q8c,notlastcycle);
+D8a :=		ND2 (d8a,mt8a0,mt8a1);
+
+Mt8b0 :=	IV (mt8b0,q8a);
+Mt8b1 :=	ND2 (mt8b1,q8b,notwaitdone);
+D8b :=		ND2 (d8b,mt8b0,mt8b1);
+
+D8c :=		AN2 (d8c,q8b,waitdone);
+
+D10 :=		AN4 (d10,ack,mreqb,ourack,notrefack); 
+
+Wait1 :=	AN2 (wait1,iospeed2,q8a);
+
+Wait2 :=	AN3 (wait2,romspeed3,q5a,slowrom);
+
+Wait30 :=	ND3 (wait30,romspeed2,q5a,slowrom);
+Wait31 :=	ND2 (wait31,iospeed3,q8a);
+Wait3 :=	ND2 (wait3,wait30,wait31);
+
+Wait5 :=	AN3 (wait5,romspeed1,q5a,slowrom);
+
+Wait70 :=	ND3 (wait70,romspeed0,q5a,slowrom);
+Wait71 :=	ND2 (wait71,iospeed1,q8a);
+Wait7 :=	ND2 (wait7,wait70,wait71);
+
+Wait15 :=	AN2 (wait15,iospeed0,q8a);
+
+(*************** Synthesize control signals *************)
+
+Rasoffl[1-2] :=	ND2 (rasoffl[1-2],d1a,abs[2-3]);
+
+Rason	:=	NIV (rason,q1d);
+
+Muxi :=		NR2 (muxi,d1d,q1d);
+Mux :=		IVM (mux,muxi);
+
+/* old logic
+Oet0 :=		OR6 (oet0,q3a,q3b,q5a,q5b,q5c,gnd);
+Oet1 :=		OR3 (oet1,q7a,q7b,q8b);
+Oet2 :=		ND2 (oet2,oet0,reads);
+Oet3 :=		ND2 (oet3,oet1,reads);
+Oeti :=		ND2 (oeti,oet2,oet3);
+Oet :=		NIVU (oet,oeti);
+*/
+
+Oet0 :=		ND2 (oet0,q3a,reads);
+Oet1 :=		ND2 (oet1,q3b,reads);
+Oet2 :=		ND2 (oet2,q5a,reads);
+Oet3 :=		ND2 (oet3,q5b,reads);
+Oet4 :=		ND2 (oet4,q5c,reads);
+Oet5 :=		ND2 (oet5,q7a,reads);
+Oet6 :=		ND2 (oet6,q7b,reads);
+Oet7 :=		ND2 (oet7,q8b,reads);
+
+(* GE *)
+Oet11 :=		ND2 (oet11,q3b1,reads);
+Oet12 :=		ND2 (oet12,q3b2,reads);
+Oet13 :=		ND2 (oet13,q3b3,reads);
+
+
+(* GE Oeti :=		ND8 (oeti,oet0,oet1,oet2,oet3,oet4,oet5,oet6,oet7); *)
+Oeti :=		ND11 (oeti,oet0,oet1,oet2,oet3,oet4,oet5,oet6,oet7, oet11, oet12, oet13);
+
+Oet :=		NIVU2 (oet,oeti);
+
+Startcas :=	AN2 (startcas,q3a,dram);
+
+Dinl0 :=	ND2 (dinl0,q3b,reads);
+Dinl1 :=	ND2 (dinl1,q5c,reads);
+Dinl3 :=	ND2 (dinl3,q7b,reads);
+Dinl4 :=	ND2 (dinl4,d8c,reads);
+Dinlatchd :=	ND4 (dinlatchd,dinl0,dinl1,dinl3,dinl4);
+
+Dinlatch :=	NIVH (dinlatch,dinlatchd);
+
+Iwnext :=	AN2 (iwnext,q7a,notreads);
+Nextci :=	NR6 (nextci,q3b,q5c,iwnext,q7b,q8c,ack);
+Nextc :=	IVH (nextc,nextci);
+
+Sw0 :=		NR4 (sw0,d3a,d5a,d5b,d8b);
+Swd :=		NR2 (swd,sw0,readt);
+Startwe :=	FD1Q (startwe,swd,clk);
+
+(* write data is latched in DBUS during first cycle of transfer *)
+
+Notrw :=	IV (notrw,rw);
+Dol :=		ND3 (doll,ack,notrw,mreqb);
+Lwdli :=	FD1Q (lwdli,doll,clk);
+Lwdl :=		NIVH (lwdl,lwdli);
+
+Allrasoffl :=	NR2 (allrasoffl,d4a,q4i);
+Allrasonl :=	IV (allrasonl,q4d);
+Allcasonl :=	NR2 (allcasonl,q4d,q4e);
+Resrow :=	NIV (resrow,q4a);
+
+(***************** delay generator *************)
+
+(* four bit loadable down counter *)
+
+W[0] :=		DNCNT (wq[0],wco[0],wd[0],clk,wcen,wld,resetl);
+W[1] :=		DNCNT (wq[1],wco[1],wd[1],clk,wco[0],wld,resetl);
+W[2] :=		DNCNT (wq[2],wco[2],wd[2],clk,wco[1],wld,resetl);
+W[3] :=		DNCNT (wq[3],wco[3],wait15,clk,wco[2],wld,resetl);
+Wco[3] :=	DUMMY (wco[3]);
+Wcen :=		OR4 (wcen,wq[0..3]);
+
+Wld :=		OR6 (wld,wait1,wait2,wait3,wait5,wait7,wait15);
+
+Wait :=		IV (wait,waitl);
+Waitdonei :=	NR6 (waitdonei,wq[0..3],wait,gnd);
+Notwaitdone :=	IV (notwaitdone,waitdonei);
+Waitdone :=	IV (waitdone,notwaitdone);
+
+Wd[0] :=	OR6 (wd[0],wait1,wait3,wait5,wait7,wait15,gnd);
+Wd[1] :=	OR4 (wd[1],wait2,wait3,wait7,wait15);
+Wd[2] :=	OR3 (wd[2],wait5,wait7,wait15);
+
+Dspdl[0-1] :=	IV (dspdl[0-1],dspd[0-1]);
+Iospdl[0-1] :=	IV (iospdl[0-1],iospd[0-1]);
+Romspdl[0-1] :=	IV (romspdl[0-1],romspd[0-1]);
+
+Dramspeed0 :=	AN2 (dramspeed0,dspdl[1],dspdl[0]);
+Dramspeed1 :=	AN2 (dramspeed1,dspdl[1],dspd[0]);
+Dramspeed2 :=	AN2 (dramspeed2,dspd[1],dspdl[0]);
+Dramspeed3 :=	AN2 (dramspeed3,dspd[1],dspd[0]);
+
+Iospeed0 :=	AN2 (iospeed0,iospdl[1],iospdl[0]);
+Iospeed1 :=	AN2 (iospeed1,iospdl[1],iospd[0]);
+Iospeed2 :=	AN2 (iospeed2,iospd[1],iospdl[0]);
+Iospeed3 :=	AN2 (iospeed3,iospd[1],iospd[0]);
+
+Romspeed0 :=	AN2 (romspeed0,romspdl[1],romspdl[0]);
+Romspeed1 :=	AN2 (romspeed1,romspdl[1],romspd[0]);
+Romspeed2 :=	AN2 (romspeed2,romspd[1],romspdl[0]);
+Romspeed3 :=	AN2 (romspeed3,romspd[1],romspd[0]);
+
+(***************** Generate memory control signals ***********)
+
+
+Rasl[0] :=	RASGEN	(rasl[0],
+		rason,rasoffl[2],bs[3],allrasonl,allrasoffl,clk,resetl);
+Rasl[1] :=	RASGEN	(rasl[1],
+		rason,rasoffl[1],bs[2],allrasonl,allrasoffl,clk,resetl);
+
+Clkl :=		IV (clkl,clk);
+Pclkl :=	IVH (pclkl,pclk);
+Casd[0] :=	ND2 (casd[0],startcas,bs[3]);
+Casd[1] :=	ND2 (casd[1],startcas,bs[2]);
+Cas00 :=	FD4Q (cas00,casd[0],pclkl,resetl);
+Cas01 :=	FD4Q (cas01,casd[0],clk,resetl);
+Cas10 :=	FD4Q (cas10,casd[1],pclkl,resetl);
+Cas11 :=	FD4Q (cas11,casd[1],clk,resetl);
+
+(* GE *)
+Cas02 :=	FD4Q (cas02,cas00,pclkl,resetl);
+Cas03 :=	FD4Q (cas03,cas01,clk,resetl);
+Cas12 :=	FD4Q (cas12,cas10,pclkl,resetl);
+Cas13 :=	FD4Q (cas13,cas11,clk,resetl);
+Cas04 :=	FD4Q (cas04,cas02,pclkl,resetl);
+Cas05 :=	FD4Q (cas05,cas03,clk,resetl);
+Cas14 :=	FD4Q (cas14,cas12,pclkl,resetl);
+Cas15 :=	FD4Q (cas15,cas13,clk,resetl);
+Cas06 :=	FD4Q (cas06,cas04,pclkl,resetl);
+Cas07 :=	FD4Q (cas07,cas05,clk,resetl);
+Cas16 :=	FD4Q (cas16,cas14,pclkl,resetl);
+Cas17 :=	FD4Q (cas17,cas15,clk,resetl);
+
+Casl[0] :=	AN9 (casl[0],cas00,cas01,cas02,cas03,cas04,cas05,cas06,cas07,allcasonl);
+Casl[1] :=	AN9 (casl[1],cas10,cas11,cas12,cas13,cas14,cas15,cas16,cas17,allcasonl);
+
+(* GE Casl[0] :=	AN3 (casl[0],cas00,cas01,allcasonl); *)
+(* GE Casl[1] :=	AN3 (casl[1],cas10,cas11,allcasonl); *)
+
+Romcst :=	OR3 (romcst,q5a,q5b,q5c);
+Romcsl[0-1] :=	ND2 (romcsl[0-1],bs[0-1],romcst);
+
+Dspcsli :=	NR3 (dspcsli,q8a,q8b,q8c);
+Dspcsl :=	NIV (dspcsl,dspcsli);
+
+Int_we :=	ND3 (int_wel,q7a,notreads,clkl);
+Intwe :=	IVM (intwe,int_wel);
+Intswe :=	AN2 (intswe,q7a,notreads);
+
+Ba[0-2] :=	EO (ba[0-2],maska[0-2],bigend);
+
+(************** write strobes *****************
+
+Wel[0] writes bits d0-d7 and is asserted when
+
+wet & memory width = 8
+wet & memory width = 16 & (bm[0] || bm[2] || bm[4] || bm[6])
+wet & memory width = 32 & (bm[0] || bm[4])
+wet & memory width = 64 & bm[0]
+
+*)
+
+Mwsl[0-1] :=	IV (mwsl[0-1],mws[0-1]);
+Wet0 :=		FD2 (wet0,wet0l,startwe,pclkl,resetl);
+Wetu :=		DUMMY (wet0);
+Weti :=		ND2 (weti,wet0l,int_wel);
+Wet :=		NIVU (wet,weti);
+Mws8 :=		AN2 (mws8,mwsl[1],mwsl[0]);
+Mws16 :=	AN2M (mws16,mwsl[1],mws[0]);
+Mws32 :=	AN2M (mws32,mws[1],mwsl[0]);
+Mws64 :=	AN2M (mws64,mws[1],mws[0]);
+
+We00 :=		IV (we00,mws8);
+We01 :=		IV (we01,bm[0]);
+We02 :=		ND2 (we02,mws16,bm[2]);
+We03 :=		ND2 (we03,mws16,bm[4]);
+We04 :=		ND2 (we04,mws16,bm[6]);
+We05 :=		ND2 (we05,mws32,bm[4]);
+We[0] :=	ND6 (we[0],we00,we01,we02,we03,we04,we05);
+
+(*
+Wel[1] writes bits d8-d15 and is asserted when
+
+wet & memory width = 16 & (bm[1] || bm[3] || bm[5] || bm[7])
+wet & memory width = 32 & (bm[1] || bm[5])
+wet & memory width = 64 & bm[1]
+
+*)
+
+We10 :=		ND2 (we10,mws16,bm[1]);
+We11 :=		ND2 (we11,mws16,bm[3]);
+We12 :=		ND2 (we12,mws16,bm[5]);
+We13 :=		ND2 (we13,mws16,bm[7]);
+We14 :=		ND2 (we14,mws32,bm[1]);
+We15 :=		ND2 (we15,mws32,bm[5]);
+We16 :=		ND2 (we16,mws64,bm[1]);
+We[1] :=	ND8 (we[1],we10,we11,we12,we13,we14,we15,we16,vcc);
+
+(*
+Wel[2] writes bits d16-d23 and is asserted when
+
+wet & memory width = 32 & (bm[2] || bm[6])
+wet & memory width = 64 & bm[2]
+
+*)
+
+We20 :=		ND2 (we20,mws32,bm[2]);
+We21 :=		ND2 (we21,mws32,bm[6]);
+We22 :=		ND2 (we22,mws64,bm[2]);
+We[2] :=	ND3 (we[2],we20,we21,we22);
+
+(*
+Wel[3] writes bits d24-d31 and is asserted when
+
+wet & memory width = 32 & (bm[3] || bm[7])
+wet & memory width = 64 & bm[3]
+
+*)
+
+We30 :=		ND2 (we30,mws32,bm[3]);
+We31 :=		ND2 (we31,mws32,bm[7]);
+We32 :=		ND2 (we32,mws64,bm[3]);
+We[3] :=	ND3 (we[3],we30,we31,we32);
+
+Wel[0-3] :=	ND2 (wel[0-3],we[0-3],wet);
+Wel[4-7] :=	ND3 (wel[4-7],wet,mws64,bm[4-7]);
+
+
+
+(*************** Output enables ***************
+
+oel[0] enables memory bits d0-d15 and is asserted when
+
+oet & memory width = 8 or 16
+oet & memory width = 32 & (bm[0] || bm[1] || bm[4] || bm[5]);
+oet & memory width = 64 & (bm[0] || bm[1]);
+
+oel[1] enables memory bits d15-d31 and is asserted when
+
+oet & memory width = 32 & (bm[2] || bm[3] || bm[6] || bm[7])
+oet & memory width = 64 & (bm[2] || bm[3])
+
+oel[2] enables memory bits d32-d63 and is asserted when
+
+oet & memory width = 64 & (bm[4] || bm[5] || bm[6] || bm[7])
+
+*)
+
+
+Oe00 :=		ND2 (oe00,oet,mws8);
+Oe01 :=		ND2 (oe01,oet,mws16);
+Oe02 :=		ND2 (oe02,oet,bm[0]);
+Oe03 :=		ND2 (oe03,oet,bm[1]);
+Oe04 :=		ND3 (oe04,oet,mws32,bm[4]);
+Oe05 :=		ND3 (oe05,oet,mws32,bm[5]);
+Oel[0] :=	AN6 (oel[0],oe00,oe01,oe02,oe03,oe04,oe05);
+
+Oe10 :=		ND3 (oe10,oet,mws32,bm[2]);
+Oe11 :=		ND3 (oe11,oet,mws32,bm[3]);
+Oe12 :=		ND3 (oe12,oet,mws32,bm[6]);
+Oe13 :=		ND3 (oe13,oet,mws32,bm[7]);
+Oe14 :=		ND3 (oe14,oet,mws64,bm[2]);
+Oe15 :=		ND3 (oe15,oet,mws64,bm[3]);
+Oel[1] :=	AN6 (oel[1],oe10,oe11,oe12,oe13,oe14,oe15);
+
+Oe20 :=		ND3 (oe20,oet,mws64,bm[4]);
+Oe21 :=		ND3 (oe21,oet,mws64,bm[5]);
+Oe22 :=		ND3 (oe22,oet,mws64,bm[6]);
+Oe23 :=		ND3 (oe23,oet,mws64,bm[7]);
+Oel[2] :=	AN4 (oel[2],oe20,oe21,oe22,oe23);
+
+(* generate dinlatch[0-7] defined by bm during read, all open starting write *)
+
+Dinlatchl[0-7] := ND2P (dinlatchl[0-7],dinlatch,bm[0-7]);
+Dinlatch[0-7] :=  ND2P (dinlatch[0-7],dinlatchl[0-7],lwdl);
+
+(* generate sizout[0-2] *)
+
+Sizout[0-2] :=	NIV (sizout[0-2],maskw[0-2]);
+Maskwu :=	DUMMY (maskw[3]);
+
+Readsi :=	FD1Q (readsi,readt,clk);
+Readt :=	MX2P (readt,readsi,rw,ack);
+Reads :=	NIVU (reads,readsi);
+
+(* hold the memory width until the next ack *)
+
+Mwti[0-1] :=      MX2P (mwti[0-1],mws[0-1],mw[0-1],ack);
+Mws[0-1] :=     FD1Q (mws[0-1],mwti[0-1],clk);
+Mwt[0-1] :=	NIVH (mwt[0-1],mwti[0-1]);
+
+Mreqb :=	NIVH (mreqb,mreq);
+Notmreq :=	IV (notmreq,mreqb);
+Notmatch :=	IV (notmatch,match);
+Notlastcycle :=	IV (notlastcycle,lastcycle);
+Notreads :=	IV (notreads,readsi);
+Notack :=	IV (notack,ack);
+Notrefack :=	IV (notrefack,refack);
+Notourack :=	IV (notourack,ourack);
+(*************** refresh logic **************)
+
+Newrow :=	NIV (newrow,q1a);
+
+/* synthesise dreqlout at the start of transfers */
+
+Dreqd :=	ND2 (dreqd,mreqb,ack);
+Jdreqlout :=	FD1Q (dreqlout,dreqd,clk);
+
+
+END;
+
+(* this module generates chip selects syncronously *)
+
+
+DEF	RASGEN	(csl:IO; on1,roffl,bs,allonl,alloffl,clk,resl:IN);
+
+BEGIN
+
+Ronl	 :=	ND2 (ronl,bs,on1);
+Ron	 :=	ND2 (ron,ronl,allonl);
+Roff	 :=	ND2 (roff,roffl,alloffl);
+Cs	 :=	FJK2 (cs,csl,ron,roff,clk,resl);
+Csl      :=	DUMMY (cs);
+
+END;

@@ -1,0 +1,169 @@
+/******************************************************************
+addrmux
+29/11/90
+
+Address section multiplexers
+----------------------------
+This module contains the multiplexers used in the blitter address 
+generation section.
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+/**  ADDAMUX - Address adder input A selection  *******************
+
+This module generates the data loaded into the address adder input 
+A.  This is the update value, and can be one of four registers : 
+A1 step, A2 step, A1 increment and A1 fraction.  It can complement 
+these values to perform subtraction, and it can generate constants 
+to increment / decrement the window pointers.
+
+addasel[0..2] select the register to add
+
+000	A1 step integer part
+001	A1 step fraction part
+010	A1 increment integer part
+011	A1 increment fraction part
+100	A2 step
+
+adda_xconst[0..2] generate a power of 2 in the range 1-64 or all 
+zeroes when they are all 1.
+
+addareg selects register value to be added as opposed to constant 
+value.
+
+suba_x, suba_y complement the X and Y values
+
+*/
+
+DEF ADDAMUX (
+INT16/	adda_x
+INT16/	adda_y
+	:OUT;
+	addasel[0..2]
+INT16/	a1_step_x
+INT16/	a1_step_y
+INT16/	a1_stepf_x
+INT16/	a1_stepf_y
+INT16/	a2_step_x
+INT16/	a2_step_y
+INT16/	a1_inc_x
+INT16/	a1_inc_y
+INT16/	a1_incf_x
+INT16/	a1_incf_y
+	adda_xconst[0..2]
+	adda_yconst
+	addareg
+	suba_x
+	suba_y :IN);
+
+INT16/	addac_x, addac_y, addar_x, addar_y, addart_x, addart_y, 
+INT16/	addas_x, addas_y, suba_x16, suba_y16
+:LOCAL;
+BEGIN
+
+Zero		:= TIE0 (zero);
+
+/* Multiplex the register terms */
+
+Addaselb[0-2]	:= NIVU (addaselb[0-2], addasel[0-2]);
+Addart_x	:= MX4 (addart_x, a1_step_x, a1_stepf_x, a1_inc_x, 
+			a1_incf_x, addaselb[0..1]);
+Addar_x		:= MX2 (addar_x, addart_x, a2_step_x, addaselb[2]);
+Addart_y	:= MX4 (addart_y, a1_step_y, a1_stepf_y, a1_inc_y, 
+			a1_incf_y, addaselb[0..1]);
+Addar_y		:= MX2 (addar_y, addart_y, a2_step_y, addaselb[2]);
+
+/* Generate a constant value - this is a power of 2 in the range 
+0-64, or zero.  The control bits are adda_xconst[0..2], when they
+are all 1  the result is 0.
+Constants for Y can only be 0 or 1 */
+
+Addac_xlo	:= D38H (addac_x[0..6], unused[0], 
+			adda_xconst[0..2]);
+Unused[0]	:= DUMMY (unused[0]);
+
+Addac_x		:= JOIN (addac_x, addac_x[0..6], zero, zero, zero,
+			zero, zero, zero, zero, zero, zero);
+Addac_y		:= JOIN (addac_y, adda_yconst, zero, zero, zero,
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero);
+
+/* Select between constant value and register value */
+
+Addas_x		:= MX2 (addas_x, addac_x, addar_x, addareg);
+Addas_y		:= MX2 (addas_y, addac_y, addar_y, addareg);
+
+/* Complement these values (complement flag gives adder carry in)*/
+
+Suba_x16	:= JOIN (suba_x16, suba_x, suba_x, suba_x, suba_x, 
+			suba_x, suba_x, suba_x, suba_x, suba_x, 
+			suba_x, suba_x, suba_x, suba_x, suba_x, 
+			suba_x, suba_x);
+Suba_y16	:= JOIN (suba_y16, suba_y, suba_y, suba_y, suba_y, 
+			suba_y, suba_y, suba_y, suba_y, suba_y, 
+			suba_y, suba_y, suba_y, suba_y, suba_y, 
+			suba_y, suba_y);
+Adda_x		:= EO (adda_x, suba_x16, addas_x);
+Adda_y		:= EO (adda_y, suba_y16, addas_y);
+
+END;
+
+/**  ADDBMUX - Address adder input B selection  *******************
+
+This module selects the register to be updated by the address 
+adder.  This can be one of three registers, the A1 and A2 
+pointers, or the A1 fractional part.
+*/
+
+DEF ADDBMUX (
+INT16/	addb_x
+INT16/	addb_y
+	:OUT;
+	addbsel[0..1]
+INT16/	a1_x
+INT16/	a1_y
+INT16/	a2_x
+INT16/	a2_y
+INT16/	a1_frac_x
+INT16/	a1_frac_y
+	:IN);
+
+BEGIN
+
+Addbselb[0-1]	:= NIVU (addbselb[0-1], addbsel[0-1]);
+Addb_x		:= MX4 (addb_x, a1_x, a2_x, a1_frac_x, a1_x, 
+			addbselb[0..1]);
+Addb_y		:= MX4 (addb_y, a1_y, a2_y, a1_frac_y, a1_y, 
+			addbselb[0..1]);
+
+END;
+
+/**  DATAMUX - Address local data bus selection  ******************
+
+Select between the adder output and the input data bus
+*/
+
+DEF DATAMUX (
+INT16/	data_x
+INT16/	data_y
+	:OUT;
+INT32/	gpu_din
+INT16/	addq_x
+INT16/	addq_y
+	addqsel
+	:IN);
+
+INT16/	gpu_lo, gpu_hi
+:LOCAL;
+BEGIN
+
+Gpu_lo		:= JOIN (gpu_lo, gpu_din{0..15});
+Gpu_hi		:= JOIN (gpu_hi, gpu_din{16..31});
+
+Addqselb	:= NIVU (addqselb, addqsel);
+Data_x		:= MX2 (data_x, gpu_lo, addq_x, addqselb);
+Data_y		:= MX2 (data_y, gpu_hi, addq_y, addqselb); 
+
+END;

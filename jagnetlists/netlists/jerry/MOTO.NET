@@ -1,0 +1,407 @@
+/*******************************************************************
+moto.net
+7 Jan 1993
+
+Motorola Library for Flare Simulator
+------------------------------------
+This library contains Motorola elements from the MDA08 Library.
+
+There are three sections, Gates, Pads and Megacells. Please add
+elements in alphabetical order.
+
+******************************************************************/
+
+IMPORT prim;
+
+/** Gates ********************************************************/
+
+/* 1 strength buffer */
+DEF BUF1 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf1	:= BUF_PRIM (z,a);
+END;
+
+/* 2 strength buffer */
+DEF BUF2 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf2	:= BUF_PRIM (z,a);
+END;
+
+/* 4 strength buffer */
+DEF BUF4 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf4	:= BUF_PRIM (z,a);
+END;
+
+/* 8 strength buffer */
+DEF BUF8 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	22
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf8	:= BUF_PRIM (z,a);
+END;
+
+/* 16 strength buffer */
+DEF BUF16 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+/* 16 strength buffer */
+DEF BUF16 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+/* 24 strength buffer */
+DEF BUF24 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf24	:= BUF_PRIM (z,a);
+END;
+
+/* 32 strength buffer */
+DEF BUF32 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf32	:= BUF_PRIM (z,a);
+END;
+
+/* 48 strength buffer */
+DEF BUF48 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf48	:= BUF_PRIM (z,a);
+END;
+
+/* 64 strength buffer */
+DEF BUF64 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf64	:= BUF_PRIM (z,a);
+END;
+
+/* 96 strength buffer */
+DEF BUF96 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf64	:= BUF_PRIM (z,a);
+END;
+
+/* 128 strength buffer */
+DEF BUF128 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf128	:= BUF_PRIM (z,a);
+END;
+
+/* Miscellaneous buffers
+(not sure what strengths these are, use names above in future)
+*/
+
+DEF BU33IP7C (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+DEF BU36DA3M (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+DEF BU36B52E (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+DEF BU36B531 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf16	:= BUF_PRIM (z,a);
+END;
+
+
+
+
+/* parallel buffers for reset driving */
+
+/* 16 strength buffer */
+DEF BUF8X2 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	30
+#GATECOUNT	22
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf8	:= BUF_PRIM (z,a);
+END;
+
+/* 32 strength buffer */
+DEF BUF8X4 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	30
+#GATECOUNT	22
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf8	:= BUF_PRIM (z,a);
+END;
+
+/* 48 strength buffer */
+DEF BUF8X6 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	30
+#GATECOUNT	22
+#MEGACOUNT	0
+#TYPEWIDE	1
+Buf8	:= BUF_PRIM (z,a);
+END;
+
+/* D type flip-flop, positive clock */
+DEF DFFP (q,qbar:OUT; d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	19
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+DFFP	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,one);
+END;
+
+/* D type flip-flop, positive clock, with active low reset */
+DEF DFFRP (q,qbar:OUT; BIT/rb, d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	22
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+DFFRP	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,rb);
+END;
+
+/* Delay buffer */
+DEF DLY8 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+DLY8	:= BUF_PRIM (z,a);
+END;
+
+/* 2 input non-inverting mux */
+DEF MUX2H (z:OUT; a,BIT/s,b:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0_PRIM (zero);
+MX2	:= MUX2_PRIM (z,a,b,s,zero);
+END;
+
+/** Pads *********************************************************/
+
+/** Megacells ****************************************************/
+
+/* 1K x 8 RAM */
+DEF RP1024X8 (
+	dbo[7],dbo[6],dbo[5],dbo[4],dbo[3],dbo[2],dbo[1],dbo[0] :OUT;
+	we,st,csb,a[9],a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0],
+	d[7],d[6],d[5],d[4],d[3],d[2],d[1],d[0] :IN);
+INT8/	dout,din, dind, dind\
+INT10/	a, ad, ad\
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0		/* needs a size */
+#TYPEWIDE       0
+Tie		:= TIE1_PRIM (one);
+Din		:= JOIN (din, d[0..7]);
+Dind		:= FLIPFLOP_PRIM (dind, dind\, din, st, one, one);
+A		:= JOIN (a, a[0..9]);
+Ad		:= FLIPFLOP_PRIM (ad, ad\, a, st, one, one);
+Wed		:= FLIPFLOP_PRIM (wed, wed\, we, st, one, one);
+Csbd		:= FLIPFLOP_PRIM (csbd, csbd\, csb, st, one, one);
+/* gate WE with clock and delay it for this RAM */
+Std		:= DELAY_PRIM (std, st);
+Wet		:= NAND_PRIM (wet, std, wed\);
+Wett		:= DELAY_PRIM (wett, wet);
+RAMA   		:= RAMB_PRIM (dout, dind, csbd, wett, ad);
+Dbo[0-7]	:= JOIN_BUS (dbo[0-7], dout{0-7});
+END;
+
+/* 360 x 16 RAM */
+DEF RP360X16 (
+	dbo[15],dbo[14],dbo[13],dbo[12],dbo[11],dbo[10],dbo[9],dbo[8], 
+	dbo[7],dbo[6],dbo[5],dbo[4],dbo[3],dbo[2],dbo[1],dbo[0] :OUT;
+	we,st,csb,a[8],a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0],
+	d[15],d[14],d[13],d[12],d[11],d[10],d[9],d[8],d[7],d[6],d[5],d[4],
+	d[3],d[2],d[1],d[0] :IN);
+INT16/	dout,din, dind, dind\
+INT9/	a, ad, ad\
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0		/* needs a size */
+#TYPEWIDE       0
+Tie		:= TIE1_PRIM (one);
+Din		:= JOIN (din, d[0..15]);
+Dind		:= FLIPFLOP_PRIM (dind, dind\, din, st, one, one);
+A		:= JOIN (a, a[0..8]);
+Ad		:= FLIPFLOP_PRIM (ad, ad\, a, st, one, one);
+Wed		:= FLIPFLOP_PRIM (wed, wed\, we, st, one, one);
+Csbd		:= FLIPFLOP_PRIM (csbd, csbd\, csb, st, one, one);
+/* gate WE with clock and delay it for this RAM */
+Std		:= DELAY_PRIM (std, st);
+Wet		:= NAND_PRIM (wet, std, wed\);
+Wett		:= DELAY_PRIM (wett, wet);
+RAMA   		:= RAMB_PRIM (dout, dind, csbd, wett, ad);
+Dbo[0-15]	:= JOIN_BUS (dbo[0-15], dout{0-15});
+END;
+
+/* 256 x 16 RAM */
+DEF RP256X16 (
+	dbo[15],dbo[14],dbo[13],dbo[12],dbo[11],dbo[10],dbo[9],dbo[8], 
+	dbo[7],dbo[6],dbo[5],dbo[4],dbo[3],dbo[2],dbo[1],dbo[0] :OUT;
+	we,st,csb,a[7],a[6],a[5],a[4],a[3],a[2],a[1],a[0],
+	d[15],d[14],d[13],d[12],d[11],d[10],d[9],d[8],d[7],d[6],d[5],d[4],
+	d[3],d[2],d[1],d[0] :IN);
+INT16/	dout,din, dind, dind\
+INT8/	a, ad, ad\
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0		/* needs a size */
+#TYPEWIDE       0
+Tie		:= TIE1_PRIM (one);
+Din		:= JOIN (din, d[0..15]);
+Dind		:= FLIPFLOP_PRIM (dind, dind\, din, st, one, one);
+A		:= JOIN (a, a[0..7]);
+Ad		:= FLIPFLOP_PRIM (ad, ad\, a, st, one, one);
+Wed		:= FLIPFLOP_PRIM (wed, wed\, we, st, one, one);
+Csbd		:= FLIPFLOP_PRIM (csbd, csbd\, csb, st, one, one);
+/* gate WE with clock and delay it for this RAM */
+Std		:= DELAY_PRIM (std, st);
+Wet		:= NAND_PRIM (wet, std, wed\);
+Wett		:= DELAY_PRIM (wett, wet);
+RAMA   		:= RAMB_PRIM (dout, dind, csbd, wett, ad);
+Dbo[0-15]	:= JOIN_BUS (dbo[0-15], dout{0-15});
+END;
+
+/* 64 x 32 Dual Port RAM */
+DEF RD64X32 (rda[31],rda[30],rda[29],rda[28],
+	rda[27],rda[26],rda[25],rda[24],rda[23],rda[22],
+	rda[21],rda[20],rda[19],rda[18],rda[17],rda[16],
+	rda[15],rda[14],rda[13],rda[12],rda[11],rda[10],
+	rda[9],rda[8],rda[7],rda[6],rda[5],rda[4],
+	rda[3],rda[2],rda[1],rda[0],rdb[31],rdb[30],
+	rdb[29],rdb[28],rdb[27],rdb[26],rdb[25],rdb[24],
+	rdb[23],rdb[22],rdb[21],rdb[20],rdb[19],rdb[18],
+	rdb[17],rdb[16],rdb[15],rdb[14],rdb[13],rdb[12],
+	rdb[11],rdb[10],rdb[9],rdb[8],rdb[7],rdb[6],
+	rdb[5],rdb[4],rdb[3],rdb[2],rdb[1],rdb[0] :OUT;
+	arw,sta,
+	aa[5],aa[4],aa[3],aa[2],aa[1],aa[0],
+	wda[31],wda[30],wda[29],wda[28],wda[27],wda[26],
+	wda[25],wda[24],wda[23],wda[22],wda[21],wda[20],
+	wda[19],wda[18],wda[17],wda[16],wda[15],wda[14],
+	wda[13],wda[12],wda[11],wda[10],wda[9],wda[8],
+	wda[7],wda[6],wda[5],wda[4],wda[3],wda[2],
+	wda[1],wda[0],
+	brw,stb,
+	ba[5],ba[4],ba[3],ba[2],ba[1],ba[0],
+	wdb[31],wdb[30],wdb[29],wdb[28],wdb[27],wdb[26],
+	wdb[25],wdb[24],wdb[23],wdb[22],wdb[21],wdb[20],
+	wdb[19],wdb[18],wdb[17],wdb[16],wdb[15],wdb[14],
+	wdb[13],wdb[12],wdb[11],wdb[10],wdb[9],wdb[8],
+	wdb[7],wdb[6],wdb[5],wdb[4],wdb[3],wdb[2],
+	wdb[1],wdb[0] :IN);
+INT6/	aa, aad, aad\, ab, abd, abd\
+INT32/	dina, dinad, dinad\, douta, dinb, dinbd, dinbd\, doutb
+:LOCAL;
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0		/* needs a size */
+#TYPEWIDE       0
+Tie1		:= TIE1_PRIM (one);
+Tie0		:= TIE0_PRIM (zero);
+Dina		:= JOIN (dina, wda[0..31]);
+Dinad		:= FLIPFLOP_PRIM (dinad, dinad\, dina, sta, one, one);
+Dinb		:= JOIN (dinb, wdb[0..31]);
+Dinbd		:= FLIPFLOP_PRIM (dinbd, dinbd\, dinb, stb, one, one);
+Aa		:= JOIN (aa, aa[0..5]);
+Aad		:= FLIPFLOP_PRIM (aad, aad\, aa, sta, one, one);
+Ab		:= JOIN (ab, ba[0..5]);
+Abd		:= FLIPFLOP_PRIM (abd, abd\, ab, stb, one, one);
+Wead		:= FLIPFLOP_PRIM (wead, wead\, arw, sta, one, one);
+Webd		:= FLIPFLOP_PRIM (webd, webd\, brw, stb, one, one);
+/* gate WE with clock and delay it for this RAM */
+Stad		:= DELAY_PRIM (stad, sta);
+Weat		:= NAND_PRIM (weat, stad, wead\);
+Weatt		:= DELAY_PRIM (weatt, weat);
+Stbd		:= DELAY_PRIM (stbd, stb);
+Webt		:= NAND_PRIM (webt, stbd, webd\);
+Webtt		:= DELAY_PRIM (webtt, webt);
+RD64X32		:= RAMF_PRIM (douta, doutb, zero, weatt, aad, dinad, 
+			zero, webtt, abd, dinbd);
+Rda[0-31]	:= JOIN_BUS (rda[0-31], douta{0-31});
+Rdb[0-31]	:= JOIN_BUS (rdb[0-31], doutb{0-31});
+END;

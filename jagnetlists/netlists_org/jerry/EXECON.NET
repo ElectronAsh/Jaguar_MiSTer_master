@@ -1,0 +1,198 @@
+/******************************************************************
+execon.net
+18/4/91
+
+Execution control state machine
+-------------------------------
+
+The execution control state machine determines when an instruction
+has completed, and controls the operation of some more complex 
+instructions.
+
+The prefetch control unit provides a 16-bit instruction, and when
+the signal romold is set to indicate that the instruction is
+being latched locally, it will provide the next instruction.
+
+The instruction is decoded through a micro-code ROM, and the 
+decoded output from the ROM is latched.
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF EXECON (
+	dstdgate	/* latch store instruction data */
+	exe, exeb[1]	/* current instruction is being executed */
+	immwri		/* look-ahead version */
+	insexe		/* instruction executable */
+	insexei		/* look-ahead version */
+	loimmld		/* load low word of immediate data */
+	romold		/* load ROM output pipe-line stage */
+	romoldb[0..4]	/* buffered versions */
+	stop		/* single-step stop active */
+	:OUT;
+	clk[0]		/* master clock */
+	go		/* GPU execution enable */
+	immld		/* instruction requires data load from
+			   immediate data (instruction stream) */
+	insrdy		/* instruction ready for execution */
+	memrw		/* instruction requires memory access */
+	datwe		/* makes memory access a write */
+	mtx_wait	/* wait form the matrix unit */
+	precomp		/* pre-compute memory address */
+	reset\		/* master reset */
+	sbwait		/* wait while write back occurs */
+	single_go	/* single step, one instruction advance */
+	single_step	/* single step, enable */
+	:IN);
+
+BEGIN
+
+Go\		:= IV (go\, go);
+Immld\		:= IV (immld\, immld);
+Precomp\	:= IV (precomp\, precomp);
+Single_go\	:= IV (single_go\, single_go);
+Single_step\	:= IV (single_step\, single_step);
+
+/* Pipe-line instruction ready */
+
+Insrdy		:= FD2 (insrdyp, insrdyp\, insrdy, clk[0], reset\);
+
+/* Instruction valid signal for exe
+set by romold . insrdy
+cleared by exe + insrdyp . (imm1 + imm2) + go\
+- set is dominant
+ 
+24/7/92 - bug fix
+Added go\ term to clear to prevent vins remaining valid between
+program runs.
+*/
+
+Vinsset\	:= ND2 (vinsset\, romold, insrdy);
+Vinsclrt	:= OAN1 (vinsclrt, imm1, imm2, insrdyp);
+Vinsclr\	:= NR3 (vinsclr\, exe, vinsclrt, go\);
+Vinst0		:= ND2 (vinst[0], vins, vinsclr\);
+Vinsi		:= ND2P (vinsi, vinst[0], vinsset\);
+Vins		:= FD2QP (vins, vinsi, clk[0], reset\);
+
+Wait\		:= NR3P (wait\, sbwait, compdwait, mtx_wait);
+Waitb\		:= NR3P (waitb\, sbwait, compdwait, mtx_wait);
+
+/* Flag instruction currently being executed */
+
+Exe\		:= ND3P (exe\, vins, wait\, exec);
+Exe		:= AN3U (exe,  vins, wait\, exec);
+/* faster exe for romold decode */
+Exeb[0]		:= AN3P (exeb[0], vins, waitb\, exec);
+/* faster exe for datwe decode */
+Exeb[1]		:= AN3P (exeb[1], vins, waitb\, exec);
+
+/* A synchronous version of exe can be generated that means exe
+if not write back.  This is used for gating microcode terms. */
+
+Insexei		:= AN3P (insexei, vinsi, execi, compdwaiti\);
+Insexe		:= FD2QP (insexe, insexei, clk[0], reset\);
+
+/* Execution control state machine
+   -------------------------------
+(2/64) 
+20/8/92 bug fix
+Forced stop to go to idle if go is cleared
+*/
+
+Idlet0		:= ND2 (idlet[0], idle, go\);
+Idlet1		:= ND2 (idlet[1], exec, go\);
+Idlet2		:= ND2 (idlet[2], stop, go\);
+Idlet3		:= ND3 (idlet[3], idlet[0..2]);
+Idle		:= FD4Q (idle, idlet[3], clk[0], reset\);
+
+Exect0		:= ND2 (exect[0], idle, go);
+Exect1		:= ND3 (exect[1], exec, go, exe\);
+Exect2		:= ND5 (exect[2], exec, go, exe, single_step\, 
+			immld\);
+Exect3		:= ND3 (exect[3], imm2, insrdyp, single_step\);
+Exect4		:= ND3 (exect[4], stop, single_go, go);
+Exect5		:= ND5 (execi, exect[0..4]);
+Exect		:= FD2Q (exect, execi, clk[0], reset\);
+Exec		:= NIVM (exec, exect);
+
+Imm1t0		:= ND4 (imm1t[0], exec, go, exe, immld);
+Imm1t1		:= ND2 (imm1t[1], imm1, insrdyp\);
+Imm1t2		:= ND2 (imm1t[2], imm1t[0..1]);
+Imm1		:= FD2Q (imm1, imm1t[2], clk[0], reset\);
+
+Imm2t0		:= ND2 (imm2t[0], imm1, insrdyp);
+Imm2t1		:= ND2 (imm2t[1], imm2, insrdyp\);
+Imm2t2		:= ND2 (imm2i, imm2t[0..1]);
+Imm2		:= FD2Q (imm2, imm2i, clk[0], reset\);
+
+Stopt0		:= ND5 (stopt[0], exec, go, exe, immld\, 
+			single_step);
+Stopt1		:= ND3 (stopt[1], imm2, insrdyp, single_step);
+Stopt2		:= ND3 (stopt[2], stop, single_go\, go);
+Stopt3		:= ND3 (stopt[3], stopt[0..2]);
+Stop		:= FD2Q (stop, stopt[3], clk[0], reset\);
+
+/* The ROM output pipe-line stage is latched on insrdy in any of
+the following conditions:
+	  imm1
+	+ imm2 . /single_step
+	+ exec . exe . /single_step . /compdwaiti
+	+ exec . /exe . compdwait
+	+ exec . exe . immld . single_step
+	+ exec . /exe . /wait
+	+ stop . single_go
+(2/9)(2/68) 
+Second term
+ = exec . exe . /single_step . /(exe . memrw . datwe . precomp)
+ = exec . exe . /single_step . /(memrw . datwe . precomp)
+*/
+
+Romot0		:= ND2P (romot[0], imm1, insrdy);
+Romot1		:= ND3P (romot[1], imm2, single_step\, insrdy);
+Romot2t		:= ND3 (romot2t, memrw, datwe, precomp);
+Romot2		:= ND5P (romot[2], exec, exeb[0], single_step\, 
+			insrdy, romot2t);
+Romot3		:= ND3 (romot[3], exec, exe\, compdwait);
+Romot4		:= ND5 (romot[4], exec, exeb[0], immld, 
+			single_step, insrdy);
+Romot5		:= ND4 (romot[5], exec, exe\, wait\, insrdy);
+Romot6		:= ND3 (romot[6], stop, single_go, insrdy);
+Romoldt		:= AN4P (romoldt, romot[3..6]);
+Romold		:= ND4P (romold, romot[0..2], romoldt);
+Romoldub[0-2]	:= ND4P (romoldub[0-2], romot[0..2], romoldt);
+Romoldb[0]	:= NIVU (romoldb[0], romoldub[0]);
+Romoldb[1-2]	:= NIVM (romoldb[1-2], romoldub[1]);
+Romoldb[3]	:= NIVH (romoldb[3], romoldub[2]);
+Romoldb[4]	:= NIVM (romoldb[4], romoldub[2]);
+
+/* Immediate data load operation */
+/* load low half in imm1 and insrdyp */
+
+Loimmld	:= AN2H (loimmld, insrdyp, imm1);
+
+/* dstd is latched for write on 
+  exe . memrw . datwe . /precomp
++ compdld
+
+An extra wait state is generated for computed address cycles, to
+read this data.  compdld is the output of a latch, set on the
+condition
+  exe . memrw . datwe . precomp
+(2/65) */
+
+Compdldt	:= ND4 (compdldt\, exe, memrw, datwe, precomp);
+Compdld		:= FD1Q (compdld\, compdldt\, clk[0]);
+Dstdgt0		:= ND4 (dstdgt, exe, memrw, datwe, precomp\);
+Dstgate		:= ND2 (dstdgate, dstdgt, compdld\);
+
+Compdwait	:= IV (compdwait, compdld\);
+Compdwaiti\	:= JOIN (compdwaiti\, compdldt\);
+
+/* write immediate data in imm2 and insrdyp 
+generate look-ahead version for register address generation */
+
+Immwri	:= AN2 (immwri, insrdy, imm2i);
+
+END;
+
+

@@ -1,0 +1,262 @@
+/******************************************************************
+dsp_gate.net
+21/2/91
+
+GPU gateway to co-processor bus
+-------------------------------
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DSP_GATE (
+INT32/	gpu_data	/* Graphics processor data bus */
+	:BUS;
+	gpu_dout[15]	/* GPU data bit-wise read bus */
+	:TRI;
+INT24/	address		/* co-processor address bus */
+	mreq		/* co-processor cycle request */
+	read		/* co-processor read request */
+	width[0..2]	/* co-processor cycle width (in bytes) */
+	dma_breq\	/* GPU high-priority bus request */
+	gate_active	/* Gateway memory interface is active */
+	gatereq		/* bus transfer from memory load */
+	gpu_breq\	/* GPU normal bus request */
+INT32/	load_data	/* operand load data */
+	xld_ready	/* external load data is ready */
+	:OUT;
+	ack		/* co-processor memory acknowledge */
+	bus_hog		/* GPU bus behaviour on external fetch */
+	clk		/* co-processor clock */
+	tlw		/* co-processor clock, latch load timing */
+	data[0..31]	/* co-processor read data bus */
+	external	/* external memory address decode */
+	flagrd		/* flag register read */
+	flagwr		/* flag register write */
+	gateack		/* gateway transfer acknowledge */
+INT24/	gpu_addr	/* graphics processor address bus */
+	gpu_back\	/* GPU normal bus acknowledge */
+INT32/	gpu_din		/* GPU data bus for inputs */
+	gpu_memw	/* graphics processor bus write enable */
+	msize[0..1]	/* width of external memory cycles */
+	progserv	/* current cycle is a program fetch */
+	reset\		/* system reset */
+	:IN);
+
+INT24/	cpu_addr, dat_addr, 
+INT32/	lddatai, zero32, 
+INT32/	lodatai, lodin, prog_data
+:LOCAL;
+BEGIN
+
+Zero		:= TIE0 (zero);
+Zero32		:= JOIN (zero32, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero);
+
+Lodatai		:= JOIN (lodatai, data[0..31]);
+
+Ack\		:= IV (ack\, ack);
+External\	:= IV (external\, external);
+Gateack\	:= IV (gateack\, gateack);
+Gpu_back	:= IV (gpu_back, gpu_back\);
+Gpu_memw\	:= IV (gpu_memw\, gpu_memw);
+Progserv\	:= IV (progserv\, progserv);
+
+/* Control bit from flags register -  give data transfers DMA 
+priority */
+
+Dmaen		:= FDSYNCR (dmaen, gpu_din{15}, flagwr, clk, 
+			reset\);
+Dmaen\		:= IV (dmaen\, dmaen);
+Dmaenr		:= TS (gpu_dout[15], dmaen, flagrd);
+
+/**  Memory cycle control state machine  **************************
+(2/1) */
+
+/* Latch the owner of the current cycle - this is given by 
+idle . external + active . gpu_ack . (external + cycpend)
+*/
+
+Prot1		:= ND3 (prot[1], active, gpu_ack, cycgo);
+Prot2		:= ND2 (prot[2], idle, external);
+Cycstart	:= ND2 (cycstart, prot[1..2]);
+
+/* program fetch owns current cycle */
+
+Progoi		:= MX4 (progoi, progown, progown, progserv, 
+			progownp, cycpend, cycstart);
+Progown		:= FD2QU (progown, progoi, clk, reset\);
+Progown\	:= IV (progown\, progown);
+
+/* program fetch ownership pending is loaded by external */
+
+Progownp	:= FDSYNC (progownp, progserv, external, clk);
+
+/* similarly, latch read/write status */
+
+Readp		:= FDSYNC (readp, gpu_memw\, external, clk);
+
+Readi		:= MX4 (readi, reada, reada, gpu_memw\, readp, 
+			cycpend, cycstart);
+Reada		:= FD1Q (reada, readi, clk);
+
+/* latch size information for data requests */
+
+Msizelat	:= AN3 (msizelat, external, progserv\, tlw);
+Msized[0-1]	:= LDP1Q (msized[0-1], msize[0-1], msizelat);
+
+/* flag a cycle as pending if neither idle or cycstart is active
+when external is, clear it by cycstart */
+
+Cyptset		:= NR3 (cyptset, external\, idle, cycstart);
+Cypt0		:= NR2 (cypt[0], cyptset, cycpend);
+Cypt1		:= NR2 (cypt[1], cypt[0], cycstart);
+Cycpend		:= FD2Q (cycpend, cypt[1], clk, reset\);
+
+Cycgo		:= OR2 (cycgo, external, cycpend);
+
+/* The memory interface is active */
+
+Activet0	:= ND2 (activet[0], idle, external);
+Activet1	:= ND2 (activet[1], active, gpu_ack\);
+Activet2	:= ND3 (activet[2], active, gpu_ack, cycgo);
+Activet3	:= ND3 (activet[3], activet[0..2]);
+Activet		:= FD2Q (activet, activet[3], clk, reset\);
+Active		:= NIVM (active, activet);
+Idle		:= IV (idle, active);
+
+/* The gate_active signal is passed to the score-board wait control
+mechanism to ensure that another load/store instruction does not
+commence while the previous one is still being processed.  It is
+true while active is set */
+
+Gate_active	:= NIV (gate_active, active);
+
+/* Program fetch data is loaded on the next ack after an ack 
+during program ownership - this ack may not appear to be a GPU
+ack */
+
+Pawset\		:= ND3 (pawset\, active, progown, gpu_ack);
+Pawt0		:= ND2 (pawt[0], packwt, ack\);
+Pawt1		:= ND2 (pawt[1], pawset\, pawt[0]);
+Packwt		:= FD2Q (packwt, pawt[1], clk, reset\);
+Pdatld		:= AN2 (pdatld, packwt, ack);
+Pdatldb		:= NIVU (pdatldb, pdatld);
+
+/* Gatereq is issued asynchronously when program data has been 
+successfully loaded, and is cleared asynchronously by the 
+acknowledge, 
+set = pdatld */
+
+Greqt0		:= NR2 (greqt[0], pdatld, greqt[2]);
+Greqt1		:= NR2 (greqt[1], gateack, greqt[0]);
+Greqt2		:= FD2Q (greqt[2], greqt[1], clk, reset\);
+Gatereq		:= OAN1 (gatereq, pdatld, greqt[2], gateack\);
+
+/* Operand fetch fata is loaded under similar conditions */
+
+Dawset\		:= ND4 (dawset\, active, progown\, gpu_ack, reada);
+Dawt0		:= ND2 (dawt[0], dackwt, ack\);
+Dawt1		:= ND2 (dawt[1], dawset\, dawt[0]);
+Dackwt		:= FD2Q (dackwt, dawt[1], clk, reset\);
+Ddatld		:= AN2 (ddatld, dackwt, ack);
+Ddatldb		:= NIVU (ddatldb, ddatld);
+
+/* external data is ready when this has been loaded */
+
+Xld_ready	:= FD1QU (xld_ready, ddatld, clk);
+
+/* Bus acknowledge to the GPU */
+
+Busackt		:= ND2 (busackt, gpu_breq\, dma_breq\);
+Busack		:= AN2 (busack, busackt, gpu_back);
+
+/* The GPU acknowledge is an ack when the GPU owns the bus */
+
+Gpu_ack\	:= ND2 (gpu_ack\, ack, busack);
+Gpu_ack		:= IV (gpu_ack, gpu_ack\);
+
+/* Latch an address from either source */
+
+Cald		:= AN3U (cald, external, progserv, tlw);
+Cpu_addr	:= LDP1Q (cpu_addr, gpu_addr, cald);
+Dald		:= AN3U (dald, external, progserv\, tlw);
+Dat_addr	:= LDP1Q (dat_addr, gpu_addr, dald);
+
+/* The output address is given by the owner of the cycle */
+
+Out_addr	:= MX2 (address, dat_addr, cpu_addr, progown);
+
+/* The cycle control signals */
+
+Mreq		:= NIV (mreq, active);
+Read		:= NIV (read, reada);
+
+/* The width is derived from the op-code, but is forced to 
+long-word for program-fetch */ 
+
+Msizet[0]	:= AN2 (msizet[0], msized[0], progown\);
+Msizet[1]	:= OR2 (msizet[1], msized[1], progown);
+Width		:= D24H (width[0..3], msizet[0..1]);
+Width[3]	:= DUMMY (width[3]);
+
+/* Latch program data */
+
+Prog_data	:= FDSYNC32 (prog_data, lodatai, pdatldb, clk);
+
+/* enable the program data on gateack */
+
+Lodrd		:= TS (gpu_data, prog_data, gateack);
+
+/* Latch operand data - this can also be written to */
+
+Lodwr		:= AN3U (lodwr, external, progserv\, gpu_memw);
+
+/* mask the high parts of data for word and byte reads.  
+Because the data transfers occur after the gateway has gone 
+inactive, and another cycle can potentially have started, the
+masks are latched on active . gpu_ack
+*/
+
+Maskwt		:= JOIN (maskwt\, msizet[1]);
+Maskbt		:= OR2 (maskbt\, msizet[0..1]);
+
+Maskld		:= AN2 (maskld, active, gpu_ack);
+Maskb		:= FDSYNCH (maskb\, maskbt\, maskld, clk);
+Maskw		:= FDSYNCH (maskw\, maskwt\, maskld, clk);
+
+Lodm[8-15]	:= AN2 (lodm[8-15], maskb\, data[8-15]);
+Lodm[16-31]	:= AN2 (lodm[16-31], maskw\, data[16-31]);
+
+Lddatai		:= JOIN (lddatai, data[0..7], lodm[8..31]);
+Lodin		:= MX4 (lodin, load_data, lddatai, gpu_din, zero32,
+			ddatldb, lodwr);
+Loaddata	:= FD1Q (load_data, lodin, clk);
+
+
+/* Extended bus request
+When program fetches are going on, it is desirable not to release
+the bus for a further four ticks, so that another request will be
+serviced faster.  This is enabled by the bus_hog flag. */
+
+Ext_reqt0	:= AOR1 (ext_reqt[0], active, progown, packwt);
+Ext_reqt[1-4]	:= FD1Q (ext_reqt[1-4], ext_reqt[0-3], clk);
+Ext_reqt[5]	:= OR4 (ext_reqt[5], ext_reqt[1..4]);
+Ext_req\	:= ND2 (ext_req\, ext_reqt[5], bus_hog);
+
+/* Bus control - the GPU requests the bus while active, on the
+appropriate bus request:
+gpu_breq = active . (progown + /progown . /dmaen)) + ext_req
+dma_breq = active . /progown . dmaen
+*/
+
+Gpu_bt0		:= ND2 (gpu_bt[0], progown\, dmaen\);
+Gpu_bt1		:= ND2 (gpu_bt[1], gpu_bt[0], progown\);
+Gpu_bt2		:= ND2 (gpu_bt[2], gpu_bt[1], active);
+Gpu_breq	:= AN2 (gpu_breq\, gpu_bt[2], ext_req\);
+
+Dma_breq	:= ND3 (dma_breq\, active, progown\, dmaen);
+
+END;

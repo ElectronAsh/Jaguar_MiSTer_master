@@ -1,0 +1,273 @@
+(*****************************************************************
+
+	pix.net
+
+This is the post line-buffer pixel data path of the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego;
+
+
+
+DEF 	PIX	(din[0..15],dd,vactive,blank,
+		nextpixa,nextpixd,cry16,rgb24,rg16,lbrd[0..31],
+		lbraw,lbrar,bcrgwr,bcbwr,
+		resetl,vclk,gnd,mptest,incen,binc,
+		lp,rgb16,varmod,word2,pp:IN;
+
+		lbra[0..8],r[0..7],g[0..7],b[0..7],inc:IO;
+
+		dr[0..8]:TRI);
+
+	INT8/red,green,blue,INT9/lbra:IO;
+(* GE *) INT32/pd1_d,lbrd_d:IO;
+BEGIN
+
+Red :=		JOIN (red,r[0..7]);
+Green :=	JOIN (green,g[0..7]);
+Blue :=		JOIN (blue,b[0..7]);
+Ru :=		DUMMY (red);
+Gu :=		DUMMY (green);
+Bu :=		DUMMY (blue);
+Lbra :=		JOIN (lbra,lbra[0..8]);
+Lbrau :=	DUMMY (lbra);
+
+(* generate a line buffer address *)
+
+Startdl :=	IV (ddl,dd);
+Lbresl :=	ND2X2 (lbres,ddl,resetl);
+Lbra[0] :=	UPCNTS (lbra[0],co[0],din[0],vclk,nextpixa,lbraw,lbres);
+Lbra[1-8] :=	UPCNTS (lbra[1-8],co[1-8],din[1-8],vclk,co[0-7],lbraw,lbres);
+Co8 :=		DUMMY (co[8]);
+
+Lbrad[0-8] :=	TS (dr[0-8],lbra[0-8],lbrar);
+
+(* latch the data from the line buffer *)
+
+Nextpixb :=	NIVU2 (nextpixb,nextpixd);
+Pd1[0-31] :=	SLATCH (pd1[0-31],lbrd[0-31],vclk,nextpixb);
+
+(* GE *)
+GE1 := JOIN(pd1_d, pd1[0..31]);
+GE2 := DUMMY(pd1_d);
+GE3 := JOIN(lbrd_d, lbrd[0..31]);
+GE4 := DUMMY(lbrd_d);
+
+
+(* multiplex into two CRY pixels *)
+
+Word2b :=	NIVU2 (word2b,word2);
+Pd2[0-15] :=	MX2M (pd2[0-15],pd1[0-15],pd1[16-31],word2b);
+
+(*
+ convert cry into RGB 
+ in rgb16 mode and in variable mode when bit 0 is set the conversion
+ is skipped
+*)
+
+Rgb0 :=		IV (rgb0,rgb16);
+Rgb1 :=		ND2 (rgb1,varmod,pd2[0]);
+Rgb :=		ND2 (rgb,rgb0,rgb1);
+
+/*
+ delay pp to sample output of the multiplier at pixel rate
+ this gives the multiplier longer to operate
+*/
+
+Ppdi :=		FD1Q (ppdi,pp,vclk);
+Ppd :=		NIVU (ppd,ppdi);
+
+Pd3 :=		CRYRGB (pd3[0..23],pd20,pd2[1..15],vclk,mptest,rgb,ppd);
+
+(* convert data into RG16 data
+when  lp is  high the low word is selected *)
+
+Lpb :=		NIVH (lpb,lp);
+Pd4[0-15] :=	MX2 (pd4[0-15],pd1[16-31],pd1[0-15],lpb);
+
+(* latch the border colour *)
+
+Bc[0-15] :=	LDP1Q (bc[0-15],din[0-15],bcrgwr);	(* red & green *)
+Bc[16-23] :=	LDP1Q (bc[16-23],din[0-7],bcbwr);	(* blue *)
+
+(*
+generate border timing
+for RGB24 the border is one tick after vactive
+for CRY16 the border is two clock ticks plus one pixel period after
+*)
+
+Sxp	:=	OR2 (sxp,cry16,rgb16);
+Vactivel :=	IV (notvactive,vactive);
+Bord1 :=	FD1Q (bord1,notvactive,vclk);
+Bord2 :=	FD1Q (bord2,bord1,vclk);
+Bord3 :=	SLATCH (bord3,bord2,vclk,ppd);
+Border :=	MX2 (border,bord1,bord3,sxp);
+
+(* Select cry16, rgb24, border or black
+
+the multiplexer is wired as follows
+
+	S0 S1
+
+	0  0	cry16
+	1  0	rgb24
+	0  1	border
+	1  1    black
+
+blank	border	rgb24 | S0 S1
+-----------------------------
+1       X       X     | 1  1
+0       1       X     | 0  1
+0       0       0     | 0  0
+0       0       1     | 1  0
+*)
+
+Blankl :=	IV (blankl,blank);
+Borderl :=	IV (borderl,border);
+
+S1i :=		ND2 (s1i,blankl,borderl);
+S1 :=		NIVU (s1,s1i);
+S01 :=		ND3 (s01,blankl,borderl,rgb24);
+S0i :=		ND2 (s0i,s01,blankl);
+S0 :=		NIVU (s0,s0i);
+
+Pd5[0-23] :=	MX4 (pd5[0-23],pd3[0-23],pd1[0-23],bc[0-23],gnd,s0,s1);
+
+(* Re-synchronize to prevent glitches at border *)
+
+Pd6[0-23] :=	FD1Q (pd6[0-23],pd5[0-23],vclk);
+
+(* select this or RG16 data
+Blanking & vactive are produced on blue *)
+
+R[0-7] :=	MX2 (r[0-7],pd6[0-7],pd4[0-7],rg16);
+G[0-7] :=	MX2 (g[0-7],pd6[8-15],pd4[8-15],rg16);
+B[0] :=		MX2 (b[0],pd6[16],blank,rg16);
+B[1] :=		MX2 (b[1],pd6[17],vactive,rg16);
+B[2-7] :=	MX2 (b[2-7],pd6[18-23],gnd,rg16);
+
+(************ incrustation ***********)
+
+(* bit 0 of CRY pixels and bit 24 of rgb24 pixels is used for incrustation *)
+
+(* delay bit 0 to synchronize with the pixels *)
+
+Inc1 :=		FD1Q (inc1,pd2[0],vclk);
+Inc2 :=		SLATCH (inc2,inc1,vclk,ppd);
+Inc3 :=		MX2 (inc3,inc2,pd1[24],rgb24);
+Inc4 :=		MX2 (inc4,inc3,binc,border);
+Inc5 :=		FD1Q (inc5,inc4,vclk);
+Inc :=		OR2 (inc,inc5,notincen);
+
+(* mask bit 0 of intensity if used for incrustation or variable mode *)
+
+Pd20 :=		AN3 (pd20,pd2[0],notincen,notvarmod);
+
+Notincen :=	IV (notincen,incen);
+Notvarmod :=	IV (notvarmod,varmod);
+
+END;
+
+
+DEF	CRYRGB	(r[0..7],g[0..7],b[0..7]:IO;
+		 cry[0..15],vclk,mptest,rgb,ppd:IN);
+
+	INT8/i,c,r1,g1,b1,r2,g2,b2,i2,rt,gt,bt,
+	INT10/r2a,g2a,b2a,i2a,INT20/r3,g3,b3:IO;
+
+BEGIN
+
+(* separate intensity & colour *)
+
+I :=	JOIN (i,cry[0..7]);
+C :=	JOIN (c,cry[8..15]);
+
+(* convert colour into red, green & blue components using ROMs *)
+
+/* 27/5/93 JGM - made Verilog work with A, B and C variants */
+#if FLARE
+red :=		RA8008A	(r1,vclk,c);
+green :=	RA8008A	(g1,vclk,c);
+blue :=		RA8008A	(b1,vclk,c);
+#endif
+#if TOSHIBA
+red :=		RA8008A	(r1,vclk,c);
+green :=	RA8008A	(g1,vclk,c);
+blue :=		RA8008A	(b1,vclk,c);
+#endif
+#if VERILOG
+red :=		RA8008A	(r1,vclk,c);
+green :=	RA8008B	(g1,vclk,c);
+blue :=		RA8008C	(b1,vclk,c);
+#endif
+
+(* if rgb16 mode or multiplier test remove multipliers *)
+
+Rgbtsti :=	OR2 (rgbtsti,rgb,mptest);
+Rgbtst :=	NIVH (rgbtst,rgbtsti);
+Rt :=		MX2 (rt,r1,c,rgbtst);
+Gt :=		MX2 (gt,g1,c,rgbtst);
+Bt :=		MX2 (bt,b1,c,rgbtst);
+
+(* latch the intermediate colours, the intensity & the mode *)
+
+R2 :=	FD1Q (r2,rt,vclk);
+G2 :=	FD1Q (g2,gt,vclk);
+B2 :=	FD1Q (b2,bt,vclk);
+I2 :=	FD1Q (i2,i,vclk);
+
+Rgbdi := FD1Q (rgbdi,rgb,vclk);
+Rgbd :=	 NIVH (rgbd,rgbdi);
+
+(* multiply the intermediate colours by the intensity *)
+(* NB there is no 8x8 UNSIGNED multiplier so a 10x10 SIGNED must be used *)
+
+Gnd :=		TIE0 (gnd);
+R2a :=		JOIN (r2a,r2{0..7},gnd,gnd);
+G2a :=		JOIN (g2a,g2{0..7},gnd,gnd);
+B2a :=		JOIN (b2a,b2{0..7},gnd,gnd);
+I2a :=		JOIN (i2a,i2{0..7},gnd,gnd);
+#if FLARE
+R3 :=		MP1010A (r3,r2a,i2a);
+G3 :=		MP1010A (g3,g2a,i2a);
+B3 :=		MP1010A (b3,b2a,i2a);
+#endif
+#if TOSHIBA
+/* hard macrocell
+R3 :=		MP1010A (r3,r2a,i2a);
+G3 :=		MP1010A (g3,g2a,i2a);
+B3 :=		MP1010A (b3,b2a,i2a);
+*/
+/* soft macrocell */
+R3 :=		MP1010 (r3,r2a,i2a);
+G3 :=		MP1010 (g3,g2a,i2a);
+B3 :=		MP1010 (b3,b2a,i2a);
+#endif
+#if VERILOG
+R3 :=		MP1010A (r3,r2a,i2a);
+G3 :=		MP1010A (g3,g2a,i2a);
+B3 :=		MP1010A (b3,b2a,i2a);
+#endif
+
+(* select output of multiplier or RGB data *)
+
+R3b[0-2] :=	MX2 (r3b[0-2],r3{8-10},gnd,rgbd);
+R3b[3-7] :=	MX2 (r3b[3-7],r3{11-15},r2{3-7},rgbd);
+
+B3b[0-2] :=	MX2 (b3b[0-2],b3{8-10},gnd,rgbd);
+B3b[3-4] :=	MX2 (b3b[3-4],b3{11-12},i2{6-7},rgbd);
+B3b[5-7] :=	MX2 (b3b[5-7],b3{13-15},r2{0-2},rgbd);
+
+G3b[0-1] :=	MX2 (g3b[0-1],g3{8-9},gnd,rgbd);
+G3b[2-7] :=	MX2 (g3b[2-7],g3{10-15},i2{0-5},rgbd);
+
+(* latch the final colours *)
+
+R[0-7] :=	SLATCH (r[0-7],r3b[0-7],vclk,ppd);
+G[0-7] :=	SLATCH (g[0-7],g3b[0-7],vclk,ppd);
+B[0-7] :=	SLATCH (b[0-7],b3b[0-7],vclk,ppd);
+
+END;
+

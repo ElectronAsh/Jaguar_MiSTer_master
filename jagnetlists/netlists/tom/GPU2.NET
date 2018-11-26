@@ -1,0 +1,61 @@
+(*****************************************************************
+
+	gpu2.net
+
+This module provides an interface between a dummy graphics processor
+and the rest of the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT 	tosh;		(* Toshiba gate & pad definitions *)
+
+
+DEF 	GRI	(ima[0..15],din[0..31],ack,blback,gpback,dmback,
+		resetl,clk[0],clk[2],cst,
+                dmreql,grpintreq,abort,tint,
+		gpuread,gpuwrite,nocpu,d[0..63]:IN;
+
+		blbreq,gpbreq,dmbreq,dmackl,gpuint:IO;
+
+		wd[0..63],a[0..31],w[0..3],rw,mreq,dr[0..15],justify:TRI);
+
+BEGIN
+
+Unused[0] := ND8 (unused[0],ima[0..7]);
+Unused[1] := ND8 (unused[1],ima[8..15]);
+Unused[2] := ND8 (unused[2],din[0..7]);
+Unused[3] := ND8 (unused[3],din[8..15]);
+Unused[4] := ND8 (unused[4],ack,blback,gpback,resetl,gpuread,gpuwrite,nocpu,dmback);
+Unused[5] :=	ND6 (unused[5],clk[0],clk[2],dmreql,grpintreq,abort,tint);
+Unused[6] :=	ND8 (unused[6],din[16..23]);
+Unused[7] :=	ND8 (unused[7],din[24..31]);
+Unused[8] :=	ND8 (unused[8],unused[0..6],gnd);
+Unused[9] :=	ND4 (unused[9],unused[7..9],gnd);
+Unused[10] :=	ND3 (unused[10],unused[10],gnd,cst);
+
+Unused[11] :=	ND8 (unused[11],d[0..7]);
+Unused[12] :=	ND8 (unused[12],d[8..15]);
+Unused[13] :=	ND8 (unused[13],d[16..23]);
+Unused[14] :=	ND8 (unused[14],d[24..31]);
+Unused[15] :=	ND8 (unused[15],d[32..39]);
+Unused[16] :=	ND8 (unused[16],d[40..47]);
+Unused[17] :=	ND8 (unused[17],d[48..55]);
+Unused[18] :=	ND8 (unused[18],d[56..63]);
+
+Uu[0-7] :=	DUMMY (unused[11-18]);
+
+Gnd :=		TIE0 (gnd);
+Vcc :=		TIE1 (vcc);
+
+Blbreq :=	NIV (blbreq,gnd);
+Gpbreq :=	NIV (gpbreq,gnd);
+Dmbreq :=	NIV (dmbreq,gnd);
+Dmackl :=	NIV (dmackl,vcc);
+Gpuint :=	NIV (gpuint,gnd);
+
+Wd1[0-63] :=	TS (wd[0-63],wd[0-63],gnd);
+Wd2[0-63] :=	TS (wd[0-63],wd[0-63],gnd);
+
+END;
+
+

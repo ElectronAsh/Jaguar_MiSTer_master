@@ -1,0 +1,287 @@
+(*****************************************************************
+
+	lbuf.net
+
+This is the line buffer in the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego,
+	duplo;
+
+
+DEF LBUF	(aout[1],aout[15],dout[0..31],siz[2],
+		lbwa[0..8],lbra[0..8],lbwe[0..1],
+		lbwd[0..31],lbufa,lbufb,lbaw,lbbw,rmw,
+		reads,vclk,clk[0],lben,bgw,bgwr
+		vactive,lbaactive,lbbactive,bigend:IN;
+
+		lbrd[0..31]:IO;
+
+		dr[0..15]:BI);
+
+	INT16/wdil, wdih, lbadl, lbadh, lbbdl, lbbdh, bgc :IO;
+
+
+(*
+lbufa	is asserted when line buffer A is being read
+	and line buffer B is being written
+
+cst	is a chip select for processor access to internal synchronous RAM
+
+	    ____________               ______
+[v]clk	___/            \_____________/
+	            ___________________
+cst	___________/                   \_____
+	            _____________
+wet	___________/             \___________
+
+
+*)
+
+(*
+The line buffer may be addressed in two 32k blocks of memory
+In the lower 32k it appears as 16 bits wide and may be read & written
+In the upper 32k is appears as 32 bits wide and may be written only
+line buffer A occupies the first 2k, line buffer B occupies
+the next 2k, and the current write buffer occupies the next 2k
+*)
+
+
+BEGIN
+
+Nota[1] :=	IV (nota[1],aout[1]);
+
+Lbad :=		TWONIV (lbad,lbaw);
+Lba :=		NIVU (lba,lbad);
+Lbbd :=		TWONIV (lbbd,lbbw);
+Lbb :=		NIVU (lbb,lbbd);
+
+(* Multiplex the address busses *)
+
+Lbwad[0-8] :=	HDLY1B (lbwad[0-8],lbwa[0-8]);
+Lbrad[0-8] :=	HDLY1B (lbrad[0-8],lbra[0-8]);
+Lbaadi[0-8] :=	MX2P (lbaadi[0-8],lbwad[0-8],lbrad[0-8],lbaactive);
+Lbbadi[0-8] :=	MX2P (lbbadi[0-8],lbwad[0-8],lbrad[0-8],lbbactive);
+Lbaad[0-8] :=	NIV (lbaad[0-8],lbaadi[0-8]);
+Lbbad[0-8] :=	NIV (lbbad[0-8],lbbadi[0-8]);
+
+
+(* if a[15] is asserted 32bit write data is available *)
+
+Dw[0-15] :=	MX2 (dw[0-15],dout[0-15],dout[16-31],down);
+Dw[16-31] :=	MX2 (dw[16-31],dout[0-15],dout[16-31],up);
+Littlend :=	IV (littlend,bigend);
+Down :=		AN2H (down,aout[15],bigend);
+Up :=		AN2H (up,aout[15],littlend);
+
+(* Multiplex the read data *)
+
+Lbrd[0-15] :=	MX2 (lbrd[0-15],lbbdl{0-15},lbadl{0-15},lbufa);
+Lbrd[16-31] :=	MX2 (lbrd[16-31],lbbdh{0-15},lbadh{0-15},lbufa);
+
+
+(* Select the opposite data for read/modify/write cycles *)
+
+Rmwd[0-15] :=	MX2 (rmwd[0-15],lbbdl{0-15},lbadl{0-15},lbufb);
+Rmwd[16-31] :=	MX2 (rmwd[16-31],lbbdh{0-15},lbadh{0-15},lbufb);
+
+(* latch this data *)
+
+Rmwd1[0-31] :=	FD1Q (rmwd1[0-31],rmwd[0-31],clk[0]);
+
+(*
+Add this to the write data using a saturating adder per data field
+ie 8 bit adders for intensity and 4 bit adders for C & R
+*)
+
+Rmwd2[0] :=	SADD8 (rmwd2[0..7],rmwd1[0..7],lbwd[0..7]);
+Rmwd2[8] :=	SADD4 (rmwd2[8..11],rmwd1[8..11],lbwd[8..11]);
+Rmwd2[12] :=	SADD4 (rmwd2[12..15],rmwd1[12..15],lbwd[12..15]);
+Rmwd2[16] :=	SADD8 (rmwd2[16..23],rmwd1[16..23],lbwd[16..23]);
+Rmwd2[24] :=	SADD4 (rmwd2[24..27],rmwd1[24..27],lbwd[24..27]);
+Rmwd2[28] :=	SADD4 (rmwd2[28..31],rmwd1[28..31],lbwd[28..31]);
+
+(* select either the above data or the write data *)
+
+/* old logic
+Wd1[0-31] :=	MX2 (wd1[0-31],lbwd[0-31],rmwd2[0-31],rmw);
+Wd[0-31] :=	MX2 (wd[0-31],wd1[0-31],dw[0-31],extadd);
+*/
+
+Wd[0-31] :=	MX4P (wd[0-31],lbwd[0-31],rmwd2[0-31],dw[0-31],dw[0-31],
+				rmw,extadd);
+
+Extadd :=	IVU (extadd,lben);
+Wdil	:=	JOIN (wdil,wd[0..15]);
+Wdih	:=	JOIN (wdih,wd[16..31]);
+
+(* enable this data onto the appropriate RAM data bus *)
+(*
+ In order to prevent these busses floating the bus is driven except
+ when the line buffer is being read or when it is being used for video
+*)
+
+Writes :=	IVM (writes,reads);
+Lbr[0-1] :=	IV (lbr[0-1],lbwe[0-1]);
+
+Wra0 :=		ND2 (wra0,lba,reads);
+Wra1l :=	ND3 (wra1l,lbufb,lben,lbr[0]);
+Wra1h :=	ND3 (wra1h,lbufb,lben,lbr[1]);
+Wra2l :=	ND3 (wra2l,lba,writes,aout[1]);
+Wra2h :=	ND4 (wra2h,lba,writes,notsiz[2],nota[1]);
+Wrali :=	AN4 (wrali,wra0,wra1l,wra2l,notaactive);
+Wrahi :=	AN4 (wrahi,wra0,wra1h,wra2h,notaactive);
+Wral :=		NIVU (wral,wrali);
+Wrah :=		NIVU (wrah,wrahi);
+
+Wrb0 :=		ND2 (wrb0,lbb,reads);
+Wrb1l :=	ND3 (wrb1l,lbufa,lben,lbr[0]);
+Wrb1h :=	ND3 (wrb1h,lbufa,lben,lbr[1]);
+Wrb2l :=	ND3 (wrb2l,lbb,writes,aout[1]);
+Wrb2h :=	ND4 (wrb2h,lbb,writes,notsiz[2],nota[1]);
+Wrbli :=	AN4 (wrbli,wrb0,wrb1l,wrb2l,notbactive);
+Wrbhi :=	AN4 (wrbhi,wrb0,wrb1h,wrb2h,notbactive);
+Wrbl :=		NIVU (wrbl,wrbli);
+Wrbh :=		NIVU (wrbh,wrbhi);
+
+Lbadl :=	TS (lbadl,wdil,wral);
+Lbadh :=	TS (lbadh,wdih,wrah);
+Lbbdl :=	TS (lbbdl,wdil,wrbl);
+Lbbdh :=	TS (lbbdh,wdih,wrbh);
+
+(* The line buffers *)
+
+Lbai :=		JOIN (lbai,lbaad[0..8]);
+Lbbi :=		JOIN (lbbi,lbbad[0..8]);
+
+
+Lbufal :=	AB8616A (lbadl, cea[0],wea[0],lbai);
+Lbufah :=	AB8616A (lbadh, cea[1],wea[1],lbai);
+Lbufbl :=	AB8616A (lbbdl, ceb[0],web[0],lbbi);
+Lbufbh :=	AB8616A (lbbdh, ceb[1],web[1],lbbi);
+
+Ncst :=		IVH (ncst,clk[0]);
+Nvcst :=	IVH (nvcst,vclk);
+
+Cea0 :=		ND2 (cea0,lbufb,lben);
+Cea1 :=		IV (cea1,lba);
+Cea2 :=		ND2 (cea2,cea0,cea1);
+Cea[0-1] :=	ANR23 (cea[0-1],cea2,ncst,aactive,nvcst);
+
+Ceb0 :=		ND2 (ceb0,lbufa,lben);
+Ceb1 :=		IV (ceb1,lbb);
+Ceb2 :=		ND2 (ceb2,ceb0,ceb1);
+Ceb[0-1] :=	ANR23 (ceb[0-1],ceb2,ncst,bactive,nvcst);
+
+Wea00 :=	ND2 (wea00,lbwe[0],lbufb);
+Wea01 :=	ND3 (wea01,nota[1],lba,writes);
+Wea02 :=	ND2 (wea02,lbufa,bgw);
+Wead[0] :=	AN3 (wead[0],wea00,wea01,wea02);
+
+Wea10 :=	ND2 (wea10,lbwe[1],lbufb);
+Wea11 :=	ND3 (wea11,aout[1],lba,writes);
+Wea12 :=	ND6 (wea12,aout[15],nota[1],siz[2],lba,writes,vcc);
+Wead[1] :=	AN4 (wead[1],wea10,wea11,wea12,wea02);
+
+Web00 :=	ND2 (web00,lbwe[0],lbufa);
+Web01 :=	ND3 (web01,nota[1],lbb,writes);
+Web02 :=	ND2 (web02,lbufb,bgw);
+Webd[0] :=	AN3 (webd[0],web00,web01,web02);
+
+Web10 :=	ND2 (web10,lbwe[1],lbufa);
+Web11 :=	ND3 (web11,aout[1],lbb,writes);
+Web12 :=	ND6 (web12,aout[15],nota[1],siz[2],lbb,writes,vcc);
+Webd[1] :=	AN4 (webd[1],web10,web11,web12,web02);
+
+Wea[0-1] :=	TWONIV (wea[0-1],wead[0-1]);
+Web[0-1] :=	TWONIV (web[0-1],webd[0-1]);
+
+Notaactive :=	ND2 (notaactive,lbufa,vactive);
+Notbactive :=	ND2 (notbactive,lbufb,vactive);
+Aactive :=	IV (aactive,notaactive);
+Bactive :=	IV (bactive,notbactive);
+
+Vcc :=		TIE1 (vcc);
+Notsiz[2] :=	IV (notsiz[2],siz[2]);
+
+(* Select the read data *)
+
+Lbdi[0-15] := MX4 (lbdi[0-15],lbadl{0-15},lbadh{0-15},lbbdl{0-15},lbbdh{0-15},
+			aout[1],lbb);
+
+(* latch the read data *)
+
+Lbd[0-15] :=	FD1Q (lbd[0-15],lbdi[0-15],clk[0]);
+
+Lbdeni :=	ND2 (lbdeni,wra0,wrb0);
+Lbden :=	NIVH (lbden,lbdeni);
+Dr[0-15] :=	TS (dr[0-15],lbd[0-15],lbden);
+
+(* Latch the background colour *)
+
+Bgc[0-15] :=	LDP1Q (bgc[0-15],dw[0-15],bgwr);
+Bgc	:=	JOIN (bgc,bgc[0..15]);
+
+(* enable onto RAM data busses if clearing *)
+
+Bwadl :=	TS (lbadl,bgc,bgwa);
+Bwadh :=	TS (lbadh,bgc,bgwa);
+Bwbdl :=	TS (lbbdl,bgc,bgwb);
+Bwbdh :=	TS (lbbdh,bgc,bgwb);
+
+Bgwa :=		AN2U (bgwa,bgw,aactive);
+Bgwb :=		AN2U (bgwb,bgw,bactive);
+
+END;
+
+DEF	SADD4	(z[0..3]:IO; a[0..3],b[0..3]:IN);
+
+(* SADD4 is a four bit saturating adder. The first parameter (a) is unsigned
+the second (b) is signed. The result is unsigned. If the addition overflows
+or underflows the result is forced to all 1's or all 0's *)
+
+BEGIN
+
+/* old logic
+s[0] :=		HA1 (s[0],co[0],a[0],b[0]);
+s[1-3] :=	FA1 (s[1-3],co[1-3],a[1-3],b[1-3],co[0-2]);
+*/
+Gnd :=		TIE0 (gnd);
+S0	:=	ADD4 (s[0..3],co[3],a[0..3],b[0..3],gnd);
+Overflowi :=	EN (overflowi,co[3],b[3]);
+Overflow :=	IVM (overflow,overflowi);
+Z[0-3] :=	MX2 (z[0-3],s[0-3],co[3],overflow);
+
+
+END;
+
+DEF	SADD8	(z[0..7]:IO; a[0..7],b[0..7]:IN);
+
+BEGIN
+
+/* old logic
+s[0] :=		HA1 (s[0],co[0],a[0],b[0]);
+s[1-7] :=	FA1 (s[1-7],co[1-7],a[1-7],b[1-7],co[0-6]);
+*/
+Gnd :=		TIE0 (gnd);
+S0	:=	ADD4 (s[0..3],co[3],a[0..3],b[0..3],gnd);
+S1	:=	ADD4 (s[4..7],co[7],a[4..7],b[4..7],co[3]);
+Overflowi :=	EN (overflowi,co[7],b[7]);
+Overflow :=	IVM (overflow,overflowi);
+Cob[7] :=	NIVM (cob[7],co[7]);
+Z[0-7] :=	MX2 (z[0-7],s[0-7],cob[7],overflow);
+
+
+END;
+
+DEF	DELL	(z:IO; a:IN);
+
+BEGIN
+
+Y :=		TWONIV (y,a);
+Z :=		HDLY1B (z,y);
+
+END;
+

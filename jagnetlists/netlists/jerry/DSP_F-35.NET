@@ -1,0 +1,406 @@
+/******************************************************************
+dsp_fetch.net
+7/2/91
+
+Program counter and fetch control
+---------------------------------
+This module contains the program counter and fetch control logic.
+Program instructions are always fetched in pairs from an address
+lying on a long-word boundary.
+
+The program counter can be loaded from the GPU data bus, or with 
+the ALU result, or from the destination data bus.
+
+This logic attempts to provide a constant supply of instructions
+for the execution unit.  It contains a 32-bit prefetch queue 
+holding a total of two instructions.  A memory cycle is 
+initiated whenever execution starts on the second.
+
+The instruction selected on the output of the pre-fetch register
+is fed through a microcode ROM to a pipe-line stage, which
+is reloaded whenever promold is active.  
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DSP_FETCH (
+	gpu_dout[22..24] /* GPU data bit-wise read bus */
+	:TRI;
+	insrdy		/* instruction output is valid */
+INT16/	instruction	/* instruction to be executed */
+	jump_atomic	/* make jumps atomic with next instr. */
+	pabort		/* aborting program fetch request */
+	progreq		/* program fetch request */
+INT22/	progaddr	/* program address to memory interface 
+			   controller */
+INT24/	program_count	/* program counter value */
+	:OUT;
+	big_instr	/* instruction stream is big-endian */
+	clk		/* master clock */
+	dbgrd		/* read debug information */
+	go		/* GPU execution enable */
+INT32/	gpu_data	/* program data from memory interface */
+INT32/	gpu_din		/* GPU data for inputs */
+	progack		/* acknowledge from memory interface */
+	jumprel		/* load PC from source data bus + PC */
+	jumpabs		/* load PC from source data bus */
+	pcwr		/* write to program counter */
+	reset\		/* master reset */
+	promoldx\	/* instruction being latched in ins_exec */
+	single_go	/* single step, one instruction advance */
+	single_step	/* single step, enable */
+INT32/	srcd		/* source data direct from RAM */
+INT32/	srcdp		/* pipe-lined source data */
+	:IN);
+
+INT16/	inshi, inslo
+INT32/	insin, insdata, pfdata
+:LOCAL;
+(* GE - added missing declarations *)
+INT23/	pc
+:LOCAL;
+BEGIN
+
+Single_go\	:= IV (single_go\, single_go);
+
+Dbgrd[22-24]	:= TS (gpu_dout[22-24], qs[0-2], dbgrd);
+
+/* Jump Control
+   ------------
+When running out of local RAM, it is almost impossible to avoid 
+the instruction after the jump being executed.  This facility is 
+in fact quite desirable as it will increase throughput of well 
+written programs.
+
+In slow RAM, it is quite possible that the instruction after the 
+jump has not yet been fetched.  To allow programmers to rely on 
+the instruction after jump being executed, the jump signal is 
+latched here and only passed on into the pre-fetch mechanism when 
+the signal insrdy is active, meaning that the next instruction 
+may be executed.  Out of fast RAM, the jump will be passed 
+straight through.
+
+10/9/91
+Jump relative was computed from srcd - this is unattractive as it
+puts an adder in the data path from the RAM.  srcdp is the correct
+term to use, which means computing the relative jump one tick 
+later.  To avoid two instructions creeping through, jreli must
+also be included in the force0 decode.
+
+The insrdy term without jreli has to be used, and the single_go
+flag must be ANDed to execute jumps correctly when single-stepping
+The advance condition is
+insrdy . (/single_step + single_go)
+
+10/12/91
+Jumps must be atomic with the subsequent instruction or all hell
+breaks loose.  The term jump_atomic is produced here when either
+jumprel or jumpabs is active, or when their corresponding
+latches are active.
+*/
+
+Single_adv	:= ND2 (single_adv, single_go\, single_step);
+Insrdyss	:= AN2 (insrdyss, insrdyt, single_adv);
+Jat0		:= NR2 (jat[0], jumpabs, jat[2]);
+Jat1		:= NR2 (jat[1], insrdyss, jat[0]);
+Jat2		:= FD2Q (jat[2], jat[1], clk, reset\);
+Jat3		:= OR2 (jat[3], jumpabs, jat[2]);
+Jabs		:= AN2 (jabs, jat[3], insrdyss);
+
+Jrt0		:= NR2 (jrt[0], jumprel, jrt[2]);
+Jrt1		:= NR2 (jrt[1], insrdyss, jrt[0]);
+Jrt2		:= FD2Q (jrt[2], jrt[1], clk, reset\);
+Jrt3		:= OR2 (jrt[3], jumprel, jrt[2]);
+Jreli		:= AN2 (jreli, jrt[3], insrdyss);
+Jrel		:= FD1Q (jrel, jreli, clk);
+Jrelb		:= NIVU (jrelb, jrel);
+Jrel\		:= IV (jrel\, jrel);
+
+/* generate the jump atomic term */
+
+Jump_atomic	:= OR4 (jump_atomic, jumprel, jumpabs, jat[2], 
+			jrt[2]);
+
+Jump\		:= NR2M (jump\, jrelb, jabs);
+Oddjmp\		:= IV (oddjump\, oddjump);
+Prgack\		:= IV (progack\, progack);
+Romold		:= IVM (promold, promoldx\);
+Romold\		:= NIVM (promold\, promoldx\);
+
+Force0		:= AN2 (force0\, jump\, go);
+
+
+/* Queue size state machine 
+   ------------------------
+(1/101) */
+
+/* paths to state 1 */
+Q0b0	:= ND6 (q0b[0], qs\[0], qs\[1], qs\[2], progack, oddjump, 
+		go);
+Q0b1	:= ND5 (q0b[1], qs[0],  qs\[1], qs\[2], progack\, promold\);
+Q0b2	:= ND5 (q0b[2], qs\[0], qs[1],  qs\[2], progack\, promold);
+/* paths to state 3 */
+Q0b3	:= ND5 (q0b[3], qs[0],  qs\[1], qs\[2], progack, promold\);
+Q0b4	:= ND5 (q0b[4], qs\[0], qs[1],  qs\[2], progack, promold);
+Q0b5	:= ND4 (q0b[5], qs[0],  qs[1],  qs\[2], promold\);
+Q0b6	:= ND4 (q0b[6], qs\[0], qs\[1], qs[2],  promold);
+Q0b7	:= ND7 (q0b[7], q0b[0..6]);
+Qi0	:= AN2 (qsi[0], q0b[7], force0\);
+
+/* paths to state 2 */
+Q1b0	:= ND6 (q1b[0], qs\[0], qs\[1], qs\[2], progack, oddjump\, 
+		go);
+Q1b1	:= ND5 (q1b[1], qs[0],  qs\[1], qs\[2], progack, promold);
+Q1b2	:= ND5 (q1b[2], qs\[0], qs[1],  qs\[2], progack\, promold\);
+Q1b3	:= ND4 (q1b[3], qs[0],  qs[1],  qs\[2], promold);
+/* paths to state 3 */
+Q1b4	:= ND5 (q1b[4], qs[0],  qs\[1], qs\[2], progack, promold\);
+Q1b5	:= ND5 (q1b[5], qs\[0], qs[1],  qs\[2], progack, promold);
+Q1b6	:= ND4 (q1b[6], qs[0],  qs[1],  qs\[2], promold\);
+Q1b7	:= ND4 (q1b[7], qs\[0], qs\[1], qs[2],  promold);
+Q1b8	:= ND8 (q1b[8], q1b[0..7]);
+Qi1	:= AN2 (qsi[1], q1b[8], force0\);
+
+/* paths to state 4 */
+Q2b0	:= ND5 (q2b[0], qs\[0], qs[1],  qs\[2], progack, promold\);
+Q2b1	:= ND4 (q2b[1], qs\[0], qs\[1], qs[2],  promold\);
+Q2b2	:= ND2 (q2b[2], q2b[0..1]);
+Qi2	:= AN2 (qsi[2], q2b[2], force0\);
+
+Qst[0-2]	:= FD2QP (qst[0-2], qsi[0-2], clk, reset\);
+Qs[0]		:= NIVU (qs[0], qst[0]);
+Qs[1-2]		:= NIVM (qs[1-2], qst[1-2]);
+Qs\[0-2]	:= IVH (qs\[0-2], qst[0-2]);
+
+/* Instruction ready is when the queue size is not 0, and jrel
+is not active */
+
+Insrdyt	:= ND3P (insrdyt, qs\[0..2]);
+Insrdy\	:= ND2 (insrdy\, insrdyt, jrel\);
+Insrdy	:= IVH (insrdy, insrdy\);
+
+/* The pre-fetch buffer 
+
+The first stage is always loaded by progack with gpu_data
+
+The second stage is loaded from the first stage when there is
+valid data in the first stage, given by a queue size of 3 or 4,
+otherwise it is loaded directly off the data bus - a size of 3
+is used for this decode as the second stage is only reloaded on
+odd values (except 0).
+
+The second stage may be loaded when it is about to become empty and
+either there is valid data in the first stage, or there is valid
+data on the data bus. i.e.
+state 0 and progack
+state 1 and promold and progack
+state 3 and promold
+*/
+
+Insldt0		:= ND4 (insldt[0], qs\[0..2], progack);
+Insldt1t	:= AN3 (insldt1t, qs[0], qs\[1..2]);
+Insldt1		:= ND3 (insldt[1], insldt1t, promold, progack);
+Insldt2		:= ND4 (insldt[2], qs[0..1], qs\[2], promold);
+Insldt		:= ND3P (insldt, insldt[0..2]);
+Insld		:= NIVU3 (insld, insldt);
+
+Pfbuf1		:= FDSYNCR32 (pfdata, gpu_data, progack, clk, 
+			reset\);
+
+Pf1selt		:= AN3U (pf1sel, qs[0], qs[1], qs\[2]);
+
+Inssel		:= MX4 (insin, insdata, gpu_data, insdata, pfdata,
+			insld, pf1sel);
+Insdata 	:= FD2Q (insdata, insin, clk, reset\);
+
+/* Select high instruction when bottom bit of count is set */
+ 
+Inshi		:= JOIN (inshi, insdata{16..31});
+Inslo		:= JOIN (inslo, insdata{0..15});
+Ins_swap\	:= ENP (ins_swap\, qst[0], big_instr);
+Ins_swapb	:= IVU (ins_swapb, ins_swap\);
+Instr		:= MX2 (instruction, inslo, inshi, ins_swapb);
+
+/* Memory cycle control ******************************************/
+
+/* Program request 
+should be active whenever there is room for two more instructions.
+
+it is set on
+queue size 0 and go
+queue size 1 and not (progack and not promold)
+queue size 2 and not progack
+queue size 3 and promold
+it is always cleared by jump
+*/
+
+Prst0	:= ND5 (prst[0], qs\[0], qs\[1], qs\[2], go, jump\);
+Prst1t	:= ND2 (prst1t, progack, promold\);
+Prst1	:= ND5 (prst[1], qs[0],  qs\[1], qs\[2], prst1t, jump\);
+Prst2	:= ND5 (prst[2], qs\[0],  qs[1],  qs\[2], progack\, jump\);
+Prst3	:= ND5 (prst[3], qs[0],  qs[1],  qs\[2], promold, jump\);
+Progreq	:= ND4P (progreq, prst[0..3]);
+
+/* flag its cancellation */
+
+Pabort	:= OR2P (pabort, jrel, jabs);
+
+/* The program counter *******************************************/
+
+Pc	:= PC (pc, program_count, clk, go, gpu_din, progack, 
+		jabs, jrelb, pcwr, qs\[0..2], reset\, srcd, srcdp);
+
+Oddjump	:= JOIN (oddjump, pc{0});
+Progadr	:= JOIN (progaddr, pc{1..22});
+
+END;
+
+/******************************************************************
+**  PC - The program counter  *************************************
+*******************************************************************
+The program counter is used to give the address for each program
+data fetch.  It points where instructions are being fetched from,
+rather than where they are being executed.  It is an address in
+words, with an implicit bottom bit of zero.
+
+At each tick, four things can happen:
+The counter can be incremented by 2 (LSB set to zero)
+The counter can hold its previous value
+The counter can be loaded from the srcdp bus
+The counter can have the value on the srcdp bus added to it
+
+It can also be loaded from the gpu_data bus when go is clear
+
+The bottom bit is used only when execution starts, or after a jump,
+and controls in which half of the first word execution starts.
+When the srcdp value is added, the bottom bit of the queue size
+state machine is used to give the offset within a long-word.
+
+The program counter can only range over a 64 Mbyte address space,
+i.e. 25 byte address bits.
+*/
+
+DEF PC (
+INT23/	pc 		/* address for fetching instructions */
+INT24/	program_count	/* address of instruction being executed */
+	:OUT; 
+	clk
+	go		/* GPU execution enable */
+INT32/	gpu_din		/* program data from memory interface */
+	progack
+	jabs
+	jrel
+	pcwr		/* write to program counter */
+	qs\[0..2]
+	reset\
+INT32/	srcd		/* source data direct from RAM */
+INT32/	srcdp		/* pipe-lined source data */
+	:IN);
+
+INT23/	subq
+:LOCAL;
+BEGIN
+
+One	:= TIE1 (one);
+Go\	:= IV (go\, go);
+Jrel\	:= IV (jrel\, jrel);
+
+/* Compute the count value */
+
+/* subtract the buffer size from the program count - this is used
+elsewhere to give the PC for call type operations */
+
+Sub		:= SUBSIZE (subq, pc, qs\[0..2]);
+Zerob		:= IV (zerob, one);
+Program_count	:= JOIN (program_count, zerob, subq);
+
+/* add the PC's top 30 bits or subtrahend to two or the offset */
+
+Adda[0]		:= AN2 (adda[0], subq{0}, jrel);
+Adda[1-22]	:= MX2 (adda[1-22], pc{1-22}, subq{1-22}, jrel);
+
+Addb[0]		:= AN2 (addb[0], srcdp{0}, jrel);
+Addb[1]		:= OR2 (addb[1], srcdp{1}, jrel\);
+Addb[2-22]	:= AN2 (addb[2-22], srcdp{2-22}, jrel);
+
+Pcadd		:= FA23 (pcadd[0..22], adda[0..22], addb[0..22]);
+
+/* load the program counter with the adder output, itself, 
+the offset supplied, or from the GPU data bus
+Jumpabs has priority,
+Sel0	= jabs + loadpc
+Sel1	= jabs\ . (progack + jrel) + loadpc
+
+ */
+
+Loadpc		:= AN2 (loadpc, pcwr, go\);
+Sel0		:= OR2U (sel[0], jabs, loadpc);
+Sel1t0		:= NR2 (sel1t0, progack, jrel);
+Sel1t1		:= NR2 (sel1t1, sel1t0, jabs);
+Sel1		:= OR2U (sel[1], sel1t1, loadpc);
+
+Pcin[0-22]	:= MX4 (pcin[0-22], pc[0-22], srcd{1-23}, 
+			pcadd[0-22], gpu_din{1-23}, sel[0..1]);
+
+/* The program counter 
+   initialised to internal ROM = FF0008 
+   (byte address, PC = words)
+*/
+
+Pc[0-1]		:= FD2Q (pc[0-1], pcin[0-1], clk, reset\);
+Pc[2]		:= FD4Q (pc[2], pcin[2], clk, reset\);
+Pc[3-12]	:= FD2Q (pc[3-12], pcin[3-12], clk, reset\);
+Pc[13]		:= FD2QP (pc[13], pcin[13], clk, reset\);
+Pc[14]		:= FD2Q (pc[14], pcin[14], clk, reset\);
+Pc[15-22]	:= FD4Q (pc[15-22], pcin[15-22], clk, reset\);
+Pc		:= JOIN (pc, pc[0..22]);
+
+END;
+
+DEF FA23 (s[0..22] :OUT; a[0..22], b[0..22] :IN);
+BEGIN
+Zero		:= TIE0 (zero);
+FA32		:= FA32 (s[0..31], unused[0..2], zero, a[0], b[0], 
+	a[1], b[1], a[2], b[2], a[3], b[3], a[4], b[4], a[5], 
+	b[5], a[6], b[6], a[7], b[7], a[8], b[8], a[9], b[9], 
+	a[10], b[10], a[11], b[11], a[12], b[12], a[13], b[13], 
+	a[14], b[14], a[15], b[15], a[16], b[16], a[17], b[17], 
+	a[18], b[18], a[19], b[19], a[20], b[20], a[21], b[21], 
+	a[22], b[22], zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero);
+Dummy[0-2]	:= DUMMY (unused[0-2]);
+Dummy[23-31]	:= DUMMY (s[23-31]);
+END;
+
+
+/* Size subtracter
+   ---------------
+This module forms a fast subtracter for sybtracting a 3-bit value
+from a 23-bit value.
+The b input is already complemented.  Some carry look-ahead is 
+performed to aid performance. 
+One more than the size is subtracted to allow for the effects of 
+the pipe-line, i.e. promold means that the instruction will be
+executed next tick.
+ */
+
+DEF SUBSIZE (INT23/sub :OUT; INT23/a, b[0..2] :IN);
+
+BEGIN
+
+Sub[0]		:= HA1 (sub[0], co[0], a{0}, b[0]);
+Sub[1]		:= FA1 (sub[1], co[1], a{1}, b[1], co[0]);
+Sub[2]		:= FA1 (sub[2], co[2], a{2}, b[2], co[1]);
+Sub[3-8]	:= HS1 (sub[3-8], co[3-8], a{3-8}, co[2-7]);
+Sub[9]		:= EN (sub[9], a{9}, co[8]);
+Co[9]		:= OR8 (co[9], a{3..9}, co[2]);
+Sub[10-15]	:= HS1 (sub[10-15], co[10-15], a{10-15}, co[9-14]);
+Sub[16]		:= EN (sub[16], a{16}, co[15]);
+Co[16]		:= OR8 (co[16], a{10..16}, co[9]);
+Sub[17-21]	:= HS1 (sub[17-21], co[17-21], a{17-21},co[16-20]);
+Sub[22]		:= EN (sub[22], a{22}, co[21]);
+Sub		:= JOIN (sub, sub[0..22]);
+
+END;
+

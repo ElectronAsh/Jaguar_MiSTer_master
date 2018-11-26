@@ -1,0 +1,197 @@
+/******************************************************************
+outer.net
+27/3/91
+
+Outer Loop Control Logic
+------------------------
+
+******************************************************************/
+
+IMPORT enumerates, duplo, tosh;
+
+DEF OUTER (
+	gpu_dout[11..15] /* GPU read bus */
+	:TRI;
+	a1updatei	/* outer loop a1 update */
+	a1fupdatei	/* outer loop a1 fraction update */
+	a2updatei	/* outer loop a2 update */
+	blit_breq[0..1]	/* blitter bus requests */
+	blit_int	/* blitter interrupt to GPU */
+	instart		/* start inner loop operation, load icnt */
+	sshftld		/* load source shift value */
+	:OUT;
+	active		/* memory interface active */
+	clk		/* co-processor clock */
+	cmdld		/* command register load */
+	countld		/* load inner count register */
+INT32/	gpu_din	/* GPU data bus */
+	indone		/* inner loop complete */
+	reset\		/* system reset */
+	statrd		/* blitter status read port */
+	stopped		/* retract blitter bus request */
+	:IN);
+
+BEGIN
+
+#if FLARE
+
+Show_out	:= SHOW_OUTER (outer_state, idle, inner, 
+			a1fupdate, a1update, a2update);
+Dummy0		:= DUMMY (outer_state);
+
+#endif
+
+/* Make outer state readble */
+
+Stat[11]	:= TS (gpu_dout[11], idle, statrd);
+Stat[12]	:= TS (gpu_dout[12], inner, statrd);
+Stat[13]	:= TS (gpu_dout[13], a1fupdate, statrd);
+Stat[14]	:= TS (gpu_dout[14], a1update, statrd);
+Stat[15]	:= TS (gpu_dout[15], a2update, statrd);
+
+/* Outer loop control bits */
+
+Upda1f		:= FDSYNC (upda1f, gpu_din{8}, cmdld, clk);
+Upda1		:= FDSYNC (upda1,  gpu_din{9}, cmdld, clk);
+Upda2		:= FDSYNC (upda2,  gpu_din{10}, cmdld, clk);
+
+/* Bus priority */
+
+Bushi		:= FDSYNC (bushi, gpu_din{29}, cmdld, clk);
+Bushi\		:= IV (bushi\, bushi);
+
+/* The outer loop is started the tick after a command register
+write, unless that write had bit 7 set */
+
+Gpu_data\[7]	:= IV (gpu_din\[7], gpu_din{7});
+Goin		:= AN2 (goin, cmdld, gpu_din\[7]);
+Go		:= FD1 (go, go\, goin, clk);
+
+/* Outer Loop State Machine **************************************/
+
+Indone\		:= IV (indone\, indone);
+Outer0\		:= IV (outer0\, outer0);
+Upda1f\		:= IV (upda1f\, upda1f);
+Upda1\		:= IV (upda1\, upda1);
+Upda2\		:= IV (upda2\, upda2);
+
+/* idle state */
+
+Idle0		:= ND2 (idlet[0], idle, go\);
+Idle1		:= ND3 (idlet[1], inner, outer0, indone);
+Idle2		:= ND2 (idlet[2], idlet[0..1]);
+Idle		:= FD4Q (idle, idlet[2], clk, reset\);
+Idle\		:= IV (idle\, idle);
+
+/* inner loop active state */
+
+Inner0		:= ND2 (innert[0], idle, go);
+Inner1		:= ND2 (innert[1], inner, indone\);
+Inner2t		:= AN5 (innert2t, inner, outer0\, upda1f\,
+			upda1\, upda2\);
+Inner2		:= ND2 (innert[2], indone, innert2t);
+Inner3		:= ND2 (innert[3], a1update, upda2\);
+Inner4		:= IV (innert[4], a2update);
+Inner5		:= ND5 (innert[5], innert[0..4]);
+Inner		:= FD2Q (inner, innert[5], clk, reset\);
+
+/* a1 fraction update state */
+
+A1fupd0		:= AN4 (a1fupdatei, inner, indone, outer0\, 
+			upda1f);
+A1fupdate	:= FD2Q (a1fupdate, a1fupdatei, clk, reset\);
+
+/* a1 pointer update state */
+
+A1upd0		:= IV (a1updt[0], a1fupdate);
+A1upd1		:= ND5 (a1updt[1], inner, indone, outer0\, upda1f\,
+			upda1);
+A1upd2		:= ND2 (a1updatei, a1updt[0..1]);
+A1update	:= FD2Q (a1update, a1updatei, clk, reset\);
+
+/* a2 pointer update state */
+
+A2upd0		:= ND2 (a2updt[0], a1update, upda2);
+A2upd1		:= ND6 (a2updt[1], inner, indone, outer0\, upda1f\,
+			upda1\, upda2);
+A2upd2		:= ND2 (a2updatei, a2updt[0..1]);
+A2update	:= FD2Q (a2update, a2updatei, clk, reset\);
+
+/* Decodes from the state */
+
+/* the inner loop is started whenever another state is about to
+cause the inner state to go active */
+
+Instart		:= ND4U (instart, innert[0], innert[2..4]);
+
+/* the source shifter is loaded one tick later */
+
+Sshftld		:= FD1QM (sshftld, instart, clk);
+
+/* the outer counter is enable to count down whenever the inner 
+loop is started */
+
+Ocntena		:= JOIN (ocntena, instart);
+
+/* the bus is requested when the outer loop is not idle, or the
+memory interface is active, as long as stopped is not active */
+
+Breqt		:= NR2 (breqt\, idle\, active);
+Blit_breq[0]	:= NR3 (blit_breq[0], breqt\, stopped, bushi);
+Blit_breq[1]	:= NR3 (blit_breq[1], breqt\, stopped, bushi\);
+
+/* The Outer Loop Counter */
+
+Outer_cnt	:= OUTER_CNT (outer0, clk, countld, gpu_din,
+			ocntena);
+
+
+/* an interrupt is generated on the first tick of idle and 
+not active 
+29/7/92 - bug fix
+Do not generate the interrupt unitl the memory interface is idle
+as well.
+*/
+
+Idledt		:= NR2 (idledt, idle\, active);
+Idled		:= FD4Q (idled, idledt, clk, reset\);
+Idled\		:= IV (idled\, idled);
+Blit_int	:= AN2 (blit_int, idled\, idledt);
+
+END;
+
+/**  OUTER_CNT - The outer loop counter  **************************
+This block contains the counter that is used to give the number of
+cycles to be performed by the outer loop.  It is a sixteen bit
+counter.
+*/
+
+DEF OUTER_CNT (
+	outer0		/* counter has reached zero */
+	:OUT;
+	clk		/* co-processor clock */
+	countld		/* outer counter load */
+INT32/	gpu_din	/* GPU data bus */
+	ocntena		/* outer count enable */
+	:IN);
+
+INT16/	gpu_d_hi16
+(* GE 19/06/2012 Added missing declarations *)
+INT16/	ocount
+:LOCAL;
+BEGIN
+
+Gpu_d_hi16	:= JOIN (gpu_d_hi16, gpu_din{16..31});
+
+/* the counter */
+
+Counto		:= DCOUNT16 (ocount, gpu_d_hi16, countld, ocntena, 
+			clk);
+
+/* detect count value of zero */
+
+Out0t0		:= NR8 (out0t[0], ocount{0..7});
+Out0t1		:= NR8 (out0t[1], ocount{8..15});
+Outer0		:= AN2 (outer0, out0t[0..1]);
+
+END;

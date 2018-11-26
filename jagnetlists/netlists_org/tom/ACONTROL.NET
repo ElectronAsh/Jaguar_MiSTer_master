@@ -1,0 +1,552 @@
+/******************************************************************
+acontrol.net
+26/3/91
+
+Address section control logic
+-----------------------------
+This block within the state machine section is responsible for
+generating the control signals for the address generator.
+
+The write data mask control is also here as it is address derived.
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ACONTROL (
+	addasel[0..2]	/* address adder input A select */
+	addbsel[0..1]	/* address adder input B select */
+	addqsel		/* select adder Q versus GPU data */
+	adda_xconst[0..2] /* constants to add to X & Y */
+	adda_yconst
+	addareg		/* add register rather than constant */
+	a1fracldi	/* A1 window pointer fractions add */
+	a1ptrldi	/* A1 window pointer add */
+	a2ptrldi	/* A2 window pointer add */
+	dend[0..5]	/* end of changed write data zone */
+	dsta2		/* reverse normal roles of A1 and A2 */
+	dstart[0..5]	/* start of changed write data zone */
+INT16/	dstxp		/* destination X address */
+	modx[0..2]	/* mask low bits of X during add */
+	phrase_cycle	/* phrase cycle at pipeline stage 1 */
+	phrase_mode	/* phrase write mode */
+	pixsize[0..2]	/* destination pixel size */
+	pwidth[0..3]	/* width in phrase mode */
+	srcshift[0..5]	/* source alignment shift */
+	suba_x		/* address adder X subtract control */
+	suba_y		/* address adder Y subtract control */
+	:OUT;
+	a1_pixsize[0..2] /* A1 pixel size */
+INT15/	a1_win_x	/* A1 window x size */
+INT16/	a1_x		/* A1 x pointer */
+	a1addx[0..1]	/* A1 address X update mode */
+	a1addy		/* A1 address Y update mode */
+	a1xsign		/* sign for A1 X address updates */
+	a1ysign		/* sign for A1 Y address updates */
+	a1updatei	/* outer loop a1 update */
+	a1fupdatei	/* outer loop a1 fraction update */
+	a2_pixsize[0..2] /* A2 pixel size */
+INT16/	a2_x		/* A2 x pointer */
+	a2addx[0..1]	/* A2 address X update mode */
+	a2addy		/* A2 address Y update mode */
+	a2xsign		/* sign for A2 X address updates */
+	a2ysign		/* sign for A2 Y address updates */
+	a2updatei	/* outer loop a2 update */
+	atick[0..1]	/* address update timing */
+	aticki[0]	/* look-ahead of bit 0 (0 is l.a. of 1) */
+	bcompen		/* bit comparator mode enable */
+	clk		/* co-processor clock */
+	cmdld		/* command register load */
+	dest_cycle[1]	/* destination cycle at pipeline stage 1 */
+	dsta_addi	/* inner loop update of dest address */
+INT32/	gpu_din		/* GPU data bus */
+	icount[0..2]	/* low part of inner counter */
+	inner0		/* last cycle of inner loop */
+	pixa[0..2]	/* bit part of address, un-pipe-lined */
+	srca_addi	/* inner loop update of source address */
+	srcen		/* enables repeated source reads in inner*/
+	sshftld		/* load source shift value */
+	step_inner	/* inner loop advance */
+	:IN);
+
+BEGIN
+
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+
+/* Address update control bits */
+
+Dsta2		:= FDSYNCU (dsta2, gpu_din{11},  cmdld, clk);
+
+/* various inverters , etc.*/
+
+A1update	:= FD1 (a1update, a1update\, a1updatei, clk);
+A1fupdate	:= FD1 (a1fupdate, a1fupdate\, a1fupdatei, clk);
+A1fupdate\	:= IV (a1fupdatei\, a1fupdatei);
+A2update	:= FD1 (a2update, a2update\, a2updatei, clk);
+A1addx\[0-1]	:= IV (a1addx\[0-1], a1addx[0-1]);
+A2addx\[0-1]	:= IV (a2addx\[0-1], a2addx[0-1]);
+Dsta2\		:= IV (dsta2\, dsta2);
+
+/* Generate inner loop update enables */
+
+A1_addi		:= MX2 (a1_addi, dsta_addi, srca_addi, dsta2);
+A2_addi		:= MX2 (a2_addi, srca_addi, dsta_addi, dsta2);
+A1_add		:= FD1 (a1_add, a1_add\, a1_addi, clk);
+A2_add		:= FD1 (a2_add, a2_add\, a2_addi, clk);
+A2_addb		:= NIV (a2_addb, a2_add);
+
+/* Address adder input A register selection 
+000	A1 step integer part
+001	A1 step fraction part
+010	A1 increment integer part
+011	A1 increment fraction part
+100	A2 step
+
+bit 2 = a2update
+bit 1 = /a2update . (a1_add . a1addx[0..1])
+bit 0 = /a2update . ( a1fupdate 
+		    + a1_add . atick[0] . a1addx[0..1])
+The /a2update term on bits 0 and 1 is redundant.
+Now look-ahead based
+*/
+
+Addaseli[2]	:= JOIN (addaseli[2], a2updatei);
+Addaseli[1]	:= AN3 (addaseli[1], a1_addi, a1addx[0..1]);
+Addas0t		:= ND4 (addas0t, a1_addi, aticki[0], a1addx[0..1]);
+Addaseli[0]	:= ND2 (addaseli[0], a1fupdatei\, addas0t);
+Addasel[0-2]	:= FD1Q (addasel[0-2], addaseli[0-2], clk);
+
+/* Address adder input A X constant selection
+adda_xconst[0..2] generate a power of 2 in the range 1-64 or all 
+zeroes when they are all 1
+Remember - these are pixels, so to add one phrase the pixel size
+has to be taken into account to get the appropriate value.
+for A1
+	if a1addx[0..1] are 00 set 6 - pixel size
+	if a1addx[0..1] are 01 set the value 000
+	if a1addx[0..1] are 10 set the value 111
+similarly for A2
+*/
+
+/* generate 6 - the pixel size */
+
+A1_pixsize\[0-2] := IV (a1_pixsize\[0-2], a1_pixsize[0-2]);
+A1xp0		:= JOIN (a1xp[0], a1_pixsize[0]);
+A1xp1t0		:= ND2 (a1xp1t[0], a1_pixsize\[0..1]);
+A1xp1t1		:= ND3 (a1xp1t[1], a1_pixsize[0..1], 
+			a1_pixsize\[2]);
+A1xp1		:= ND2 (a1xp[1], a1xp1t[0..1]);
+A1xp2t		:= ND2 (a1xp2t, a1_pixsize[0..1]);
+A1xp2		:= AN2 (a1xp[2], a1xp2t, a1_pixsize\[2]);
+A2_pixsize\[0-2] := IV (a2_pixsize\[0-2], a2_pixsize[0-2]);
+A2xp0		:= JOIN (a2xp[0], a2_pixsize[0]);
+A2xp1t0		:= ND2 (a2xp1t[0], a2_pixsize\[0..1]);
+A2xp1t1		:= ND3 (a2xp1t[1], a2_pixsize[0..1], 
+			a2_pixsize\[2]);
+A2xp1		:= ND2 (a2xp[1], a2xp1t[0..1]);
+A2xp2t		:= ND2 (a2xp2t, a2_pixsize[0..1]);
+A2xp2		:= AN2 (a2xp[2], a2xp2t, a2_pixsize\[2]);
+
+/* and produce the constant terms */
+
+A1_xconst[0]	:= AOR1 (a1_xconst[0], a1xp[0], a1addx\[0],
+			a1addx[1]);
+A1_xconst[1]	:= AOR1 (a1_xconst[1], a1xp[1], a1addx\[0], 
+			a1addx[1]);
+A1_xconst[2]	:= AOR1 (a1_xconst[2], a1xp[2], a1addx\[0], 
+			a1addx[1]);
+A2_xconst[0]	:= AOR1 (a2_xconst[0], a2xp[0], a2addx\[0], 
+			a2addx[1]);
+A2_xconst[1]	:= AOR1 (a2_xconst[1], a2xp[1], a2addx\[0], 
+			a2addx[1]);
+A2_xconst[2]	:= AOR1 (a2_xconst[2], a2xp[2], a2addx\[0], 
+			a2addx[1]);
+Adda_xconst[0-2] := MX2 (adda_xconst[0-2], a1_xconst[0-2], 
+			a2_xconst[0-2], a2_addb);
+
+/* Address adder input A Y constant selection */
+
+Adda_yconst	:= NIV (adda_yconst, a1addy);
+
+/* Address adder input A register versus constant selection 
+given by	  a1_add . a1addx[0..1]
+		+ a1update
+		+ a1fupdate
+		+ a2_add . a2addx[0..1]
+		+ a2update
+*/
+
+Addaregt[0]	:= AN3 (addaregt[0], a1_addi, a1addx[0..1]);
+Addaregt[1]	:= AN3 (addaregt[1], a2_addi, a2addx[0..1]);
+Addaregi	:= OR5 (addaregi, addaregt[0..1], a1updatei, 
+			a1fupdatei, a2updatei);
+Addareg		:= FD1QU (addareg, addaregi, clk);
+
+/* Address adder input B selection 
+00	A1 pointer
+01	A2 pointer
+10	A1 fraction 
+
+Bit 1 = a1fupdate + (a1_add . atick[0] . a1addx[0..1])
+Bit 0 = a2update + a2_add
+
+*/
+
+Addbseli[0]	:= OR2 (addbseli[0], a2updatei, a2_addi);
+Addbsel1t	:= ND4 (addbsl1t, a1_addi, aticki[0], 
+			a1addx[0..1]);
+Addbseli[1]	:= ND2 (addbseli[1], a1fupdatei\, addbsl1t);
+Addbsel[0-1]	:= FD1Q (addbsel[0-1], addbseli[0-1], clk);
+
+/* The modulo bits are used to align X onto a phrase boundary when
+it is being updated by one phrase 
+000	no mask
+001	mask bit 0
+010	mask bits 1-0
+..
+110  	mask bits 5-0
+
+Masking is enabled for a1 when a1addx[0..1] is 00, and the value
+is 6 - the pixel size (again!)
+*/
+
+Maska1		:= NR3 (maska1, a1addx[0..1], a1_add\);
+Maska1b[0-2]	:= AN2 (maska1b[0-2], maska1, a1xp[0-2]);
+Maska2		:= NR3 (maska2, a2addx[0..1], a2_add\);
+Maska2b[0-2]	:= AN2 (maska2b[0-2], maska2, a2xp[0-2]);
+Modx[0-2]	:= MX2 (modx[0-2], maska1b[0-2], maska2b[0-2],
+			a2_addb);
+
+/* Adder output is selected onto the address section local bus 
+whenever an add is active */
+
+Addqsel		:= OR5 (addqsel, a1_add, a2_add, a1update, 
+			a1fupdate, a2update);
+
+/* The adders can be put into subtract mode in add pixel size
+mode when the corresponding flags are set */
+
+Suba_xt0	:= ND4 (suba_xt[0], a1_add, a1addx[0], a1addx\[1],
+			a1xsign);
+Suba_xt1	:= ND4 (suba_xt[1], a2_add, a2addx[0], a2addx\[1],
+			a2xsign);
+Suba_x		:= ND2H (suba_x, suba_xt[0..1]);
+Suba_yt0	:= ND3 (suba_yt[0], a1_add, a1addy, a1ysign);
+Suba_yt1	:= ND3 (suba_yt[1], a2_add, a2addy, a2ysign);
+Suba_y		:= ND2H (suba_y, suba_yt[0..1]);
+
+/* Generate load strobes for the increment updates */
+
+A1pldt		:= ND2 (a1pldt, atick[1], a1_add);
+A1ptrldi	:= ND2 (a1ptrldi, a1update\, a1pldt);
+
+A1fldt		:= ND4 (a1fldt, atick[0], a1_add, a1addx[0..1]);
+A1fracldi	:= ND2 (a1fracldi, a1fupdate\, a1fldt);
+
+A2pldt		:= ND2 (a2pldt, atick[1], a2_add);
+A2ptrldi	:= ND2 (a2ptrldi, a2update\, a2pldt);
+
+/* Decode phrase mode
+phrase_mode =  dsta2 . /a2addx[0] . /a2addx[1]
+	    + /dsta2 . /a1addx[0] . /a1addx[1]
+*/
+
+Mdt0		:= ND3 (mdt[0], dsta2, a2addx\[0..1]);
+Mdt1		:= ND3 (mdt[1], dsta2\, a1addx\[0..1]);
+Phrase_mode	:= ND2H (phrase_mode, mdt[0..1]);
+Phrase_mode\	:= IVM (phrase_mode\, phrase_mode);
+
+/* While phrase mode affects the overall operation of the blitter,
+it is necessary to generate none phrase cycles in overall phrase
+mode operation.  For example, bytes of font data need to be read
+within phrase mode pixel writes.  The signal phrase_cycle means
+that the cycle at pipeline stage 1 is phrase wide. */
+
+Pcsela2		:= EN (pcsela2, dsta2, dest_cycle[1]);
+Pcsela2\	:= IV (pcsela2\, pcsela2);
+Phct0		:= ND3 (phct[0], pcsela2, a2addx\[0..1]);
+Phct1		:= ND3 (phct[1], pcsela2\, a1addx\[0..1]);
+Phrase_cycle	:= ND2 (phrase_cycle, phct[0..1]);
+
+/* Generate start write mask
+   -------------------------
+In phrase mode, a start mask is generated when the start of the 
+phrase lies outside the area to be written.  This is given by 
+the destination X pointer not being phrase aligned. 
+
+As phrase mode is only supported for 8 bit and larger pixels, 
+the bottom 3 bits of the start mask are always zero.
+
+When the blitter is in big-endian mode, the phrase mode start and
+end masks are swapped, and the bit parts of the pixel mode masks
+are swapped.
+*/
+
+Pixsize[0-2]	:= MX2U (pixsize[0-2], a1_pixsize[0-2], 
+			a2_pixsize[0-2], dsta2);
+Pixsize\[0-2]	:= IVM (pixsize\[0-2], pixsize[0-2]);
+
+Mask[3]		:= AN4 (smask[3], dstxp{0}, pixsize[0..1], 
+			pixsize\[2]);
+Mask4t0		:= ND4 (mask4t[0], dstxp{1}, pixsize[0..1], 
+			pixsize\[2]);
+Mask4t1		:= ND4 (mask4t[1], dstxp{0}, pixsize\[0..1], 
+			pixsize[2]);
+Mask[4]		:= ND2 (smask[4], mask4t[0..1]);
+Mask5t0		:= ND4 (mask5t[0], dstxp{2}, pixsize[0..1], 
+			pixsize\[2]);
+Mask5t1		:= ND4 (mask5t[1], dstxp{1}, pixsize\[0..1], 
+			pixsize[2]);
+Mask5t2		:= ND4 (mask5t[2], dstxp{0}, pixsize[0], 
+			pixsize\[1], pixsize[2]);
+Mask[5]		:= ND3 (smask[5], mask5t[0..2]);
+
+/* When not in phrase mode, an offset is generated from the address
+bit offset.  The mask is pipe-lined here. */
+
+Dstarta[0-2]	:= AN2 (dstarta[0-2], pixa[0-2], phrase_mode\);
+Dstarta[3-5]	:= AN2 (dstarta[3-5], smask[3-5], phrase_mode);
+
+Mpipe[0]	:= NIVM (mpipe[0], atick[1]);
+Dstartb[0-5]	:= MX2 (dstartb[0-5], dstartbl[0-5], dstarta[0-5], 			mpipe[0]);
+Dstartbl[0-5]	:= FD1Q (dstartbl[0-5], dstartb[0-5], clk);
+
+/* the masks are pipe-lined in the same way as an address, but
+then held one tick longer as write data occurs one tick later */
+
+Dstartp[0-5]	:= FDSYNC (dstartp[0-5], dstartb[0-5], step_inner, 
+			clk);
+Dstart[0-5]	:= FD1QP (dstart[0-5], dstartp[0-5], clk);
+
+/* Generate end write mask
+   -----------------------
+The end write mask is generated in phrase mode when the next
+pointer update will take the pointer off the window, i.e.
+	window width - x pointer < 1 phrase
+
+This may also be considered to be the situation when both the
+window width and the X pointer point to the same phrase, in which 
+case a mask should be generated from the low bits of the window
+width.
+
+As phrase mode is only calculated down to byte resolution, only
+the top 3 bits of the end mask are generated for this.
+
+It is also generated for phrase mode when the inner counter flags
+that this is the last write of an inner pass, with inner0,
+and there is less than a phrase worth of data to write.  This is
+given by, for eight bit mode
+count
+000	write all
+111	write 7 (counter holds -1)
+110	write 6 ...
+
+*/
+
+Dstxp		:= MX2 (dstxp, a1_x, a2_x, dsta2);
+
+Pseq[1-14]	:= EO (pseq[1-14], dstxp{1-14}, a1_win_x{1-14});
+
+/* Generate a mask if the right margin is positive but less than
+one phrase, i.e. its high bits are all the same above the phrase 
+boundary.
+32 bit pixels	101	bits 1-15
+16 bit pixels	100	bits 2-15
+ 8 bit pixels	011	bits 3-15
+
+Select the bits below bit 6 to include */
+
+Rmpt0		:= AN4 (rmpt[0], pseq[1], pixsize[0],
+			 pixsize\[1], pixsize[2]);
+Rmpt1		:= AN3 (rmpt[1], pseq[2], pixsize\[1], 
+			pixsize[2]);
+
+/* When penden is not active the X pointer is not within one 
+phrase of the right hand edge of the window. */
+
+Ewmt5		:= NR14 (penden, rmpt[0..1], pseq[3..14]);
+
+/* The mask to be used if within one phrase of the edge is the low
+three bits of the right margin, shifted appropriately to the screen
+mode. */
+
+Pixel8		:= AN3P (pixel8, pixsize[0..1], pixsize\[2]);
+Pixel16		:= AN3 (pixel16, pixsize\[0..1], pixsize[2]);
+Pixel32		:= AN3 (pixel32, pixsize[0], pixsize\[1], 
+			pixsize[2]);
+
+Wmb3		:= AN2 (wmb[3], a1_win_x{0}, pixel8);
+Wmb4t0		:= ND2 (wmb4t[0], a1_win_x{1}, pixel8);
+Wmb4t1		:= ND2 (wmb4t[1], a1_win_x{0}, pixel16);
+Wmb4		:= ND2 (wmb[4], wmb4t[0..1]);
+Wmb5t0		:= ND2 (wmb5t[0], a1_win_x{2}, pixel8);
+Wmb5t1		:= ND2 (wmb5t[1], a1_win_x{1}, pixel16);
+Wmb5t2		:= ND2 (wmb5t[2], a1_win_x{0}, pixel32);
+Wmb5		:= ND3 (wmb[5], wmb5t[0..2]);
+
+Wmt[3-5]	:= AN2 (window_mask[3-5], wmb[3-5], penden);
+
+/* The mask to be used if within one phrase of the end of the inner
+loop, similarly */
+
+Imb3		:= AN2 (imb[3], icount[0], pixel8);
+Imb4t0		:= ND2 (imb4t[0], icount[1], pixel8);
+Imb4t1		:= ND2 (imb4t[1], icount[0], pixel16);
+Imb4		:= ND2 (imb[4], imb4t[0..1]);
+Imb5t0		:= ND2 (imb5t[0], icount[2], pixel8);
+Imb5t1		:= ND2 (imb5t[1], icount[1], pixel16);
+Imb5t2		:= ND2 (imb5t[2], icount[0], pixel32);
+Imb5		:= ND3 (imb[5], imb5t[0..2]);
+
+Innerm[3-5]	:= AN2 (inner_mask[3-5], imb[3-5], inner0);
+
+/* The actual mask used should be the lesser of the window mask and
+the inner mask, where is both cases 000 means 1000. */
+
+Window_mask[6]	:= NR3 (window_mask[6], window_mask[3..5]);
+Inner_mask[6]	:= NR3P (inner_mask[6], inner_mask[3..5]);
+
+/*Mcomp         := MAG_4 (wgt, dummy[0..1], zero, one, zero,
+**                      window_mask[3..6], inner_mask[3..6]);
+*/
+Mcomp           := MAG4 (wgt, dummy[0..1], zero, one, zero,
+                        window_mask[6], inner_mask[6],
+                        window_mask[5], inner_mask[5],
+                        window_mask[4], inner_mask[4],
+                        window_mask[3], inner_mask[3]);
+
+Emask[3-5]	:= MX2 (emask[3-5], window_mask[3-5], 
+			inner_mask[3-5], wgt);
+
+/* The mask to be used for the pixel size, to which must be added
+the bit offset */
+
+Pm0		:= AN3 (pm[0], pixsize\[0], pixsize\[1], pixsize\[2]);
+Pm1		:= AN3 (pm[1], pixsize[0],  pixsize\[1], pixsize\[2]);
+Pm2		:= AN3 (pm[2], pixsize\[0], pixsize[1],  pixsize\[2]);
+Pm3		:= AN3 (pm[3], pixsize[0],  pixsize[1],  pixsize\[2]);
+Pm4		:= AN3 (pm[4], pixsize\[0], pixsize\[1], pixsize[2]);
+Pm5		:= AN3 (pm[5], pixsize[0],  pixsize\[1], pixsize[2]);
+
+Pma[0]		:= HA1 (pma[0], pmc[0], pm[0], pixa[0]);
+Pma[1]		:= FA1 (pma[1], pmc[1], pmc[0], pm[1], pixa[1]);
+Pma[2]		:= FA1 (pma[2], pmc[2], pmc[1], pm[2], pixa[2]);
+Pma[3]		:= HA1 (pma[3], pmc[3], pmc[2], pm[3]);
+Pma[4]		:= HA1 (pma[4], pmc[4], pmc[3], pm[4]);
+Pma[5]		:= EO  (pma[5], pmc[4], pm[5]);
+
+/* Select the mask */
+
+Denda[0-2]	:= AN2 (denda[0-2], pma[0-2], phrase_mode\);
+Denda[3-5]	:= MX2 (denda[3-5], emask[3-5], pma[3-5], 
+			phrase_mode\);
+
+Dendb[0-5]	:= MX2 (dendb[0-5], dendbl[0-5], denda[0-5], 
+			mpipe[0]);
+Dendbl[0-5]	:= FD1Q (dendbl[0-5], dendb[0-5], clk);
+
+Dendp[0-5]	:= FDSYNC (dendp[0-5], dendb[0-5], step_inner, 
+			clk);
+Dend[0-5]	:= FD1QP (dend[0-5], dendp[0-5], clk);
+
+/* Generate source alignment shift
+   -------------------------------
+The source alignment shift for data move is the difference between 
+the source and destination X pointers, multiplied by the pixel 
+size.  Only the low six bits of the pointers are of interest, as 
+pixel sizes are always a power of 2 and window rows are always 
+phrase aligned.  
+
+When not in phrase mode, the top 3 bits of the shift value are
+set to zero (2/26).
+
+Source shifting is also used to extract bits for bit-to-byte
+expansion in phrase mode.  This involves only the bottom three 
+bits of the shift value, and is based on the offset within the
+phrase of the destination X pointer, in pixels.
+
+Source shifting is disabled when srcen is not set.
+*/
+
+Srcxp\[0-5]	:= MXI2 (srcxp\[0-5], a2_x{0-5}, a1_x{0-5}, dsta2);
+
+Shftt[0]	:= FA1 (shftt[0], shfcy[0], one, srcxp\[0], 
+			dstxp{0});
+Shftt[1-5]	:= FA1 (shftt[1-5], shfcy[1-5], shfcy[0-4], 
+			srcxp\[1-5], dstxp{1-5});
+Unused[1]	:= DUMMY (shfcy[5]);
+
+/* Shftv0	:= MX6 (shftv[0], shftt[0], zero, zero, zero, 
+**			zero, zero, pixsize[0..2]);
+** Shftv1	:= MX6 (shftv[1], shftt[1], shftt[0], zero, 
+**			zero, zero, zero, pixsize[0..2]);
+** Shftv2	:= MX6 (shftv[2], shftt[2], shftt[1], 
+**			shftt[0], zero, zero, zero, pixsize[0..2]);
+** Shftv3	:= MX6 (shftv[3], shftt[3], shftt[2], 
+**			shftt[1], shftt[0], zero, zero, 
+**			pixsize[0..2]);
+*/
+Shftv0		:= AN4 (shftv[0], shftt[0], pixsize\[0..2]);
+Sftv1t		:= OR2 (shftv1t, pixsize[1..2]);
+Shftv1		:= MX2G (shftv[1], shftt[1], shftt[0], pixsize[1],
+			shftv1t);
+Shftv2		:= MX4G (shftv[2], shftt[2], shftt[1], 
+			shftt[0], zero, pixsize[0..2]);
+Shftv3		:= MX4G (shftv[3], shftt[3], shftt[2], 
+			shftt[1], shftt[0], pixsize[0..2]);
+Shftv4		:= MX6 (shftv[4], shftt[4], shftt[3], 
+			shftt[2], shftt[1], shftt[0], zero, 
+			pixsize[0..2]);
+Shftv5		:= MX6 (shftv[5], shftt[5], shftt[4], 
+			shftt[3], shftt[2], shftt[1], shftt[0], 
+			pixsize[0..2]);
+
+/* The phrase mode alignment count is given by the phrase offset
+of the first pixel, for bit to byte expansion */
+
+Pobb0t		:= OR3 (pobb0t, pixel8, pixel16, pixel32);
+Pobb0		:= AN2 (pobb[0], pobb0t, dstxp{0});
+Pobb1t		:= OR2 (pobb1t, pixel8, pixel16);
+Pobb1		:= AN2 (pobb[1], pobb1t, dstxp{1});
+Pobb2		:= AN2 (pobb[2], pixel8, dstxp{2});
+
+Pobbsel		:= AN2 (pobbsel, phrase_mode, bcompen);
+Loshen		:= NR2 (loshen\, srcen, pobbsel);
+Loshd[0-2]	:= MX2 (loshd[0-2], shftv[0-2], pobb[0-2], 
+			pobbsel);
+Shfti[0-2]	:= MX2G (shfti[0-2], srcshift[0-2], loshd[0-2], 
+			sshftld, loshen\);
+
+/* Enable for high bits is srcen . phrase_mode */
+
+Hishen\		:= ND2 (hishen\, srcen, phrase_mode);
+Shfti[3-5]	:= MX2G (shfti[3-5], srcshift[3-5], shftv[3-5], 
+			sshftld, hishen\);
+Srcshift[0-5]	:= FD1Q (srcshift[0-5], shfti[0-5], clk);
+
+/* The cycle width in phrase mode is normally one phrase.  However,
+at the start and end it may be narrower.  The start and end masks
+are used to generate this.  The width is given by:
+
+	8 - start mask - (8 - end mask)
+=	end mask - start mask
+
+This is only used for writes in phrase mode.
+Start and end from the address level of the pipeline are used.
+*/
+
+Dstartp\[3-5]	:= IV (dstartp\[3-5], dstartp[3-5]);
+
+Pwidth0		:= FA1 (pwidth[0], pwc[0], dendp[3], dstartp\[3], 
+			one);
+Pwidth1		:= FA1 (pwidth[1], pwc[1], dendp[4], dstartp\[4], 
+			pwc[0]);
+Pwidth2		:= FA1 (pwidth[2], pwc[2], dendp[5], dstartp\[5], 
+			pwc[1]);
+Pwidth3		:= NR6 (pwidth[3], dendp[3..5], dstartp[3..5]);
+
+Unusedp		:= DUMMY (pwc[2]);
+Dummy[0-1]	:= DUMMY (dummy[0-1]);
+
+END;

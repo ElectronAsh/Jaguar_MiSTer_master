@@ -1,0 +1,2342 @@
+/******************************************************************
+tosh.net
+31/1/91
+
+Library for Toshiba gates 
+
+This library allows any type to be connected to gates, effectively
+widening them.  Where a signal would be common across all the gates
+it is given a width of 1.
+******************************************************************/
+
+IMPORT prim;
+
+/* Inverter */
+DEF IV (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	2
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+DEF IVP (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	2
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IVP	:= INV_PRIM (z,a);
+END;
+
+/* Double inverter */
+DEF IVDM (z0, z1:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+IVDMa	:= INV_PRIM (z0,a);
+IVDMb	:= INV_PRIM (z1,z0);
+END;
+
+/* Inverter */
+DEF IVS (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+
+/* Inverter drive 36 */
+DEF IVM (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+
+/* Inverter drive 46 */
+DEF IVML (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+
+/* Inverter drive 64 */
+DEF IVH (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+
+/* Inverter drive 107 */
+DEF IVU (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+IV	:= INV_PRIM (z,a);
+END;
+
+/* 2 input nand gate */
+DEF ND2 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND2	:= NAND_PRIM (z,a,b);
+END;
+DEF ND2P (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND2P	:= NAND_PRIM (z,a,b);
+END;
+
+/* 3 input nand gate */
+DEF ND3 (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND3	:= NAND_PRIM (z,a,b,c);
+END;
+DEF ND3P (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND3	:= NAND_PRIM (z,a,b,c);
+END;
+
+/* 4 input nand gate */
+DEF ND4 (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND4	:= NAND_PRIM (z,a,b,c,d);
+END;
+DEF ND4P (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND4P	:= NAND_PRIM (z,a,b,c,d);
+END;
+
+/* 6 input nand gate */
+DEF ND6 (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND6	:= NAND_PRIM (z,a,b,c,d,e,f);
+END;
+
+/* 8 input nand gate */
+DEF ND8 (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND8	:= NAND_PRIM (z,a,b,c,d,e,f,g,h);
+END;
+
+/* 2 input nor gate */
+DEF NR2 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR2	:= NOR_PRIM (z,a,b);
+END;
+DEF NR2P (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR2P	:= NOR_PRIM (z,a,b);
+END;
+
+/* 3 input nor gate */
+DEF NR3 (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR3	:= NOR_PRIM (z,a,b,c);
+END;
+DEF NR3P (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR3P	:= NOR_PRIM (z,a,b,c);
+END;
+
+/* 4 input nor gate */
+DEF NR4 (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR4	:= NOR_PRIM (z,a,b,c,d);
+END;
+
+/* 4 input nor gate */
+DEF NR4P (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR4	:= NOR_PRIM (z,a,b,c,d);
+END;
+
+/* 6 input nor gate */
+DEF NR6 (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR6	:= NOR_PRIM (z,a,b,c,d,e,f);
+END;
+
+/* 8 input nor gate */
+DEF NR8 (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+NR8	:= NOR_PRIM (z,a,b,c,d,e,f,g,h);
+END;
+
+/* 2 input and gate */
+DEF AN2 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN2	:= AND_PRIM (z,a,b);
+END;
+DEF AN2P (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN2P	:= AND_PRIM (z,a,b);
+END;
+
+/* 3 input and gate */
+DEF AN3 (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN3	:= AND_PRIM (z,a,b,c);
+END;
+DEF AN3P (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN3P	:= AND_PRIM (z,a,b,c);
+END;
+
+/* 4 input and gate */
+DEF AN4 (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN4	:= AND_PRIM (z,a,b,c,d);
+END;
+DEF AN4P (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN4	:= AND_PRIM (z,a,b,c,d);
+END;
+
+/* 6 input and gate */
+DEF AN6 (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN6	:= AND_PRIM (z,a,b,c,d,e,f);
+END;
+
+/* 8 input and gate */
+DEF AN8 (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+#GRIDCOUNT	13
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN8	:= AND_PRIM (z,a,b,c,d,e,f,g,h);
+END;
+DEF AN8P (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+AN8	:= AND_PRIM (z,a,b,c,d,e,f,g,h);
+END;
+
+/* 2 input or gate */
+DEF OR2 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR2	:= OR_PRIM (z,a,b);
+END;
+DEF OR2P (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR2P	:= OR_PRIM (z,a,b);
+END;
+
+/* 3 input or gate */
+DEF OR3 (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR3	:= OR_PRIM (z,a,b,c);
+END;
+DEF OR3P (z:OUT; a,b,c:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR3	:= OR_PRIM (z,a,b,c);
+END;
+
+/* 4 input or gate */
+DEF OR4 (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR4	:= OR_PRIM (z,a,b,c,d);
+END;
+
+/* 6 input or gate */
+DEF OR6 (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR6	:= OR_PRIM (z,a,b,c,d,e,f);
+END;
+
+/* 8 input or gate */
+DEF OR8 (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+#GRIDCOUNT	13
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR	:= OR_PRIM (z,a,b,c,d,e,f,g,h);
+END;
+
+/* 2 input exclusive nor gate */
+DEF EN (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+EN_1	:= XOR_PRIM (notz,a,b);
+EN_2	:= INV_PRIM (z,notz);
+END;
+DEF ENP (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+EN_1	:= XOR_PRIM (notz,a,b);
+EN_2	:= INV_PRIM (z,notz);
+END;
+
+/* 2 input exclusive or gate */
+DEF EO (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+EO	:= XOR_PRIM (z,a,b);
+END;
+DEF EOP (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+EOP	:= XOR_PRIM (z,a,b);
+END;
+
+/* 2 input non-inverting mux */
+DEF MX2 (z:OUT; a,b,BIT/s:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX2	:= MUX2_PRIM (z,a,b,s,zero);
+END;
+DEF MX2P (z:OUT; a,b,BIT/s:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX2	:= MUX2_PRIM (z,a,b,s,zero);
+END;
+
+/* 2 input non-inverting mux with active low enable */
+DEF MX2G (z:OUT; a,b,BIT/s,BIT/ena\:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+MX2G	:= MUX2_PRIM (z,a,b,s,ena\);
+END;
+
+/* 2 input inverting mux */
+DEF MXI2 (z:OUT; a,b,BIT/s:IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MXI2_1	:= MUX2_PRIM (notz,a,b,s,zero);
+MXI2_2	:= INV_PRIM (z,notz);
+END;
+DEF MXI2P (z:OUT; a,b,BIT/s:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MXI2_1	:= MUX2_PRIM (notz,a,b,s,zero);
+MXI2_2	:= INV_PRIM (z,notz);
+END;
+
+/* 4 to 1 non-inverting multiplexer */
+DEF MX4 (z:OUT; a[0..3], BIT/s[0..1] :IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX4	:= MUX4_PRIM (z, a[0..3], s[0..1], zero);
+END;
+DEF MX4P (z:OUT; a[0..3], BIT/s[0..1] :IN);
+BEGIN
+#GRIDCOUNT	15
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX4	:= MUX4_PRIM (z, a[0..3], s[0..1], zero);
+END;
+
+/* 4 to 1 non-inverting multiplexer with active low enable */
+DEF MX4G (z:OUT; a[0..3], BIT/s[0..1], BIT/ena\ :IN);
+BEGIN
+#GRIDCOUNT	18
+#GATECOUNT	8
+#MEGACOUNT	0
+#TYPEWIDE	1
+MX4G	:= MUX4_PRIM (z, a[0..3], s[0..1], ena\);
+END;
+
+/* 8 to 1 non-inverting multiplexer */
+DEF MX8 (z:OUT; a[0..7], BIT/s[0..2] :IN);
+BEGIN
+#GRIDCOUNT	33
+#GATECOUNT	15
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX8	:= MUX8_PRIM (z, a[0..7], s[0..2], zero);
+END;
+DEF MX8P (z:OUT; a[0..7], BIT/s[0..2] :IN);
+BEGIN
+#GRIDCOUNT	35
+#GATECOUNT	15
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+MX8P	:= MUX8_PRIM (z, a[0..7], s[0..2], zero);
+END;
+
+/* 8 to 1 non-inverting multiplexer with active low enable */
+DEF MX8G (z:OUT; a[0..7], BIT/s[0..2], BIT/ena\ :IN);
+BEGIN
+#GRIDCOUNT	38
+#GATECOUNT	17
+#MEGACOUNT	0
+#TYPEWIDE	1
+MX8G	:= MUX8_PRIM (z, a[0..7], s[0..2], ena\);
+END;
+
+/* Non inverting buffer drive 20 */
+DEF NIV (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	3
+#GATECOUNT	1
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIV	:= BUF_PRIM (z,a);
+END;
+
+/* Non inverting buffer drive 36 */
+DEF NIVM (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVM	:= BUF_PRIM (z,a);
+END;
+
+/* Non inverting buffer drive 64 */
+DEF NIVH (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVH	:= BUF_PRIM (z,a);
+END;
+
+/* Non inverting buffer drive 107 */
+DEF NIVU (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU	:= BUF_PRIM (z,a);
+END;
+
+/* Non inverting buffer using IO cell */
+DEF BNIV3 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU	:= BUF_PRIM (z,a);
+END;
+
+/* Non inverting buffer using IO cell */
+DEF IDRV16 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer drive 19 */
+DEF HDLY1A (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF HDLY1B (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	10
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF HDLY2B (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	13
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF HDLY3B (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF HDLY4B (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	19
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF HDLY5B (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	22
+#GATECOUNT	4
+#MEGACOUNT	0
+#TYPEWIDE	1
+HDLY1A	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF YDLY1P (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	10
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+YDL1P	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF YDLY2P (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	15
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+YDLY2P	:= BUF_PRIM (z,a);
+END;
+
+/* Delay buffer */
+DEF YDLY3P (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	28
+#GATECOUNT	17
+#MEGACOUNT	0
+#TYPEWIDE	1
+YDLY3P	:= BUF_PRIM (z,a);
+END;
+
+/**  Latches  **/
+
+/* Latch, low enable */
+DEF LDN1 (q,qbar:OUT; d,BIT/gn:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+G	:= INV_PRIM (g, gn);
+LDN1	:= LATCH_PRIM (q,qbar,d,g,one,one);
+END;
+
+/* Latch, low enable */
+DEF LDN1Q (q:OUT; d,BIT/gn:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+G	:= INV_PRIM (g, gn);
+LDN1Q	:= LATCH_PRIM (q,qbar,d,g,one,one);
+END;
+
+/* Latch, low enable witch clear direct */
+DEF LDN2 (q,qbar:OUT; d,BIT/gn,BIT/cd:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+G	:= INV_PRIM (g, gn);
+LDN2	:= LATCH_PRIM (q,qbar,d,g,one,cd);
+END;
+
+/* Latch, low enable witch clear direct */
+DEF LDN2Q (q:OUT; d,BIT/gn,BIT/cd:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+G	:= INV_PRIM (g, gn);
+LDN2Q	:= LATCH_PRIM (q,qbar,d,g,one,cd);
+END;
+
+/* Latch, high enable */
+DEF LDP1Q (q:OUT; d,BIT/g:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+LDP1Q	:= LATCH_PRIM (q,qbar,d,g,one,one);
+END;
+
+/* Latch, high enable */
+DEF LDP1 (q,qbar:OUT; d,BIT/g:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+LDP1	:= LATCH_PRIM (q,qbar,d,g,one,one);
+END;
+
+/* Latch, high enable, with reset */
+DEF LDP2 (q, qbar:OUT; d,BIT/g,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+LDP2	:= LATCH_PRIM (q,qbar,d,g,one,r);
+END;
+
+/* Latch, high enable, with reset */
+DEF LDP2Q (q:OUT; d,BIT/g,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+LDP2Q	:= LATCH_PRIM (q,qbar,d,g,one,r);
+END;
+
+/* D type flip-flop, positive clock */
+DEF FD1Q (q:OUT; d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	11
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1Q	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,one);
+END;
+DEF FD1QP (q:OUT; d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1Q	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,one);
+END;
+
+/* D type flip-flop, positive clock */
+DEF FD1 (q,qbar:OUT; d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,one);
+END;
+DEF FD1P (q,qbar:OUT; d,BIT/clk:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	7
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,one);
+END;
+
+/* D type flip-flop, positive clock, scan type */
+DEF FD1E (q,qbar:OUT; d,BIT/clk,ti,BIT/te:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1	:= FLIPFLOPS_PRIM (q,qbar,d,clk,one,one,ti,te);
+END;
+
+/* D type flip-flop with active low reset, positive clock */
+DEF FD2Q (q:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD2Q	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,r);
+END;
+DEF FD2QP (q:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	17
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD2QP	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,r);
+END;
+
+/* D type flip-flop with active low reset, positive clock */
+DEF FD2 (q,qbar:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	17
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD2	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,r);
+END;
+DEF FD2P (q,qbar:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+#GRIDCOUNT	18
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD2P	:= FLIPFLOP_PRIM (q,qbar,d,clk,one,r);
+END;
+
+/* D type flip-flop with active low reset, positive clock, scan 
+type */
+DEF FD2E (q,qbar:OUT; d,BIT/clk,BIT/r,ti,BIT/te:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD1	:= FLIPFLOPS_PRIM (q,qbar,d,clk,one,r,ti,te);
+END;
+
+/* D type flip-flop with active low clear + preset, pos. clock */
+DEF FD3 (q, qbar :OUT; d,BIT/clk,BIT/clr,BIT/pre:IN);
+BEGIN
+#GRIDCOUNT	21
+#GATECOUNT	12
+#MEGACOUNT	0
+#TYPEWIDE	1
+FD3	:= FLIPFLOP_PRIM (q,qbar,d,clk,pre,clr);
+END;
+
+/* D type flip-flop with active low clear + preset, pos. clock */
+DEF FD3Q (q:OUT; d,BIT/clk,BIT/clr,BIT/pre:IN);
+BEGIN
+#GRIDCOUNT	19
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+FD3Q	:= FLIPFLOP_PRIM (q,qbar,d,clk,pre,clr);
+END;
+
+/* D type flip-flop with active low preset, positive clock */
+DEF FD4Q (q:OUT; d,BIT/clk,BIT/p:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	8
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD4Q	:= FLIPFLOP_PRIM (q,qbar,d,clk,p,one);
+END;
+
+/* D type flip-flop with active low preset, positive clock */
+DEF FD4 (q,qbar:OUT; d,BIT/clk,BIT/p:IN);
+BEGIN
+#GRIDCOUNT	15
+#GATECOUNT	8
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD4	:= FLIPFLOP_PRIM (q,qbar,d,clk,p,one);
+END;
+
+/* D type flip-flop with active low preset, positive clock, scan 
+type */
+DEF FD4E (q,qbar:OUT; d,BIT/clk,BIT/p,ti,BIT/te:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	9
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+FD4E	:= FLIPFLOPS_PRIM (q,qbar,d,clk,p,one,ti,te);
+END;
+
+/* JK flip-flop */
+DEF     FJK1    (q,ql:OUT; j,k,cp:IN);
+BEGIN
+#GRIDCOUNT	16
+#GATECOUNT	10	/* ? */
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+A       := NAND_PRIM (a,j,ql);
+B       := OR_PRIM (b,k,ql);
+D       := NAND_PRIM (d,a,b);
+Q       := FLIPFLOP_PRIM (q,ql,d,cp,one,one);
+END;
+
+/* JK flip-flop with clear */
+DEF     FJK2    (q, ql :OUT; j, k, cp, cd:IN);
+BEGIN
+#GRIDCOUNT	18
+#GATECOUNT	11	/* ? */
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE1 (one);
+A       := NAND_PRIM (a,j,ql);
+B       := OR_PRIM (b,k,ql);
+D       := NAND_PRIM (d,a,b);
+Q       := FLIPFLOP_PRIM (q,ql,d,cp,one,cd);
+END;
+
+/* Tristate buffer high enable */
+DEF TS (z:TRI; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TS	:= TRISTATE_PRIM (z,a,e);
+END;
+
+/* Tristate buffer high enable, drive 35 */
+DEF TSM (z:TRI; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TS	:= TRISTATE_PRIM (z,a,e);
+END;
+
+/* Tristate buffer high enable, drive 46 */
+DEF TSH (z:TRI; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	10
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TS	:= TRISTATE_PRIM (z,a,e);
+END;
+
+/* Tristate buffer high enable, drive 80 */
+DEF TSU (z:TRI; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TS	:= TRISTATE_PRIM (z,a,e);
+END;
+
+/* Tristate buffer high enable - for tri-state outputs which are
+outputs only at the chip level (otherwise TS) */
+DEF TSO (z:OUT; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TS	:= TSOUTPUT_PRIM (z,a,e);
+END;
+
+/* Tristate inverting buffer high enable */
+DEF TSI (z:TRI; a,BIT/e:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+TSI_A	:= INV_PRIM (nota,a);
+TSI_B	:= TRISTATE_PRIM (z,nota,e);
+END;
+
+/* Half adder */
+DEF HA1 (s,BIT/co:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	8
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+HA1	:= ADDER_PRIM (s,co,a,b,zero);
+END;
+DEF HA1P (s,BIT/co:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	10
+#GATECOUNT	5
+#MEGACOUNT	0
+#TYPEWIDE	1
+Tie	:= TIE0 (zero);
+HA1	:= ADDER_PRIM (s,co,a,b,zero);
+END;
+
+/* Full adder */
+DEF FA1 (s,BIT/co:OUT; a,b,BIT/c:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	10
+#MEGACOUNT	0
+#TYPEWIDE	1
+FA1	:= ADDER_PRIM (s,co,a,b,c);
+END;
+
+/* Full adder */
+DEF FA1P (s,BIT/co:OUT; a,b,BIT/c:IN);
+BEGIN
+#GRIDCOUNT	14
+#GATECOUNT	10
+#MEGACOUNT	0
+#TYPEWIDE	1
+FA1	:= ADDER_PRIM (s,co,a,b,c);
+END;
+
+/* Full adder */
+DEF FA4R (BIT/s[0..3],BIT/co:OUT; ci, a[0], b[0], a[1], b[1], 
+	a[2], b[2], a[3], b[3]:IN);
+INT4/a,b,s:LOCAL;
+BEGIN
+#GRIDCOUNT	52
+#GATECOUNT	40
+#MEGACOUNT	0
+#TYPEWIDE	1
+A	:= JOIN (a, a[0..3]);
+B	:= JOIN (b, b[0..3]);
+FA1	:= ADDER_PRIM (s,co,a,b,ci);
+S[0-3]	:= JOIN (s[0-3], s{0-3});
+END;
+
+/* 4-bit carry select adder and propagate units
+*/
+DEF FA4CS (s[0..3], co\, co0\, co1\, g, p:OUT; cin, ci0n, ci1n, 
+	a[0], b[0], a[1], b[1], a[2], b[2], a[3], b[3] :IN);
+INT4/a,b,s:LOCAL;
+BEGIN
+#GRIDCOUNT	107
+#GATECOUNT	70
+#MEGACOUNT	0
+#TYPEWIDE	1
+Cit	:= OR_PRIM (cit, cin, ci1n);
+Ci	:= NAND_PRIM (ci, cit, ci0n);
+Co\	:= INV_PRIM (co\, ci);
+P[0-3]	:= XOR_PRIM (p[0-3], a[0-3], b[0-3]);
+G[0-3]	:= AND_PRIM (g[0-3], a[0-3], b[0-3]);
+Gt0	:= AND_PRIM (gt[0], g[0], p[1..3]);
+Gt1	:= AND_PRIM (gt[1], g[1], p[2..3]);
+Gt2	:= AND_PRIM (gt[2], g[2], p[3]);
+G	:= OR_PRIM (g, g[3], gt[0..2]);
+P	:= AND_PRIM (p, p[0..3]);
+Co0	:= INV_PRIM (co0\, g);
+P\	:= INV_PRIM (p\, p);
+Co1	:= AND_PRIM (co1\, co0\, p\);
+A	:= JOIN (a, a[0..3]);
+B	:= JOIN (b, b[0..3]);
+FA1	:= ADDER_PRIM (s,co,a,b,ci);
+S[0-3]	:= JOIN (s[0-3], s{0-3});
+Co	:= DUMMY (co);
+END;
+DEF CG4 (co0\, co1\, co2\, g, p :OUT; cin, g[0..3], p[0..3] :IN);
+BEGIN
+#GRIDCOUNT	43
+#GATECOUNT	22
+#MEGACOUNT	0
+#TYPEWIDE	1
+Cin\	:= INV_PRIM (cin\, cin);
+Co0t	:= AND_PRIM (co0t, p[0], cin\);
+Co0	:= NOR_PRIM (co0\, g[0], co0t);
+Co1t0	:= AND_PRIM (co1t[0], p[0..1], cin\);
+Co1t1	:= AND_PRIM (co1t[1], p[1], g[0]);
+Co1	:= NOR_PRIM (co1\, g[1], co1t[0..1]);
+Co2t0	:= AND_PRIM (co2t[0], p[0..2], cin\);
+Co2t1	:= AND_PRIM (co2t[1], p[1..2], g[0]);
+Co2t2	:= AND_PRIM (co2t[2], p[2], g[1]);
+Co2	:= NOR_PRIM (co2\, g[2], co2t[0..2]);
+P	:= AND_PRIM (p, p[0..3]);
+Gt0	:= AND_PRIM (gt[0], g[0], p[1..3]);
+Gt1	:= AND_PRIM (gt[1], g[1], p[2..3]);
+Gt2	:= AND_PRIM (gt[2], g[2], p[3]);
+G	:= OR_PRIM (g, g[3], gt[0..2]);
+END;
+
+/**  Mega-functions  *********************************************/
+
+/* Sixteen bit adder/subtractor */
+
+DEF FAS16 (f[0..15], cout\ :OUT; as, cin, a[0], b[0], a[1], b[1],
+a[2], b[2], a[3], b[3], a[4], b[4], a[5], b[5], a[6], b[6], a[7], 
+b[7], a[8], b[8], a[9], b[9], a[10], b[10], a[11], b[11], a[12], 
+b[12], a[13], b[13], a[14], b[14], a[15], b[15] :IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	330
+#TYPEWIDE	0
+As\		:= IVM (as\, as);
+Binv[0-15]	:= EO (bt[0-15], b[0-15], as\);
+Cint		:= IV (cint, cin);
+F[0]		:= FA1 (f[0], cry[0], a[0], bt[0], cint);
+F[1-15]		:= FA1 (f[1-15], cry[1-15], a[1-15], bt[1-15], cry[0-14]);
+Cout\		:= IV (cout\, cry[15]);
+END;
+
+/* 32-bit fast full adder */
+/* WARNING - co31 and co24 functions not implemented!!! */
+DEF FA32 (s[0..31], BIT/co32, BIT/co31, BIT/co24, :OUT; 
+	BIT/c, a[0], b[0], a[1], b[1], a[2], b[2], a[3], b[3], 
+	a[4], b[4], a[5], b[5], a[6], b[6], a[7], b[7], a[8], 
+	b[8], a[9], b[9], a[10], b[10], a[11], b[11], a[12], 
+	b[12], a[13], b[13], a[14], b[14], a[15], b[15], a[16], 
+	b[16], a[17], b[17], a[18], b[18], a[19], b[19], a[20], 
+	b[20], a[21], b[21], a[22], b[22], a[23], b[23], a[24], 
+	b[24], a[25], b[25], a[26], b[26], a[27], b[27], a[28], 
+	b[28], a[29], b[29], a[30], b[30], a[31], b[31] :IN);
+INT32/	a, b, s :LOCAL;
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	698
+#TYPEWIDE	0
+Zero1	:= TIE0 (co24);
+Zero2	:= TIE0 (co31);
+A	:= JOIN (a, a[0..31]);
+B	:= JOIN (b, b[0..31]);
+FA32	:= ADDER_PRIM (s,co32,a,b,c);
+S[0-31]	:= JOIN (s[0-31], s{0-31});
+END;
+
+/* 32-bit 3-operands fast full adder 
+WARNING - carry out terms not implemented correctly */
+DEF FA332 (
+	s[0..31], BIT/co[0..1] :OUT; 
+	BIT/ci[0..1], a[0], b[0], c[0], a[1], b[1], c[1], a[2], 
+	b[2], c[2], a[3], b[3], c[3], a[4], b[4], c[4], a[5], 
+	b[5], c[5], a[6], b[6], c[6], a[7], b[7], c[7], a[8], 
+	b[8], c[8], a[9], b[9], c[9], a[10], b[10], c[10], a[11], 
+	b[11], c[11], a[12], b[12], c[12], a[13], b[13], c[13], 
+	a[14], b[14], c[14], a[15], b[15], c[15], a[16], b[16], 
+	c[16], a[17], b[17], c[17], a[18], b[18], c[18], a[19], 
+	b[19], c[19], a[20], b[20], c[20], a[21], b[21], c[21], 
+	a[22], b[22], c[22], a[23], b[23], c[23], a[24], b[24], 
+	c[24], a[25], b[25], c[25], a[26], b[26], c[26], a[27], 
+	b[27], c[27], a[28], b[28], c[28], a[29], b[29], c[29], 
+	a[30], b[30], c[30], a[31], b[31] c[31] :IN);
+INT32/	a, b, c, s, st :LOCAL;
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	850
+#TYPEWIDE	0
+A	:= JOIN (a, a[0..31]);
+B	:= JOIN (b, b[0..31]);
+C	:= JOIN (c, c[0..31]);
+FA332_1	:= ADDER_PRIM (st, co[0], a, b,  ci[0]);
+FA332_2	:= ADDER_PRIM (s,  co[1], c, st, ci[1]);
+S[0-31]	:= JOIN (s[0-31], s{0-31});
+END;
+
+/* 16x16 high-speed multiplier
+WARNING - IRND function is not implemented */
+
+DEF MP16 (ip[0..31] :OUT; 
+    ix[0..15], iy[0..15], BIT/ixm, BIT/iym, BIT/ifa, BIT/irnd :IN);
+INT16/	ix, iy
+INT32/	ip
+:LOCAL;
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	4060
+#TYPEWIDE	0
+Ix	:= JOIN (ix, ix[0..15]);
+Iy	:= JOIN (iy, iy[0..15]);
+MP16	:= MULT_PRIM (ip, ix, iy, ixm, iym);
+Unused0	:= DUMMY (ifa);
+Unused1	:= DUMMY (irnd);
+Ip[0-31] := JOIN (ip[0-31], ip{0-31});
+END;
+
+/* 2-bit expandable magnitude comparator */
+
+DEF MAG2 (BIT/gto, BIT/eqo, BIT/lto :OUT; 
+	BIT/gti, BIT/eqi, BIT/lti, BIT/a[1], BIT/b[1], BIT/a[0], 
+	BIT/b[0] :IN);
+INT2/	a,b :LOCAL;
+BEGIN
+#GRIDCOUNT	42
+#GATECOUNT	22
+#MEGACOUNT	0
+#TYPEWIDE	0
+A	:= JOIN (a, a[0..1]);
+B	:= JOIN (b, b[0..1]);
+MAG2	:= MAG_PRIM (gto, eqo, lto, gti, eqi, lti, a, b);
+END;
+
+/* 4-bit expandable magnitude comparator */
+
+DEF MAG4 (BIT/gto, BIT/eqo, BIT/lto :OUT; 
+	BIT/gti, BIT/eqi, BIT/lti, BIT/a[3], BIT/b[3], BIT/a[2], 
+	BIT/b[2], BIT/a[1], BIT/b[1], BIT/a[0], BIT/b[0] :IN);
+INT4/	a,b :LOCAL;
+BEGIN
+#GRIDCOUNT	84
+#GATECOUNT	44
+#MEGACOUNT	0
+#TYPEWIDE	0
+A	:= JOIN (a, a[0..3]);
+B	:= JOIN (b, b[0..3]);
+MAG4	:= MAG_PRIM (gto, eqo, lto, gti, eqi, lti, a, b);
+END;
+
+/* 4-bit equality comparator */
+
+DEF CMP4 (BIT/equal :OUT; a[0], b[0], a[1], b[1], a[2], b[2], 
+	a[3], b[3] :IN);
+INT4/	a,b :LOCAL;
+BEGIN
+#GRIDCOUNT	27
+#GATECOUNT	44
+#MEGACOUNT	0
+#TYPEWIDE	0
+Zero	:= TIE0 (zero);
+One	:= TIE1 (one);
+A	:= JOIN (a, a[0..3]);
+B	:= JOIN (b, b[0..3]);
+CMP4	:= MAG_PRIM (greater, equal, less, zero, one, zero, a, b);
+END;
+
+/* 8-bit equality comparator for integers */
+
+DEF CMP8 (BIT/equal :OUT;  a[0], b[0], a[1], b[1], a[2], b[2], 
+	a[3], b[3], a[4], b[4], a[5], b[5], a[6], b[6], a[7], 
+	b[7] :IN);
+INT8/	a,b :LOCAL;
+BEGIN
+#GRIDCOUNT	53
+#GATECOUNT	90
+#MEGACOUNT	0
+#TYPEWIDE	0
+Zero	:= TIE0 (zero);
+One	:= TIE1 (one);
+A	:= JOIN (a, a[0..7]);
+B	:= JOIN (b, b[0..7]);
+CMP8	:= MAG_PRIM (greater, equal, less, zero, one, zero, a, b);
+END;
+
+/* 32-bit barrel shifter */
+
+DEF BRL32 (z[0..31] :OUT; 
+	BIT/mux[0..1], sft[0..4], BIT/flin, d[0..31] :IN);
+INT5/	sft
+INT32/	d,z :LOCAL;
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	1148
+#TYPEWIDE	0
+Sft	:= JOIN (sft, sft[0..4]);
+D	:= JOIN (d, d[0..31]);
+BRL32	:= BRL_PRIM (z, mux[0..1], sft, flin, d);
+Z[0-31]	:= JOIN (z[0-31], z{0-31});
+END;
+
+DEF AB8616A (INT16/da:BI; BIT/ce,BIT/wel,INT9/a:IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      2220
+#TYPEWIDE       0
+RAMA    := RAMB_PRIM (da, da, ce, wel, a);
+END;
+
+DEF AB8016A (INT16/d:BI; BIT/ce,BIT/rw,INT8/a:IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      1720
+#TYPEWIDE       0
+RAMA    := RAMB_PRIM (d, d, ce, rw, a);
+END;
+
+DEF AB8016B (INT16/d:BI; BIT/ce,BIT/rw,INT8/a:IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      1720
+#TYPEWIDE       0
+RAMA    := RAMB_PRIM (d, d, ce, rw, a);
+END;
+
+DEF RA8008A (INT8/d:OUT; BIT/csl,INT8/a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 230
+#TYPEWIDE 0
+D :=    ROMA_PRIM (d,csl,a);
+END;
+
+DEF RA8008B (INT8/d:OUT; BIT/csl,INT8/a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 230
+#TYPEWIDE 0
+D :=    ROMA_PRIM (d,csl,a);
+END;
+
+DEF RA8008C (INT8/d:OUT; BIT/csl,INT8/a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 230
+#TYPEWIDE 0
+D :=    ROMA_PRIM (d,csl,a);
+END;
+
+/* Synchronous single port ROM, 64 x 32 */
+DEF RA6032A (INT32/data :BUS; BIT/ce, INT6/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      440
+#TYPEWIDE       0
+ROMA    := ROMA_PRIM (data, ce, address);
+END;
+
+/* Synchronous single port ROM, 512 x 32 */
+DEF RA9032A (INT32/data :BUS; BIT/ce, INT9/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      800
+#TYPEWIDE       0
+ROMA    := ROMA_PRIM (data, ce, address);
+END;
+
+/* Synchronous single port ROM, 1K x 16 */
+DEF RAA016A (INT16/data :BUS; BIT/ce, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      800
+#TYPEWIDE       0
+ROMA    := ROMA_PRIM (data, ce, address);
+END;
+DEF RAA016B (INT16/data :BUS; BIT/ce, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      800
+#TYPEWIDE       0
+ROMA    := ROMA_PRIM (data, ce, address);
+END;
+
+/* Synchronous single port ROM, 1K x 32 */
+DEF RAA032A (INT32/data :BUS; BIT/ce, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      1600
+#TYPEWIDE       0
+ROMA    := ROMA_PRIM (data, ce, address);
+END;
+
+DEF MP1010A (INT20/z:OUT; INT10/a, INT10/b:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 890
+#TYPEWIDE 0
+Gnd :=  TIE0 (gnd);             /* force unsigned */
+R :=    MULT_PRIM (z,a,b,gnd,gnd);
+END;
+
+DEF MP1010 (INT20/z:OUT; INT10/a, INT10/b:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 890
+#TYPEWIDE 0
+Gnd :=  TIE0 (gnd);             /* force unsigned */
+R :=    MULT_PRIM (z,a,b,gnd,gnd);
+END;
+
+/* Synchronous dual port RAM, 64 x 32, separate data in and
+out on each */
+
+DEF AF6032A (INT32/adatao, INT32/bdatao :OUT;
+        BIT/ace, BIT/arw, INT6/aaddr, INT32/adatai,
+        BIT/bce, BIT/brw, INT6/baddr, INT32/bdatai :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      4050
+#TYPEWIDE       0
+RAMF    := RAMF_PRIM (adatao, bdatao, ace, arw, aaddr, adatai,
+                bce, brw, baddr, bdatai);
+END;
+
+/* Synchronous single port RAM, 1024 x 16, bi-directional data
+port */
+ 
+DEF ABA016A (INT16/data :BUS; BIT/ce, BIT/rw, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      5400
+#TYPEWIDE       0
+RAMB    := RAMB_PRIM (data, data, ce, rw, address);
+END;
+DEF ABA016B (INT16/data :BUS; BIT/ce, BIT/rw, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      5400
+#TYPEWIDE       0
+RAMB    := RAMB_PRIM (data, data, ce, rw, address);
+END;
+
+/* Synchronous single port RAM, 1024 x 32, bi-directional data
+port */
+
+DEF ABA032A (INT32/data :BUS; BIT/ce, BIT/rw, INT10/address :IN);
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      10800
+#TYPEWIDE       0
+RAMB    := RAMB_PRIM (data, data, ce, rw, address);
+END;
+
+ 
+/**  Composite gates  *********************************************
+WARNING - these may only be used as bit wide as locals take up bit
+type by default.  If int wide versions are necessary then there
+will have to be primitives for them.
+*/
+
+/* 2-input AND into 2-input OR, drive 20 */
+DEF AOR1 (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+AOR1_A	:= AND_PRIM (d,a,b);
+AOR1_O	:= OR_PRIM  (z,c,d);
+END;
+DEF AOR1P (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+AOR1_A	:= AND_PRIM (d,a,b);
+AOR1_O	:= OR_PRIM  (z,c,d);
+END;
+
+/* 2-input OR into 2-input AND, drive 20 */
+DEF OAN1 (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+OAN1_O	:= OR_PRIM  (d,a,b);
+OAN1_A	:= AND_PRIM (z,c,d);
+END;
+DEF OAN1P (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+OAN1P_O	:= OR_PRIM  (d,a,b);
+OAN1P_A	:= AND_PRIM (z,c,d);
+END;
+
+/* 2-input OR into 2-input NAND, drive 11 */
+DEF OND1 (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+OND1_O	:= OR_PRIM  (d,a,b);
+OND1_A	:= NAND_PRIM (z,c,d);
+END;
+
+
+/* 2-input AND into 2-input NOR */
+DEF ANR1 (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	4
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+ANR1_A	:= AND_PRIM (d,a,b);
+ANR1_O	:= NOR_PRIM  (z,c,d);
+END;
+DEF ANR1P (BIT/z :OUT; BIT/a,BIT/b,BIT/c :IN);
+BEGIN
+#GRIDCOUNT	7
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+ANR1P_A	:= AND_PRIM (d,a,b);
+ANR1P_O	:= NOR_PRIM  (z,c,d);
+END;
+
+/* 2-wide 2-input AND into 2-input OR, drive 20 */
+DEF AOR2 (BIT/z :OUT; BIT/a,BIT/b,BIT/c,BIT/d :IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Q1	:= AND_PRIM (q1,a,b);
+Q2	:= AND_PRIM (q2,c,d);
+Z	:= OR_PRIM (z,q1,q2);
+END;
+
+/* 2-wide 2-input AND into 2-input NOR, drive 11 */
+DEF ANR2 (BIT/z :OUT; BIT/a,BIT/b,BIT/c,BIT/d :IN);
+BEGIN
+#GRIDCOUNT	5
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Q1	:= AND_PRIM (q1,a,b);
+Q2	:= AND_PRIM (q2,c,d);
+Z	:= NOR_PRIM (z,q1,q2);
+END;
+DEF ANR2P (BIT/z :OUT; BIT/a,BIT/b,BIT/c,BIT/d :IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Q1	:= AND_PRIM (q1,a,b);
+Q2	:= AND_PRIM (q2,c,d);
+Z	:= NOR_PRIM (z,q1,q2);
+END;
+
+/* RS-latch with NAND, reset dominant */
+
+DEF LSRA (BIT/q :OUT; BIT/rn, BIT/sn :IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Q1	:= ND2 (q1,rn,q2);
+Q2	:= ND2 (q2,sn,q1);
+Q	:= IV  (q,q1);
+END;
+
+/* RS-latch with NOR, set dominant */
+
+DEF LSRB (BIT/q :OUT; BIT/r, BIT/s :IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+Q1	:= NR2 (q1,r,q2);
+Q2	:= NR2 (q2,s,q1);
+Q	:= IV  (q,q2);
+END;
+
+
+/* Tie off generators */
+DEF TIE1 (one :OUT);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+TIE1	:= TIE1_PRIM (one);
+END;
+
+DEF TIE0 (zero :OUT);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+TIE0	:= TIE0_PRIM (zero);
+END;
+
+DEF DUMMY (a :IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+DUMMY	:= DUMMY_PRIM (a);
+END;
+
+DEF DELAY (q :OUT; a :IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+DELAY	:= DELAY_PRIM (q,a);
+END;
+
+DEF TRACE (q :OUT; a :IN);
+BEGIN
+#GRIDCOUNT	0
+#GATECOUNT	0
+#MEGACOUNT	0
+TRACE	:= TRACE_PRIM (q,a);
+END;
+
+/* 4 to 16 decoder, active low outputs, 2 active low enables */
+DEF D416G2L (BIT/y[0..15]:OUT; BIT/a,BIT/b,BIT/c,BIT/d,
+		BIT/gn[0..1]:IN);
+BEGIN
+#GRIDCOUNT	96
+#GATECOUNT	45	/* estimate */
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+D\	:= IV (d\, d);
+Gate	:= NR2 (gate, gn[0..1]);
+Yt0	:= NR4 (yt[0],  a , b , c , d);
+Yt1	:= NR4 (yt[1],  a\, b , c , d);
+Yt2	:= NR4 (yt[2],  a , b\, c , d);
+Yt3	:= NR4 (yt[3],  a\, b\, c , d);
+Yt4	:= NR4 (yt[4],  a , b , c\, d);
+Yt5	:= NR4 (yt[5],  a\, b , c\, d);
+Yt6	:= NR4 (yt[6],  a , b\, c\, d);
+Yt7	:= NR4 (yt[7],  a\, b\, c\, d);
+Yt8	:= NR4 (yt[8],  a , b , c , d\);
+Yt9	:= NR4 (yt[9],  a\, b , c , d\);
+Yt10	:= NR4 (yt[10], a , b\, c , d\);
+Yt11	:= NR4 (yt[11], a\, b\, c , d\);
+Yt12	:= NR4 (yt[12], a , b , c\, d\);
+Yt13	:= NR4 (yt[13], a\, b , c\, d\);
+Yt14	:= NR4 (yt[14], a , b\, c\, d\);
+Yt15	:= NR4 (yt[15], a\, b\, c\, d\);
+Y[0-15]	:= ND2 (y[0-15], yt[0-15], gate);
+END;
+
+/* 4 to 16 decoder, active high outputs, active low enable */
+DEF D416GH (BIT/y[0..15]:OUT; BIT/a,BIT/b,BIT/c,BIT/d,
+		BIT/gn:IN);
+BEGIN
+#GRIDCOUNT	120
+#GATECOUNT	55	/* estimate */
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+D\	:= IV (d\, d);
+Gate	:= IV (gate, gn);
+Yt0	:= NR4 (yt[0],  a , b , c , d);
+Yt1	:= NR4 (yt[1],  a\, b , c , d);
+Yt2	:= NR4 (yt[2],  a , b\, c , d);
+Yt3	:= NR4 (yt[3],  a\, b\, c , d);
+Yt4	:= NR4 (yt[4],  a , b , c\, d);
+Yt5	:= NR4 (yt[5],  a\, b , c\, d);
+Yt6	:= NR4 (yt[6],  a , b\, c\, d);
+Yt7	:= NR4 (yt[7],  a\, b\, c\, d);
+Yt8	:= NR4 (yt[8],  a , b , c , d\);
+Yt9	:= NR4 (yt[9],  a\, b , c , d\);
+Yt10	:= NR4 (yt[10], a , b\, c , d\);
+Yt11	:= NR4 (yt[11], a\, b\, c , d\);
+Yt12	:= NR4 (yt[12], a , b , c\, d\);
+Yt13	:= NR4 (yt[13], a\, b , c\, d\);
+Yt14	:= NR4 (yt[14], a , b\, c\, d\);
+Yt15	:= NR4 (yt[15], a\, b\, c\, d\);
+Y[0-15]	:= AN2 (y[0-15], yt[0-15], gate);
+END;
+
+/* 3 to 8 decoder, active low outputs */
+DEF D38L (BIT/y[0..7]:OUT; BIT/a,BIT/b,BIT/c:IN);
+BEGIN
+#GRIDCOUNT      34
+#GATECOUNT      16
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+Y0	:= ND3 (y[0], a\,b\,c\);
+Y1	:= ND3 (y[1], a ,b\,c\);
+Y2	:= ND3 (y[2], a\,b ,c\);
+Y3	:= ND3 (y[3], a ,b ,c\);
+Y4	:= ND3 (y[4], a\,b\,c);
+Y5	:= ND3 (y[5], a ,b\,c);
+Y6	:= ND3 (y[6], a\,b ,c);
+Y7	:= ND3 (y[7], a ,b ,c);
+END;
+
+/* 3 to 8 decoder, active low outputs, active high enable */
+DEF D38GL (BIT/y[0..7]:OUT; BIT/a,BIT/b,BIT/c, BIT/g:IN);
+BEGIN
+#GRIDCOUNT      42
+#GATECOUNT      20
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+Y0	:= ND4 (y[0], a\,b\,c\, g);
+Y1	:= ND4 (y[1], a ,b\,c\, g);
+Y2	:= ND4 (y[2], a\,b ,c\, g);
+Y3	:= ND4 (y[3], a ,b ,c\, g);
+Y4	:= ND4 (y[4], a\,b\,c, g);
+Y5	:= ND4 (y[5], a ,b\,c, g);
+Y6	:= ND4 (y[6], a\,b ,c, g);
+Y7	:= ND4 (y[7], a ,b ,c, g);
+END;
+
+/* 3 to 8 decoder, active high outputs */
+DEF D38H (BIT/y[0..7]:OUT; BIT/a,BIT/b,BIT/c:IN);
+BEGIN
+#GRIDCOUNT      34
+#GATECOUNT      16
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+Y0	:= AN3 (y[0], a\,b\,c\);
+Y1	:= AN3 (y[1], a ,b\,c\);
+Y2	:= AN3 (y[2], a\,b ,c\);
+Y3	:= AN3 (y[3], a ,b ,c\);
+Y4	:= AN3 (y[4], a\,b\,c);
+Y5	:= AN3 (y[5], a ,b\,c);
+Y6	:= AN3 (y[6], a\,b ,c);
+Y7	:= AN3 (y[7], a ,b ,c);
+END;
+
+/* 3 to 8 decoder, active high outputs, active low enable */
+DEF D38GH (BIT/y[0..7]:OUT; BIT/a,BIT/b,BIT/c,BIT/g:IN);
+BEGIN
+#GRIDCOUNT      42
+#GATECOUNT      20
+#MEGACOUNT      0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+C\	:= IV (c\, c);
+Y0	:= NR4 (y[0], a ,b ,c ,g);
+Y1	:= NR4 (y[1], a\,b ,c ,g);
+Y2	:= NR4 (y[2], a ,b\,c ,g);
+Y3	:= NR4 (y[3], a\,b\,c ,g);
+Y4	:= NR4 (y[4], a ,b ,c\,g);
+Y5	:= NR4 (y[5], a\,b ,c\,g);
+Y6	:= NR4 (y[6], a ,b\,c\,g);
+Y7	:= NR4 (y[7], a\,b\,c\,g);
+END;
+
+/* 2 to 4 decoder, active high outputs */
+DEF D24H (BIT/y[0..3]:OUT; BIT/a,BIT/b:IN);
+BEGIN
+#GRIDCOUNT      11
+#GATECOUNT      5
+#MEGACOUNT      0
+#TYPEWIDE       0
+A\	:= IV (a\, a);
+B\	:= IV (b\, b);
+Y0	:= AN2 (y[0], a\,b\);
+Y1	:= AN2 (y[1], a ,b\);
+Y2	:= AN2 (y[2], a\,b);
+Y3	:= AN2 (y[3], a ,b);
+END;
+
+
+/* Pads
+   ----
+*/
+
+/* bidirectional output buffer with TTL input */
+DEF	BD2T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* bidirectional output buffer with TTL input */
+DEF	BD4T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* bidirectional output buffer with TTL input and slew rate limit */
+DEF	BD4TR	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* bidirectional output buffer with TTL input */
+DEF	BD8T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* bidirectional output buffer with TTL input */
+DEF	BD16T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* tri-state output buffer */
+DEF	BT2	(BIT/x:OUT; o,en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TSO (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* tri-state output buffer */
+DEF	BT4	(BIT/x:OUT; o,en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TSO (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* tri-state output buffer with slew rate limit */
+DEF	BT4R	(BIT/x:OUT; o,en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TSO (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* tri-state output buffer */
+DEF	BT8	(BIT/x:OUT; o,en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TSO (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* tri-state output buffer with slew rate limit */
+DEF	BT8R	(BIT/x:OUT; o,en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+X	:=	TSO (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+DEF	BD12T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD4TH	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD8TH	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD16TH	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD24T	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD24TH	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* bidirectional output buffer with TTL input */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+
+END;
+
+DEF	BD8TU	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* TOSHIBA bidirectional output buffer with TTL input and pullup */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+/* Pup	:=	PUP_PRIM (x,x); */
+
+END;
+
+DEF	BD8THU	(BIT/x:BUS; i,po:OUT; o,en,tn,pi:IN);
+
+/* TOSHIBA bidirectional output buffer with TTL input and pullup */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+X	:=	TS (x,o,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+/* Pup	:=	PUP_PRIM (x,x); */
+
+END;
+
+DEF	B24	(z:OUT; o:IN);
+
+/* TOSHIBA output buffer */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Z	:=	NIV (z,o);
+
+END;
+
+DEF	B24H	(z:OUT; o:IN);
+
+/* TOSHIBA output buffer */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Z	:=	NIV (z,o);
+
+END;
+
+DEF	B12	(z:OUT; o:IN);
+
+/* TOSHIBA output buffer */
+
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+
+Z	:=	NIV (z,o);
+
+END;
+
+/* TOSHIBA output buffer */
+DEF	B2	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer */
+DEF	B4	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer with slew rate control */
+DEF	B4R	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer */
+DEF	B4H	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer */
+DEF	B8	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer */
+DEF	B16	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer with slew rate control */
+DEF	B8R	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer with slew rate control */
+DEF	B16R	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer with slew rate control */
+DEF	B24R	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA output buffer */
+DEF	B8H	(z:OUT; o:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	NIV (z,o);
+END;
+
+/* TOSHIBA CMOS level input buffer */
+DEF	IBUF	(i,po:OUT; x,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* TOSHIBA CMOS level input buffer with pull-down */
+DEF	IBUFD	(i,po:OUT; x,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* TOSHIBA TTL level input buffer */
+DEF	TLCHT	(i,po:OUT; x,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* TOSHIBA CMOS level Schmitt trigger input buffer */
+DEF	SMTC	(i,po:OUT; x,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* TOSHIBA TTL level Schmitt trigger input buffer */
+DEF	SMTT	(i,po:OUT; x,pi:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+I	:=	NIV (i,x);
+PO	:=	ND2 (po,pi,i);
+END;
+
+/* TOSHIBA open drain output buffer */
+DEF	OT4	(x:OUT; en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+G	:=	TIE0 (g);
+X	:=	TSO (x,g,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* TOSHIBA open drain output buffer */
+DEF	OT8	(x:OUT; en,tn:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+G	:=	TIE0 (g);
+X	:=	TSO (x,g,e);
+Enl	:=	IV (enl,en);
+E	:=	AN2 (e,enl,tn);
+END;
+
+/* TOSHIBA crystal oscillator */
+DEF	OSC4C	(z,zi:OUT; a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z	:=	IV (z,a);
+Zi	:=	NIV (zi,z);
+END;
+

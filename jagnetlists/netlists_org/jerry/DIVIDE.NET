@@ -1,0 +1,263 @@
+/******************************************************************
+divide.net
+17/4/91
+
+Unsigned Integer Divide Unit
+----------------------------
+This module forms an unsigned integer divide unit for the graphics
+processor.  It performs a non-restoring division algorithm, but
+generates two bits per tick by asynchronously cascading two
+stages of the calculation.
+
+Non restoring division involves:
+
+dn 32-bit dividend
+dr 32-bit divisor
+qu 32-bit quotient
+wk 32-bit working value (initially 0)
+
+the algorithm is:
+
+shift wk left 1, shifting in top bit of dn
+shift dn left 1
+subtract dr from wk
+if the result is positive left shift 1 into the qu else 0
+then loop 32 times
+	shift wk left 1, shifting in top bit of dn
+	shift dn left 1
+	if the previous result was negative then 
+		add dr to wk
+	else	subtract dr from wk
+	if the result is positive left shift 1 into the qu else 0
+
+The additions / subtractions actually have to be performed at 33
+bits of precision to correctly determine the sign, as the arguments
+are 32-bit unsigned values.
+
+10/3/92
+
+To allow division of two 16.16 bit numbers, a new input div_offset
+shifts the initial dividend left by 16 bits.  This will produce the
+correct result.
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DIVIDE (
+INT32/	gpu_data	/* graphics processor data bus */
+	:BUS;
+	div_activei	/* divide in operation (look-ahead) */
+INT32/	quotient	/* divide result */
+	:OUT;
+	clk		/* co-processor clock */
+	div_start	/* load operands and start divide */
+	divwr		/* write to the divide control register */
+INT32/	dstd		/* destination operand data */
+INT32/	gpu_din		/* register load version of gpu_data */
+	remrd		/* read the remainder register */
+	reset\		/* system reset */
+INT32/	srcd		/* source operand data */
+	:IN);
+
+INT32/	divhit, dividend_hi thisneg32\
+INT32/	addq1, divein, dividend_lo, divisor
+:LOCAL;
+BEGIN
+
+Zero		:= TIE0 (zero);
+
+Div_start\	:= IV (div_start\, div_start);
+Div_startb[0-2]	:= NIVU (div_startb[0-2], div_start);
+
+/* Divide offset control bit */
+
+Div_offsett	:= FDSYNCR (div_offsett, gpu_din{0}, divwr, 
+                        clk,reset\);
+Div_offset	:= NIVH (div_offset, div_offsett);
+/* Generate the dividend and divisor terms for the first adder */
+
+Dend1		:= JOIN (dend1, dividend_lo{31}, 
+			dividend_hi{0..30});
+Divr1[0-5]	:= EOP (divr1[0-5], divisor{0-5}, last_neg\[0]);
+Divr1[6-11]	:= EOP (divr1[6-11], divisor{6-11}, last_neg\[1]);
+Divr1[12-17]	:= EOP (divr1[12-17], divisor{12-17}, 
+			last_neg\[2]);
+Divr1[18-23]	:= EOP (divr1[18-23], divisor{18-23}, 
+			last_neg\[3]);
+Divr1[24-29]	:= EOP (divr1[24-29], divisor{24-29}, 
+			last_neg\[4]);
+Divr1[30-31]	:= EOP (divr1[30-31], divisor{30-31}, 
+			last_neg\[5]);
+
+Divr1		:= JOIN (divr1, divr1[0..31]);
+
+Adder1		:= FA32_INT (addq1, carry1, unused[0..1], 
+			last_neg\[5], dend1, divr1);
+
+/* speeded up adder for addq1[32] (no carry) */
+Carry1\		:= IVS (carry1\, carry1);
+Divdend_hi\[31] := IV (dividend_hi\[31], dividend_hi{31});
+Addq132t0	:= ND3P (addq132t[0], dividend_hi{31}, carry1\, 
+			last_neg[5]);
+Addq132t1	:= ND3P (addq132t[1], dividend_hi\[31], carry1, 
+			last_neg[5]);
+Addq132t2	:= ND3P (addq132t[2], dividend_hi\[31], carry1\, 
+			last_neg\[5]);
+Addq132t3	:= ND3P (addq132t[3], dividend_hi{31}, carry1, 
+			last_neg\[5]);
+This_negt	:= ND4P (thisnegt, addq132t[0..3]);
+This_negtt	:= ND4P (thisnegtt, addq132t[0..3]);
+
+This_negb\[0-1]	:= IVU (thisnegb\[0-1], thisnegt);
+This_negb\[2]	:= IVU (thisnegb\[2], thisnegtt);
+This_negb\[3]	:= IVM (thisnegb\[3], thisnegtt);
+This_neg	:= IV (thisneg, thisnegb\[0]);
+Adder1_33	:= JOIN (addq1[32], thisneg);
+
+/* Generate the dividend and divisor terms for the second adder */
+
+Dend2		:= JOIN (dend2, dividend_lo{30}, addq1{0..30});
+This_neg32	:= JOIN (thisneg32\, thisnegb\[0], thisnegb\[0], 
+			thisnegb\[0], thisnegb\[0], thisnegb\[0], 
+			thisnegb\[0], thisnegb\[0], thisnegb\[0], 
+			thisnegb\[0], thisnegb\[1], thisnegb\[1], 
+			thisnegb\[1], thisnegb\[1], thisnegb\[1], 
+			thisnegb\[1], thisnegb\[1], thisnegb\[1], 
+			thisnegb\[1], thisnegb\[1], thisnegb\[2], 
+			thisnegb\[2], thisnegb\[2], thisnegb\[2], 
+			thisnegb\[2], thisnegb\[2], thisnegb\[2], 
+			thisnegb\[2], thisnegb\[2], thisnegb\[2], 
+			thisnegb\[2], thisnegb\[2], thisnegb\[2]);
+Divr2		:= EOP (divr2, divisor, thisneg32\);
+
+Adder2		:= FA32_INT (addq2, carry2, unused[3..4], 
+			thisnegb\[3], dend2, divr2);
+Adder2_33	:= FA1P (addq2[32], unused[2], addq1{31}, 
+			carry2, thisnegb\[3]);
+
+/* The last_neg flag is loaded with the sign of the second adder
+result when the divider is active, zero otherwise. 
+Full adder sum = 100 or 010 or 001 or 111
+Flatten lnegt logic
+	lnegt	= addq2[32] . div_active
+		=  addq1[31] . /carry2 . //thisneg . div_active
+		+ /addq1[31] .  carry2 . //thisneg . div_active
+		+ /addq1[31] . /carry2 .  /thisneg . div_active
+		+  addq1[31] .  carry2 .  /thisneg . div_active
+Lnegt		:= ND2P (lnegt\, addq2[32], div_activeb[0]);
+*/
+
+Addq1\[31]	:= IV (addq1\[31], addq1{31});
+Carry2\		:= IVS (carry2\, carry2);
+Lnegt[0]	:= ND4 (lnegt[0], addq1{31}, carry2\, thisneg, 
+			div_activeb[0]);
+Lnegt[1]	:= ND4 (lnegt[1], addq1\[31], carry2, thisneg, 
+			div_activeb[0]);
+Lnegt[2]	:= ND4 (lnegt[2], addq1\[31], carry2\, 
+			thisnegb\[3], div_activeb[0]);
+Lnegt[3]	:= ND4 (lnegt[3], addq1{31}, carry2, 
+			thisnegb\[3], div_activeb[0]);
+Lnegt0		:= AN4P (lnegt\, lnegt[0..3]);
+Last_neg\[0-2]	:= FD1QP (last_neg\[0-2], lnegt\, clk);
+Last_neg\[3-4]	:= FD1QP (last_neg\[3-4], lnegt\, clk);
+Last_neg\[5]	:= FD1P (last_neg\[5], last_neg[5], lnegt\, clk);
+
+/* The Dividend high part (working value)
+   --------------------------------------
+The high part of the dividend is loaded with the low 31 bits
+of the second adder result when the divider is active, holds its
+value otherwise, and is cleared by div_start.  This register is
+the remainder or if negative, the remainder minus the divisor,
+after division.  
+
+If div_offset is active, the low sixteen bits are loaded from the
+high sixteen bits of the dest data bus, on div_start.
+
+Low 16 bits can load
+existing dividend_hi contents		/div_active . /div_start
+addq2					 div_active . /div_start
+zero					/div_offset .  div_start
+dstd high 16 bits			 div_offset .  div_start
+
+*/
+
+Dhlsel[0]	:= MX2H (dhlsel[0], div_activeb[2], div_offset, 
+			div_startb[0]);
+Divhit[0-15]	:= MX4 (divhit[0-15], dividend_hi{0-15}, 
+			addq2{0-15}, zero, dstd{16-31}, dhlsel[0], 
+			div_startb[0]);
+Divhit[16-31]	:= MX2G (divhit[16-31], dividend_hi{16-31}, 
+			addq2{16-31}, div_activeb[2], 
+			div_startb[0]);
+Divhit		:= JOIN (divhit, divhit[0..31]);
+Dividend_hi	:= FD1QP (dividend_hi, divhit, clk);
+Remrd		:= TS (gpu_data, dividend_hi, remrd);
+
+/* The Dividend low part
+   ---------------------
+The dividend low part is held in a latch which either loads 
+from the dest data bus, or the destination data bus shifted up 
+sixteen, or shifts up two.  
+*/
+
+Diveif0		:= AN2H (diveif0, div_startb[1], div_offset);
+Divein[0-1]	:= MX2G (divein[0-1], zero, dstd{0-1}, 
+			div_startb[1], diveif0);
+Divein[2-15]	:= MX2G (divein[2-15], dividend_lo{0-13}, 
+			dstd{2-15}, div_startb[1], diveif0);
+Divein[16-31]	:= MX4 (divein[16-31], dividend_lo{14-29}, 
+			dstd{16-31},dividend_lo{14-29}, 
+			dstd{0-15}, div_startb[1], div_offset);
+Divein		:= JOIN (divein, divein[0..31]);
+Dividend_lo	:= FD1QP (dividend_lo, divein, clk);
+
+/* The Divisor
+   -----------
+The divisor is held in a latch which is loaded from the
+source data bus. */
+
+Divisor		:= FDSYNC32 (divisor, srcd, div_startb[2], clk);
+
+/* The Quotient
+   ------------
+The quotient register, shifts in the inverse of the two adder
+output signs whilst the divider is active.  */
+
+Quosh[1]	:= IV (quosh[1], addq1[32]);
+Quoti[0]	:= MXI2 (quoti[0], quotient\[0], addq2[32], 
+			div_activeb[0]);
+Quotient[0]	:= FD1 (quotient[0], quotient\[0], quoti[0], clk);
+Quotient[1]	:= FDSYNC (quotient[1], quosh[1], 
+			div_activeb[0], clk);
+Quotient[2-31]	:= FDSYNC (quotient[2-31], quotient[0-29], 
+			div_activeb[1], clk);
+Quotient	:= JOIN (quotient, quotient[0..31]);
+
+/* Divide control state machine
+   ----------------------------
+The signal div_start indicates that div_active should be active for
+the next sixteen ticks */
+
+Cnten		:= OR2 (cnten, div_activeb[1], div_startb[2]);
+
+/* the counter freezes on zero */
+
+Cntt0		:= IV (cntt[0], count[0]);
+Cntt1		:= HA1 (cntt[1], cntc[1], count[1], count[0]);
+Cntt2		:= HA1 (cntt[2], cntc[2], count[2], cntc[1]);
+Cntt3		:= EO (cntt[3], count[3], cntc[2]);
+
+Cnti[0-3]	:= AN2 (cnti[0-3], cntt[0-3], cnten);
+Count[0-3]	:= FD1Q (count[0-3], cnti[0-3], clk);
+
+Cnt_zero	:= OR4 (cnt_zero\, count[0..3]);
+
+Dat0		:= ND2 (dat[0], div_activeb[2], cnt_zero\);
+Dat1		:= ND2 (div_activei, div_start\, dat[0]);
+Div_active	:= FD2Q (div_active, div_activei, clk, reset\);
+Div_activeb[0-2] := NIVU (div_activeb[0-2], div_active);
+
+Unused[0-4]	:= DUMMY (unused[0-4]);
+
+END;

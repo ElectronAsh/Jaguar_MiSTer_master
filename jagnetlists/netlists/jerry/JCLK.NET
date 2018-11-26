@@ -1,0 +1,183 @@
+(*****************************************************************
+
+	jclk.net
+
+This is the clock generator in Jerry 
+
+******************************************************************)
+
+IMPORT	lego,
+	tosh;		(* Toshiba gate & pad definitions *)
+
+
+DEF JCLK (resetli,pclkosc,pclkin,vclkin,chrin,clk1w,clk2w,clk3w,test,
+	cfg[2..3],din[0..9],din[15],ndtest:IN;
+
+	cfgw,cfgen,clk,pclkout,pclkdiv,vclkdiv,cpuclk,
+	chrdiv,vclken,resetl,tlw:IO);
+
+	INT6/cd:IO;
+
+BEGIN
+
+(* buffer reset *)
+
+Rsetldb :=	NIVM (resetldb,resetli);
+Resetl :=	BNIV34 (resetl,resetldb);
+
+(*
+ optionally divide pclkosc by two to improve symmetry 
+*)
+
+Pclk2 :=	FD2 (pclk2,pclk2l,pclk2l,pclkosc,tresl);
+Pclkout :=	MX2 (pclkout,pclkosc,pclk2,divide);
+
+/* divide pclkout by two to get cpu clock */
+
+Cclk :=		FD2 (cpuclk,cpuclkl,cpuclkl,pclkout,tresl);
+
+(* buffer the clock *)
+
+Pclk :=		NIVH (pclk,pclkin);
+
+#if FLARE
+Intu :=         DUMMY (internal);
+Clk1 :=         NIV (clk1,pclk);
+Clk2 :=         NIVU (clk2,clk1);
+Clk :=          DELAY (clk,clk2);
+#endif
+#if TOSHIBA
+Pclkdel :=      HDLY5B (pclkdel,pclk);
+Pclkdela :=     NIV (pclkdela, pclkdel);
+Pclkdelb :=     NIV (pclkdelb, pclkdela);
+Pclkdel\ :=     ND2 (pclkdel\,pclkdelb,internal);
+Clk1 :=         AN2 (clk1,pclk,pclkdel\);
+Clk2 :=         NIVU (clk2,clk1);
+Clk :=          BNIV32 (clk,clk2);
+#endif
+#if VERILOG
+Clk1 :=         NIV (clk1,pclk);
+Clk2 :=         NIVU (clk2,clk1);
+Clk :=          BNIV310 (clk,clk2);
+#endif
+ 
+/* tlw is used to latch data into transparent latches prior to a clock edge */
+ 
+Tlw :=          IVU (tlw,clk1);
+ 
+
+(*
+The signals cfgw & cfgen are responsible for latching initial
+configuration data from output pins which are made into inputs during
+reset.
+The multiplexed address outputs are disabled during NAND tree testing
+
+	               _____________________________
+resetl	______________/
+	    ___     ___     ___     ___     ___
+clk	___/   \___/   \___/   \___/   \___/   \__
+	___________________
+cfgw	                   \_______________________
+	                            _______________
+cfgen	___________________________/
+
+*)
+
+
+Cfgwl :=	FD1Q (cfgwl,resetl,pclkosc);
+Cfgw :=		IV (cfgw,cfgwl);
+Cfgend :=	FD2Q (cfgend,cfgwl,pclkosc,resetl);
+Cfgeni :=	ND2 (cfgeni,cfgend,notndtest);
+Cfgen :=	IVH (cfgen,cfgeni);
+
+Notndtest :=	IV (notndtest,ndtest);
+
+
+(*
+ signal cfg[2] determines whether the oscilator is divided by two 
+*)
+
+Divide :=	LDP1Q (divide,cfg[2],cfgw);
+
+External :=     LDP1Q (external,cfg[3],cfgw);
+Internal :=     IV (internal,external);
+
+
+(*
+ divide the chroma clock by 1-64. the ratio is set to 64 on reset to 
+ minimise frequencies in PLL systems
+*)
+
+Chrddl[0-5] :=	LDP2Q (chrddl[0-5],dinl[0-5],clk3w,resetl);
+Chrdd[0-5] :=	IV (chrdd[0-5],chrddl[0-5]);
+Vclken :=	LDP2Q (vclken,din[15],clk3w,resetl);
+Cd[0] :=	DNCNT (cd[0],cdco[0],chrdd[0],chrin,vcc,cdco[5],tresl);
+Cd[1-5] := DNCNT (cd[1-5],cdco[1-5],chrdd[1-5],chrin,cdco[0-4],cdco[5],tresl);
+
+Cd :=		JOIN (cd,cd[0..5]);
+Cdu :=		DUMMY (cd);
+
+/* chrdiv should be symmetrical for use as chroma carrier */
+/* compare the count against the ratio/2 */
+
+Gt :=		AGTB (gt,cd[0..5],chrdd[1..5],gnd);
+Chrq :=		FD2Q (chrq,gt,chrin,tresl);
+Gnd :=		TIE0 (gnd);
+
+/* if the ratio is odd add an extra half cycle */
+
+Odd :=		AN2 (odd,chrddl[0],chrq);
+Extra :=	FD2Q (extra,odd,chrinl,tresl);
+Chrinl :=	IV (chrinl,chrin);
+
+Chrdiv :=	OR2 (chrdiv,chrq,extra);
+
+(* divide the system clock oscilator with 10 bit programmable divider *)
+
+Vcc :=	TIE1 (vcc);
+Cld[0]:=DNCNT (cld[0],cldco[0],cldd[0],pclkosc,vcc,clkdiv,tresl);
+Cld[1-9]:=DNCNT(cld[1-9],cldco[1-9],cldd[1-9],pclkosc,cldco[0-8],clkdiv,tresl);
+Cldu[0-9] := DUMMY (cld[0-9]);
+Clkdiv :=	NIVM (clkdiv,cldco[9]);
+Pclkdiv :=	FD1Q (pclkdiv,clkdiv,pclkosc);
+
+(* the ratio is initialised to two on reset (forcing a low clock rate) *)
+
+Dinl[0-5] :=	IV (dinl[0-5],din[0-5]);
+Clddl[0] :=	LDP2Q (clddl[0],dinl[0],clk1w,resetl);
+Cldd[0] :=	IV (cldd[0],clddl[0]);
+Cldd[1-9] :=	LDP2Q (cldd[1-9],din[1-9],clk1w,resetl);
+
+(* likewise divide the video clock with 10 bit programmable divider *)
+
+Vd[0] := DNCNT (vd[0],vdco[0],vdd[0],vclkin,vcc,vclkdivi,tresl);
+Vd[1-9] := DNCNT (vd[1-9],vdco[1-9],vdd[1-9],vclkin,vdco[0-8],vclkdivi,tresl);
+Vdu[0-9] := DUMMY (vd[0-9]);
+Vclkdivi :=	NIVM (vclkdivi,vdco[9]);
+Vclkdiv :=	FD1Q (vclkdiv,vclkdivi,vclkin);
+
+Vdd[0-9] :=	LDP2Q (vdd[0-9],din[0-9],clk2w,resetl);
+
+Testl :=	IV (testl,test);
+Tres :=		NR2 (tres,resetli,testl);
+Tresl :=	IVU (tresl,tres);
+
+END;
+
+DEF	AGTB (z:IO; a[0..5],b[0..5]:IN);
+
+(* true output if A > B *)
+
+BEGIN
+
+(* subtract A from B *)
+
+Al[0-5] :=	IV (al[0-5],a[0-5]);
+S[0] :=		FA1 (s[0],c[0],b[0],al[0],vcc);
+S[1-5] :=	FA1 (s[1-5],c[1-5],b[1-5],al[1-5],c[0-4]);
+Z :=		IV (z,c[5]);
+Vcc :=		TIE1 (vcc);
+Su[0-5] :=	DUMMY (s[0-5]);
+
+END;
+

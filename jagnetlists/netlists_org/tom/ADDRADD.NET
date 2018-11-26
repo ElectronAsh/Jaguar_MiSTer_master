@@ -1,0 +1,92 @@
+/******************************************************************
+addradd
+29/11/90
+
+Blitter Address Adder
+---------------------
+The blitter address adder is a pair of sixteen bit adders, one 
+each for X and Y.  The multiplexing of the input terms is 
+performed elsewhere, but this adder can also perform modulo 
+arithmetic to align X-addresses onto phrase boundaries. 
+
+modx[0..2] take values
+000	no mask
+001	mask bit 0
+010	mask bits 1-0
+..
+110  	mask bits 5-0
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ADDRADD (
+INT16/	addq_x
+INT16/	addq_y
+	:OUT;
+	a1fracld	/* propagate address adder carry */
+INT16/	adda_x
+INT16/	adda_y
+INT16/	addb_x
+INT16/	addb_y
+	clk[0]		/* co-processor clock */
+	modx[0..2]
+	suba_x
+	suba_y
+	:IN); 
+
+BEGIN
+
+Zero		:= TIE0 (zero);
+One		:= TIE1 (one);
+
+/* Perform the addition */
+
+Adder_x		:= FAS16_S (addqt_x[0..15], co_x\, one, ci_x\, 
+		adda_x{0}, addb_x{0}, adda_x{1}, addb_x{1}, 
+		adda_x{2}, addb_x{2}, adda_x{3}, addb_x{3}, 
+		adda_x{4}, addb_x{4}, adda_x{5}, addb_x{5}, 
+		adda_x{6}, addb_x{6}, adda_x{7}, addb_x{7}, 
+		adda_x{8}, addb_x{8}, adda_x{9}, addb_x{9}, 
+		adda_x{10}, addb_x{10}, adda_x{11}, addb_x{11}, 
+		adda_x{12}, addb_x{12}, adda_x{13}, addb_x{13}, 
+		adda_x{14}, addb_x{14}, adda_x{15}, addb_x{15});
+Adder_y		:= FAS16_S (addq_y[0..15], co_y\, one, ci_y\, 
+		adda_y{0}, addb_y{0}, adda_y{1}, addb_y{1}, 
+		adda_y{2}, addb_y{2}, adda_y{3}, addb_y{3}, 
+		adda_y{4}, addb_y{4}, adda_y{5}, addb_y{5}, 
+		adda_y{6}, addb_y{6}, adda_y{7}, addb_y{7}, 
+		adda_y{8}, addb_y{8}, adda_y{9}, addb_y{9}, 
+		adda_y{10}, addb_y{10}, adda_y{11}, addb_y{11}, 
+		adda_y{12}, addb_y{12}, adda_y{13}, addb_y{13}, 
+		adda_y{14}, addb_y{14}, adda_y{15}, addb_y{15});
+
+/* latch carry and propagate if required */
+
+Co_x		:= IV (co_x, co_x\);
+Cxt0		:= AN2 (cxt[0], co_x, a1fracld);
+Cxt1		:= FD1Q (cxt[1], cxt[0], clk[0]);
+Ci_x		:= EN (ci_x\, cxt[1], suba_x);
+
+Co_y		:= IV (co_y, co_y\);
+Cyt0		:= AN2 (cyt[0], co_y, a1fracld);
+Cyt1		:= FD1Q (cyt[1], cyt[0], clk[0]);
+Ci_y		:= EN (ci_y\, cyt[1], suba_y);
+
+/* Mask low bits of X to 0 if required */
+
+Masksel		:= D38H (unused[0], masksel[0..4], maskbit[5], 
+			unused[1], modx[0..2]);
+
+Maskbit[0-4]	:= OR2 (maskbit[0-4], masksel[0-4], maskbit[1-5]);
+
+Mask[0-5]	:= MX2 (addq_x[0-5], addqt_x[0-5], zero, 
+			maskbit[0-5]);
+
+Addq_x		:= JOIN (addq_x, addq_x[0..5], addqt_x[6..15]);
+Addq_y		:= JOIN (addq_y, addq_y[0..15]);
+
+Unused[0-1]	:= DUMMY (unused[0-1]);
+
+END;
+

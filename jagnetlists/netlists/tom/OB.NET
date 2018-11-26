@@ -1,0 +1,752 @@
+(*****************************************************************
+
+	ob.net
+
+This module controls the object processor
+
+******************************************************************)
+
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego,
+	duplo;
+
+
+DEF 	OB	(din[0..15],olp1w,olp2w, obfw,
+                ob0r, ob1r, ob2r, ob3r,
+		start, newdata[0..20],newheight[0..9],newrem[0..7],
+		obdready,offscreen, refack, obback,mack, clk,resetl,vcc,gnd,
+		vc[0..10],wbkdone,obdone,heightnz,d[0..63],
+		blback,grpback,wet,hcb[10]:IN;
+
+		scaled,obdlatch,mode1,mode2,mode4,mode8,
+		mode16,mode24,rmw,index[1..7],xld,reflected,transen,
+		hscale[0..7],dwidth[0..9],
+		obbreq,vscale[0..7],wbkstart,
+		grpintreq,obint,obld[0..2],startref,vgy,vey,vly:IO;
+
+		wd[0..63],a[0..23],w[0..3],rw,mreq,justify,dr[0..15]:BUS);
+
+(*
+
+pc0en enables the object processor program counter onto the main address bus
+pc1en enables the above address PLUS 8 onto the main address bus
+
+obldd[0] loads the first phrase of an object from the data bus
+when mack is next asserted
+
+obld[1] also loads the dma register from d[43..62]
+dmaen	enables the dma register onto the address bus
+
+*)
+(* GE *)
+INT24/ oba:LOCAL;
+BEGIN
+
+
+(*****************Objects******************)
+
+Type[0-2] :=	SLATCH (type[0-2],d[0-2],clk,oblatch[0]);
+Ypos[0-10] :=	SLATCH (ypos[0-10],d[3-13],clk,oblatch[0]);
+(* height in WBK *)
+Link[0-18] :=	SLATCH (link[0-18],d[24-42],clk,oblatch[0]);
+(* data address is a counter *)
+
+(* the first phrase can be read as four words *)
+
+Ob0rd[0-2] :=	TS (dr[0-2],type[0-2],ob0r);
+Ob0rd[3-13] :=	TS (dr[3-13],ypos[0-10],ob0r);
+Ob0rd[14-15] :=	TS (dr[14-15],newheight[0-1],ob0r);
+
+Ob1rd[0-7] :=	TS (dr[0-7],newheight[2-9],ob1r);
+Ob1rd[8-15] :=	TS (dr[8-15],link[0-7],ob1r);
+
+Ob2rd[0-10] :=	TS (dr[0-10],link[8-18],ob2r);
+Ob2rd[11-15] :=	TS (dr[11-15],data[0-4],ob2r);
+
+Ob3rd[0-15] :=	TS (dr[0-15],data[5-20],ob3r);
+
+(* the first phrase is enabled during write-back *)
+
+Obwbk0[0-2] :=	TS (wd[0-2],type[0-2],wbken[0]);
+Obwbk0[3-13] :=	TS (wd[3-13],ypos[0-10],wbken[0]);
+Obwbk0[14-23]:=	TS (wd[14-23],newheight[0-9],wbken[0]);
+Obwbk0[24-42]:=	TS (wd[24-42],link[0-18],wbken[0]);
+Obwbk0[43-63]:=	TS (wd[43-63],newdata[0-20],wbken[0]);
+
+(* hpos is a counter *)
+Depth[0-2] :=	SLATCH (depth[0-2],d[12-14],clk,oblatch[1]);
+Skip[0-2] :=	SLATCH (skip[0-2],d[15-17],clk,oblatch[1]);
+Dwidth[0-9] :=	SLATCH (dwidth[0-9],d[18-27],clk,oblatch[1]);
+(* image width is a counter *)
+Index[1-7] :=	SLATCH (index[1-7],d[38-44],clk,oblatch[1]);
+Reflected :=	SLATCH (reflected,d[45],clk,oblatch[1]);
+Rmw :=		SLATCH (rmw,d[46],clk,oblatch[1]);
+Transen :=	SLATCH (transen,d[47],clk,oblatch[1]);
+Release :=	SLATCH (release,d[48],clk,oblatch[1]);
+
+Hscale[0-7] :=	SLATCH (hscale[0-7],d[0-7],clk,oblatch[2]);
+Vscale[0-7] :=	SLATCH (vscale[0-7],d[8-15],clk,oblatch[2]);
+Rem[5-7] :=	SLATCH (rem[5-7],d[21-23],clk,oblatch[2]);
+
+(* the third phrase is enabled during write-back *)
+
+Obwbk2[0-7] :=	TS (wd[0-7],hscale[0-7],wbken[2]);
+Obwbk2[8-15] :=	TS (wd[8-15],vscale[0-7],wbken[2]);
+Obwbk2[16-23]:=	TS (wd[16-23],newrem[0-7],wbken[2]);
+Obwbk2[24-63]:=	TS (wd[24-63],gnd,wbken[2]);
+
+(* the object list pointer *)
+
+Olpd[3-15] :=	LDP1Q (olpd[3-15],din[3-15],olp1w);
+Olpd[16-23] :=	LDP1Q (olpd[16-23],din[0-7],olp2w);
+
+(* select the link address when jumping *)
+
+Olpd1[3-21] :=	MX2 (olpd1[3-21],olpd[3-21],link[0-18],pclink);
+
+(* the counter *)
+
+Olp[3] :=	UPCNT (olp[3],olpco[3],olpd1[3],clk,pcinc,olpld,resetl);
+Olp[4-9] := UPCNT (olp[4-9],olpco[4-9],olpd1[4-9],clk,olpco[3-8],olpld,resetl);
+Olp[10] := UPCNT (olp[10],olpco[10],olpd1[10],clk,plac9,olpld,resetl);
+Olp[11-16] := UPCNT (olp[11-16],olpco[11-16],olpd1[11-16],clk,olpco[10-15],olpld,resetl);
+Olp[17] := UPCNT (olp[17],olpco[17],olpd1[17],clk,plac16,olpld,resetl);
+Olp[18-21] := UPCNT (olp[18-21],olpco[18-21],olpd1[18-21],clk,olpco[17-20],olpld,resetl);
+
+Plac9 :=	AN8 (plac9,pcinc,olp[3..9]);
+Plac16 :=	AN8 (plac16,plac9,olp[10..16]);
+Olpcu[9] :=	DUMMY (olpco[9]);
+Olpcu[16] :=	DUMMY (olpco[16]);
+
+Olpldi :=	NR2 (olpldi,pcld,pclink);
+Olpld :=	IVH (olpld,olpldi);
+
+(*
+when the data address register is incremented skip[0..2] is added
+to the bottom three bits 
+*)
+
+Sum[0] :=	HA1 (sum[0],dco[0],skip[0],data[0]);
+Sum[1-2] :=	FA1 (sum[1-2],dco[1-2],skip[1-2],data[1-2],dco[0-1]);
+
+(* select the sum or the load data *)
+
+Dmainc :=	FD1Q (dmainc,dmaen,clk);
+Ldinc :=	OR2 (ldinc,obld[0],dmainc);
+
+D1[0-2] :=	MX2 (d1[0-2],sum[0-2],d[43-45],obld[0]);
+Data[0-2] :=	SLATCH (data[0-2],d1[0-2],clk,ldinc);
+
+(* the rest of the register is a counter *)
+
+Dci :=		AN2 (dci,dco[2],dmainc);
+Data[3] :=	UPCNT(data[3],dco[3],d[46],clk,dci,obld[0],resetl);
+Data[4-9] :=	UPCNT(data[4-9],dco[4-9],d[47-52],clk,dco[3-8],obld[0],resetl);
+Data[10] :=	UPCNT (data[10],dco[10],d[53],clk,dlac9,obld[0],resetl);
+Data[11-16] := UPCNT (data[11-16],dco[11-16],d[54-59],clk,dco[10-15],obld[0],resetl);
+Data[17] :=	UPCNT (data[17],dco[17],d[60],clk,dlac16,obld[0],resetl);
+Data[18-20] := UPCNT (data[18-20],dco[18-20],d[61-63],clk,dco[17-19],obld[0],resetl);
+Dlac9 :=	AN8 (dlac9,dci,data[3..9]);
+Dlac16 :=	AN8 (dlac16,dlac9,data[10..16]);
+Dcou[9] :=	DUMMY(dco[9]);
+Dcou[16] :=	DUMMY(dco[16]);
+
+(* the object processor flag register *)
+
+Obfws :=	AN2 (obfws,obfw,wet);
+Obf :=		LDP1Q (obf,din[0],obfws);
+
+(* the image width counter *)
+
+Iwidth[0] :=	DNCNT (iwidth[0],wco[0],d[28],clk,dmaen,obld[1],resetl);
+Iwidth[1-9] :=	DNCNT (iwidth[1-9],wco[1-9],d[29-37],clk,wco[0-8],obld[1],resetl);
+
+(*
+ bit zero of the image width counter is ignored if unscaled 
+ because the first decrement is lost
+ (it happens at the same moment that iwidth is loaded)
+*)
+
+Bit0 :=		AN2 (bit0,iwidth[0],scaled);
+Iwidthz0 :=	NR6 (iwidthz0,bit0,iwidth[1..5]);
+Iwidthz1 :=	NR4 (iwidthz1,iwidth[6..9]);
+Iwidthnz :=	ND2 (iwidthnz,iwidthz0,iwidthz1);
+Iwidthz :=	IV (iwidthz,iwidthnz);
+
+(*
+******************* 16 bits per pixel ********************
+		  _   _   _   _   _   _   _   _   _   _   _   _   _   _   _
+Clk		_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/
+		    ___________
+[L]Start	___/           \______________________________________________
+		      ________________________________________________________
+Obactive	_____/
+	              ________________________________________________________
+Obbreq   	_____/
+		      _______________________________     ___     ____________
+Mreq	   	_____/                               \___/   \___/
+		      ___     ___     ___     ___     _______     ___     ___
+Mack    	_____/   \___/   \___/   \___/   \___/       \___/   \___/   \
+		_____ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
+State		__0__X_1_X_2_X_2_X_3_X_3_X_4_X_4_X_4_X_4_X_4_X_5_X_6_X_2_X_2_X
+		                  ____________________________________________
+Type		XXXXXXXXXXXXXXXXXX___________________________________________X
+		                                              ___
+Wbken		_____________________________________________/   \____________
+		                  ____________________________________________
+Dma[0..19]	XXXXXXXXXXXXXXXXXX____________________________________________
+                                          _______ _______ ____________________
+Iwidth		XXXXXXXXXXXXXXXXXXXXXXXXXX___2___X___1___X___0________________
+		                              ___     ___
+Obdlatch	_____________________________/   \___/   \____________________
+		                                  ___     ___
+Full		_________________________________/   \___/   \________________
+		                                  ___     ___
+Nextphrase	_________________________________/   \___/   \________________
+		_____________________________________     ___     ____________
+Phdone		                                     \___/   \___/
+
+******************* 8 bits per pixel ********************
+		  _   _   _   _   _   _   _   _   _   _   _   _   _   _   _
+Clk		_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/
+		    ___________
+[L]Start	___/           \______________________________________________
+		      ________________________________________________________
+Obactive	_____/
+	              ___________________________________________
+Obbreq   	_____/                                           \____________
+		      _______________________________     ___
+Mreq	   	_____/                               \___/   \________________
+		      ___     ___     ___     ___     _______     ___
+Mack    	_____/   \___/   \___/   \___/   \___/       \___/   \________
+		_____ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___
+State		__0__X_1_X_2_X_2_X_3_X_3_X_4_X_4_X_4_X_4_X_4_X_5_X_6_X_6_X_6_X
+		                  ____________________________________________
+Type		XXXXXXXXXXXXXXXXXX____________________________________________
+		                  ____________________________________________
+Dma[0..19]	XXXXXXXXXXXXXXXXXX____________________________________________
+                                          _______ _______ ____________________
+Iwidth		XXXXXXXXXXXXXXXXXXXXXXXXXX___2___X___1___X___0________________
+		                              ___     ___
+Obdlatch	_____________________________/   \___/   \____________________
+		                                  ___     ___________
+Full		_________________________________/   \___/           \________
+		                                  ___             ___
+Nextphrase	_________________________________/   \___________/   \________
+		_____________________________________             ___
+Phdone		                                     \___________/   \________
+		                                              ___
+Wbken		_____________________________________________/   \____________
+		  _   _   _   _   _   _   _   _   _   _   _   _   _   _   _
+Clk		_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/
+
+
+Object processor state machine
+
+assert obactive in all states except state 0
+
+
+0	idle	if (start or overrun) {
+			pcld
+			goto 1
+		}
+		else goto 0
+
+1	ob1	assert obbreq,mreq	 	; request 1st phrase
+		if (obback & mack) {
+			pc0en
+			assert obldd[0]
+			goto 2
+		}
+		else goto 1
+
+2	ob2	if (obdone || hold) assert obbreq
+		if (obdone) {
+			assert mreq     	; request 2nd phrase
+			if (obback & mack) {
+				pc1en
+				assert obldd[1]
+				goto 3
+			}
+			else goto 2
+		}
+		else goto 2
+
+3	ob3	if (scaled) {			; request 3rd phrase
+			obbreq,mreq
+			if (obback & mack) {
+				xld,pc2en, obldd[2]
+				goto 8
+			}
+			else goto 3
+                }
+		if ((bitob) && (vc >= ypos) && height > 0) {
+			obbreq,mreq,wbkstart	; request data
+			if (obback & mack) {
+				xld,dmaen, obdlatchd
+				goto 4
+			}
+			else goto 3
+                }
+		else if ((bitob) && ((vc < ypos) || (height == 0))) {
+			obbreq,pclink
+			goto 1
+		}
+
+		else if (grpob) {
+			pcinc,grpintreq
+			goto 7
+		}
+		else if (branch) {
+			obbreq
+			if (condition met) {
+				pclink
+				goto 1
+			}
+			else {
+				pcinc
+				goto 1
+			}
+		}
+		if (stop) {
+			startref
+			obint
+			goto 0
+		}
+		else goto 0
+
+4	data	if (onscreen && Iwidth > 1) {
+			if (obdready || hold) assert obbreq;
+			if (obdready) {
+				mreq
+				if (obback & mack){	; wait for data
+					dmaen, obdlatchd
+				}
+			}
+			goto 4
+		}
+		else {
+			assert obbreq;
+				if (wbkdone) {
+				mreq, write 
+				if (obback & mack){	; write back phrase 0
+					pc0en
+					wbken0d
+					if (scaled) goto 5
+					else pclink, goto 1
+				}
+				else goto 4
+			}
+			else goto 4
+		}
+
+5	wbk2	obbreq, mreq, write
+		if (obback & mack){			; write back phrase 2
+			pc2en
+			wbken2d
+			pclink, goto 1
+		}
+		else goto 5
+
+7	grp	if (obfw) goto 1
+		else goto 7
+
+8	scaled 	obbreq
+		if (obback && mack) goto 9; wait for remainder & scale
+		else goto 8
+
+9		if ((vc >= ypos) && ((height) || int (remainder))) {
+			wbkstart
+			obbreq,mreq		; request data
+			if (obback & mack) {
+				dmaen, obdlatchd
+				goto 4
+			}
+			else goto 9
+                }
+		else if ((vc < ypos) || (!height) || !int (remainder))) {
+			obbreq,pclink
+			goto 1
+		}
+
+*)
+
+(* the state machine *)
+
+Q0 :=		FD4Q (q0,d0,clk,resetl);
+Q1 :=		FD2Q (q1,d1,clk,resetl);
+Q2 :=		FD2Q (q2,d2,clk,resetl);
+Q3i :=		FD2Q (q3i,d3,clk,resetl);
+Q3 :=		NIVM (q3,q3i);
+Q4i :=		FD2Q (q4i,d4,clk,resetl);
+Q4 :=		NIVH (q4,q4i);
+Q5 :=		FD2Q (q5,d5,clk,resetl);
+Q7 :=		FD2Q (q7,d7,clk,resetl);
+Q8 :=		FD2Q (q8,d8,clk,resetl);
+Q9 :=		FD2Q (q9,d9,clk,resetl);
+
+D00 :=		ND2 (d00,q0,notstartover);
+D01 :=		ND6 (d01,q3,notbitob,notscaled,notgrpob,notbranchob,vcc);
+D0 :=		ND2 (d0,d00,d01);
+
+D10 :=		ND2 (d10,q0,startover);
+D11 :=		ND2 (d11,q1,notobmack);
+D12 :=		ND3 (d12,q3,bitob,bitnotinrange);
+D13 :=		ND3 (d13,q3,branchob,cctrue);
+D14 :=		ND2 (d14,q7,obfw);
+D15 :=		ND2 (d15,q9,scalednotinrange);
+D16 :=		ND6 (d16,q4,iwidthz,wbkdone,obmack,bitob,vcc);
+D17 :=		ND6 (d17,q4,offscreen,wbkdone,obmack,bitob,vcc);
+D18 :=		ND2 (d18,q5,obmack);
+D19 :=		ND3 (d19,q3,branchob,ccfalse);
+D1a :=		ND6 (d1a,d10,d11,d12,d13,d14,d15);
+D1b :=		ND4 (d1b,d16,d17,d18,d19);
+D1 :=		OR2 (d1,d1a,d1b);
+
+D20 :=		ND2 (d20,q1,obmack);
+D21 :=		ND2 (d21,q2,notobmack);
+D23 :=		ND2 (d23,q2,notobdone);
+D2 :=		ND3 (d2,d20,d21,d23);
+
+D30 :=		ND3 (d30,q2,obdone,obmack);
+D31 :=		ND6 (d31,q3,bitob,geq,heightnz,notobmack,vcc);
+D32 :=		ND3 (d32,q3,scaled,notobmack);
+D3 :=		ND3 (d3,d30,d31,d32);
+
+D40 :=		ND6 (d40,q3,bitob,geq,heightnz,obmack,vcc);
+D41 :=		ND3 (d41,q4,onscreen,iwidthnz);
+D42 :=		ND4 (d42,q4,iwidthz,wbkdone,notobmack);
+D43 :=		ND3 (d43,q4,iwidthz,notwbkdone);
+D44 :=		ND3 (d44,q9,scaledinrange,obmack);
+D45 :=		ND4 (d45,q4,offscreen,wbkdone,notobmack);
+D46 :=		ND3 (d46,q4,offscreen,notwbkdone);
+D4 :=		ND8 (d4,d40,d41,d42,d43,d44,d45,d46,vcc);
+
+D51 :=		ND6 (d51,q4,iwidthz,wbkdone,obmack,scaled,vcc);
+D52 :=		ND2 (d52,q5,notobmack);
+D53 :=		ND6 (d53,q4,offscreen,wbkdone,obmack,scaled,vcc);
+D5 :=		ND3 (d5,d51,d52,d53);
+
+D70 :=		ND2 (d70,q3,grpob);
+D71 :=		ND2 (d71,q7,notobfw);
+D7 :=		ND2 (d7,d70,d71);
+
+D80 :=		ND3 (d80,q3,scaled,obmack);
+D81 :=		ND2 (d81,q8,notobmack);
+D8 :=		ND2 (d8,d80,d81);
+
+D90 :=		ND2 (d90,q8,obmack);
+D91 :=		ND3 (d91,q9,scaledinrange,notobmack);
+D9 :=		ND2 (d9,d90,d91);
+
+Pcld :=		IV (pcld,d10);
+
+(* bus is requested during states 1,5,8 & 9  *)
+(* and sometimes during states 2,3,4 & 6 *)
+
+Obr0 :=		NR4 (obr0,q1,q5,q8,q9);
+Obr1 :=		ND2 (obr1,q3,bitob);
+Obr2 :=		ND2 (obr2,q3,branchob);
+Obr3 :=		ND2 (obr3,q3,scaled);
+Obr4 :=		ND2 (obr4,q2,obbr0);
+Obr5 :=		ND4 (obr5,q4,onscreen,iwidthnz,obbr1);
+Obr6 :=		ND2 (obr6,q4,offscreen);
+Obr7 :=		ND2 (obr7,q4,iwidthz);
+Obbreq :=	ND8 (obbreq,obr0,obr1,obr2,obr3,obr4,obr5,obr6,obr7);
+Obbr0 :=	OR2 (obbr0,obdone,hold);
+Obbr1 :=	OR2 (obbr1,obdready,hold);
+
+Omrq0 :=	NR2 (omrq0,q1,q5);
+Omrq1 :=	ND4 (omrq1,q3,bitob,geq,heightnz);
+Omrq2 :=	ND4 (omrq2,q4,onscreen,iwidthnz,obdready);
+Omrq3 :=	ND3 (omrq3,q4,iwidthz,wbkdone);
+Omrq4 :=	ND2 (omrq4,q9,scaledinrange);
+Omrq5 :=	ND2 (omrq5,q2,obdone);
+Omrq6 :=	ND3 (omrq6,q4,offscreen,wbkdone);
+Obmreq :=	ND8 (obmreq,omrq0,omrq1,omrq2,omrq3,omrq4,omrq5,omrq6,obr3);
+
+Obldd[0] :=	IV (obldd[0],d20);
+Obldd[1] :=	IV (obldd[1],d30);
+Obldd[2] :=	IV (obldd[2],d80);
+
+(*
+Pc0en0 :=	ND4 (pc0en0,q4,iwidthz,wbkdone,obmack);
+Pc0en1 :=	ND4 (pc0en1,q4,offscreen,wbkdone,obmack);
+*)
+Pc1en :=	IV (pc1en,d30);
+Pc2en0 :=	ND2 (pc2en0,q5,obmack);
+Pc2en :=	ND2 (pc2en,d80,pc2en0);
+
+Dmaen0 :=	ND6 (dmaen0,q4,onscreen,iwidthnz,obdready,obmack,vcc);
+Dmaen :=	ND3 (dmaen,d40,dmaen0,d44);
+Obdlatchd :=	NIV (obdlatchd,dmaen);
+
+Dsel0 :=	ND2 (dsel0,q3,bitob);
+Dsel1 :=	IV  (dsel1,q9);
+Dsel2 :=	ND3 (dsel2,q4,onscreen,iwidthnz);
+Dataseli :=	ND3 (dataseli,dsel0,dsel1,dsel2);
+Datasel :=	NIVU (datasel,dataseli);
+
+Pclinki :=	ND6 (pclinki,d12,d13,d15,d16,d17,d18);
+Pclink :=	NIVH (pclink,pclinki);
+Pcinc :=	ND2 (pcinc,d70,d19);
+
+Grpintreq :=	IV (grpintreq,d70);
+Obint :=	AN3 (obint,q3,stopob,ypos[0]);
+Startref :=	AN2 (startref,q3,stopob);
+
+Obrw1 :=	IV (obrw1,q5);
+Obrw :=		AN3 (obrw,obrw1,omrq3,omrq6);
+
+/* don't start write back for scaled object unless in range */
+/* Wbkstart :=	ND2 (wbkstart,d40,d90); */
+
+Wbkstart :=	ND2 (wbkstart,d40,omrq4);
+
+Wbken2d :=	IV (wbken2d,pc2en0);
+
+(* wbken[0] is asserted whenever wd[0..63] would not otherwise be driven *)
+
+(*
+Wbken0d :=	ND2 (wbken0d,pc0en0,pc0en1);
+*)
+
+Wr :=		IV (wr,rw);
+Eback :=	OR2 (eback,blback,grpback);
+Ewr :=		AN4 (ewr,eback,wr,mack,mreq);
+Wbken0d :=	NR2 (wbken0d,wbken2d,ewr);
+
+Xldi :=		ND2 (xldi,d40,d80);
+Xld :=		NIVM (xld,xldi);
+
+
+
+(* decode the object type *)
+
+Typel[0-2] :=	IV (typel[0-2],type[0-2]);
+
+Notbitob :=	ND3 (notbitob,typel[2],typel[1],typel[0]);
+Notscaled :=	ND3 (notscaled,typel[2],typel[1],type[0]);
+Notgrpob :=	ND3 (notgrpob,typel[2],type[1],typel[0]);
+Notbranchob :=	ND3 (notbranchob,typel[2],type[1],type[0]);
+Notstopob :=	ND3 (notstopob,type[2],typel[1],typel[0]);
+
+Bitob :=	IVM (bitob,notbitob);
+Scaled :=	IVM (scaled,notscaled);
+Grpob :=	IV (grpob,notgrpob);
+Branchob :=	IV (branchob,notbranchob);
+Stopob :=	IV (stopob,notstopob);
+
+(* decode the condition codes *)
+(* the height field determines which type *)
+
+Heightl[0-2] :=	IV (heightl[0-2],newheight[0-2]);
+
+Cctrue0 :=	ND4 (cctrue0,heightl[2],heightl[1],heightl[0],vey);
+Cctrue1 :=	ND4 (cctrue1,heightl[2],heightl[1],heightl[0],y7ff);
+Cctrue2 :=	ND4 (cctrue2,heightl[2],heightl[1],newheight[0],vly);
+Cctrue3 :=	ND4 (cctrue3,heightl[2],newheight[1],heightl[0],vgy);
+Cctrue4 :=	ND4 (cctrue4,heightl[2],newheight[1],newheight[0],obf);
+Cctrue5 :=	ND4 (cctrue5,newheight[2],heightl[1],heightl[0],hcb[10]);
+Cctrue :=	ND6 (cctrue,cctrue0,cctrue1,cctrue2,cctrue3,cctrue4,cctrue5);
+Ccfalse :=	IV (ccfalse,cctrue);
+
+Depthl[0-2] :=	IV (depthl[0-2],depth[0-2]);
+
+Mode1 :=	AN3H (mode1,depthl[2],depthl[1],depthl[0]);
+Mode2 :=	AN3H (mode2,depthl[2],depthl[1],depth[0]);
+Mode4 :=	AN3H (mode4,depthl[2],depth[1],depthl[0]);
+Mode8i :=	ND3 (mode8i,depthl[2],depth[1],depth[0]);
+Mode8 :=	IVH (mode8,mode8i);
+Mode16 :=	AN3 (mode16,depth[2],depthl[1],depthl[0]);
+Mode24 :=	AN3 (mode24,depth[2],depthl[1],depth[0]);
+
+(* sample the start signal to make it synchronous *)
+
+Start1 :=	FD2Q (start1,start,clk,resetl);
+Start2 :=	FD2Q (start2,start1,clk,resetl);
+Start2l :=	IV (start2l,start2);
+Sstart :=	AN2 (sstart,start1,start2l);
+
+(* generate an overrun signal if still processing when start arrives *)
+
+(* overrun := sstart * /q0 + overrun * /q0 *)
+
+Ov1 :=	 	ND2 (ov1,sstart,q0l);
+Ov2 :=	 	ND2 (ov2,overrun,q0l);
+Overrund :=	ND2 (overrund,ov1,ov2);
+Overrun :=	FD1Q (overrun,overrund,clk);
+Notstartover :=	NR2 (notstartover,overrun,sstart);
+Startover :=	IV (startover,notstartover);
+Q0l :=		IV (q0l,q0);
+
+Notobmack :=	ND2X3 (notobmack,obback,mack);
+Obmack :=	IVH (obmack,notobmack);
+
+(* enable the internal bus control signals onto the bus when enabled *)
+
+Obeni :=	OR2 (obeni,obback,refack);
+Oben :=		NIVU2 (oben,obeni);
+Rw :=		TS (rw,obrw,oben);
+Mreq :=		TSM (mreq,obmreq,obback);
+Justify :=	TS (justify,gnd,oben);
+W[0-2] :=	TS (w[0-2],gnd,oben);		(* always 64 bits *)
+W[3] :=		TS (w[3],vcc,oben);
+
+(*
+because memory cycles are pipelined read data is latched on the 
+memory acknowledge after the request is acknowledged, write data is enabled
+during the cycle after the request is acknowledged
+							____
+obdlatchd	___/    \_____________________
+					____              ____
+ack		___/    \____________/    \___
+																____
+obdlatch	_____________________/    \___
+*)
+
+
+Obdlatch :=	ACK_PIPE (obdlatch,obdlatchd,mack,clk,resetl);
+Obldi[0] :=	ACK_PIPE (obldi[0],obldd[0],mack,clk,resetl);
+Obldi[1] :=	ACK_PIPE (obldi[1],obldd[1],mack,clk,resetl);
+Obldi[2] :=	ACK_PIPE (obldi[2],obldd[2],mack,clk,resetl);
+Obld[0] :=	NIVU2 (obld[0],obldi[0]);
+Obld[1] :=	NIVH (obld[1],obldi[1]);
+Obld[2] :=	NIVH (obld[2],obldi[2]);
+
+Oblatch[0-2] :=	NIVU (oblatch[0-2],obld[0-2]);
+
+Wbkeni[0] :=	FD4Q (wbkeni[0],wbken0d,clk,resetl);
+Wbken[0] :=	NIVU2 (wbken[0],wbkeni[0]);
+Wbkeni[2] :=	FD2Q (wbkeni[2],wbken2d,clk,resetl);
+Wbken[2] :=	NIVU2 (wbken[2],wbkeni[2]);
+
+(* compare ypos and vc *)
+
+Comp :=		MAG11 (vgy,equ,vly,vc[0..10],ypos[0..10]);
+Geq :=		IV (geq,vly);	(* if vc >= ypos *)
+Equ :=		DUMMY (equ);
+
+/* faster test for equality */
+
+Ve[0-10] :=	EN (ve[0-10],vc[0-10],ypos[0-10]);
+Veyl :=		ND11 (veyl,ve[0..10]);
+Vey :=		IV (vey,veyl);
+
+Y7ff0 :=	ND6 (y7ff0,ypos[0..5]);
+Y7ff1 :=	ND6 (y7ff1,ypos[6..10],vcc);
+Y7ff :=		NR2 (y7ff,y7ff0,y7ff1);
+
+
+(* test the remainder *)
+
+Remnz :=	OR3 (remnz,rem[5..7]);
+
+Bitnotinrange :=	ND2 (bitnotinrange,geq,heightnz);
+
+Remheightnz :=		OR2 (remheightnz,heightnz,remnz);
+Scalednotinrange :=	ND2 (scalednotinrange,geq,remheightnz);
+Scaledinrange :=	IV (scaledinrange,scalednotinrange);
+
+Onscreen :=	IV (onscreen,offscreen);
+Notwbkdone :=	IV (notwbkdone,wbkdone);
+Notobfw :=	IV (notobfw,obfw);
+Notobdone :=	IV (notobdone,obdone);
+Hold :=		IV (hold,release);
+
+(* tie off unused signals *)
+(* GE *)
+(* Unused :=	ND6	(unused,unused,gnd,olpco[21],wco[9],dco[20],gnd); *)
+Unused := ND6	(unused,gnd,gnd,olpco[21],wco[9],dco[20],gnd);
+Unused2 := DUMMY(unused);
+
+/* select either the PC or data address */
+
+Olp1[3] :=	OR2 (olp1[3],olp[3],pc1en);
+Olp1[4] :=	OR2 (olp1[4],olp[4],pc2en);
+
+Oa[3-4] :=	MX2 (oa[3-4],olp1[3-4],data[0-1],datasel);
+Oa[5-21] :=	MX2 (oa[5-21],olp[5-21],data[2-18],datasel);
+Oa[22] :=	MX2 (oa[22],olpd[22],data[19],datasel);
+Oa[23] :=	MX2 (oa[23],olpd[23],data[20],datasel);
+
+/* enable onto address bus */
+
+Oa1[0-2] :=	TSM (a[0-2],gnd,oben);
+Oa1[3-23] :=	TSM (a[3-23],oa[3-23],oben);
+
+(* GE *)
+GE1 := JOIN(oba, a[0..23]);
+GE2 := DUMMY(oba);
+
+END;
+
+DEF	ACK_PIPE	(latch:IO; latchd,ack,clk,resetl:IN);
+
+BEGIN
+
+Notack :=	IV (notack,ack);
+D0 :=		ND2 (d0,q,notack);
+D1 :=		IV (d1,latchd);
+D :=		ND2 (d,d0,d1);
+Q :=		FD2Q (q,d,clk,resetl);
+Latch :=	AN2 (latch,q,ack);
+
+END;
+
+
+(* 11 bit magnitude comparator *)
+
+DEF	MAG11		(agb,aeb,alb:IO;a[0..10],b[0..10]:IN);
+
+BEGIN
+
+Gnd1 :=	TIE0 (gnd1);
+Gnd2 :=	TIE0 (gnd2);
+
+/* old logic
+M0 :=	MAG2 (agb[0],aeb[0],alb[0],gnd,vcc,gnd,a[10],b[10],a[9],b[9]);
+M1 :=	MAG2 (agb[1],aeb[1],alb[1],agb[0],aeb[0],alb[0],a[8],b[8],a[7],b[7]);
+M2 :=	MAG2 (agb[2],aeb[2],alb[2],agb[1],aeb[1],alb[1],a[6],b[6],a[5],b[5]);
+M3 :=	MAG2 (agb[3],aeb[3],alb[3],agb[2],aeb[2],alb[2],a[4],b[4],a[3],b[3]);
+M4 :=	MAG2 (agb[4],aeb[4],alb[4],agb[3],aeb[3],alb[3],a[2],b[2],a[1],b[1]);
+M5 :=	MAG2 (agb,aeb,alb,agb[4],aeb[4],alb[4],a[0],b[0],gnd,gnd);
+*/
+
+M :=	MAG12 (agb,aeb,alb,a[0..10],gnd1,b[0..10],gnd2);
+
+END;
+
+(* 12 bit magnitude comparator *)
+
+DEF	MAG12		(agb,aeb,alb:IO;a[0..11],b[0..11]:IN);
+
+BEGIN
+
+/* old logic
+
+Bl[0-11] :=	IV (bl[0-11],b[0-11]);
+S0	:=	ADD4 (s[0..3],c[3],a[0..3],bl[0..3],vcc);
+S1	:=	ADD4 (s[4..7],c[7],a[4..7],bl[4..7],c[3]);
+S2	:=	ADD4 (s[8..11],c[11],a[8..11],bl[8..11],c[7]);
+
+Z0	:=	NR4P (z0,s[0..3]);
+Z1	:=	NR4P (z1,s[4..7]);
+Z2	:=	NR4P (z2,s[8..11]);
+Aneb	:=	ND3 (aneb,z0,z1,z2);
+Aeb	:=	IV (aeb,aneb);
+Alb	:=	IV (alb,c[11]);
+Agb	:=	AN2 (agb,c[11],aneb);
+*/
+Vcc :=	TIE1 (vcc);
+Gnd :=	TIE0 (gnd);
+
+M0 :=	MAG4 (agb[0],aeb[0],alb[0],gnd,vcc,gnd,
+			a[11],b[11],a[10],b[10],a[9],b[9],a[8],b[8]);
+M1 :=	MAG4 (agb[1],aeb[1],alb[1],agb[0],aeb[0],alb[0],
+			a[7],b[7],a[6],b[6],a[5],b[5],a[4],b[4]);
+M2 :=	MAG4 (agb,aeb,alb,agb[1],aeb[1],alb[1],
+			a[3],b[3],a[2],b[2],a[1],b[1],a[0],b[0]);
+
+END;

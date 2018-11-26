@@ -1,0 +1,139 @@
+/******************************************************************
+blitgpu.net
+26/3/91
+
+Blitter interface with the GPU
+------------------------------
+This module is responsible for managing the blitter's interface
+with the GPU. This includes:
+
+-	memory decodes
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF BLITGPU (
+	a1baseld        /* A1 base register load */
+	a1flagld        /* A1 flags register load */
+	a1fracld        /* A1 window pointer fractions load */
+	a1incld         /* A1 pointer increment register load */
+	a1incfld	/* A1 pointer increment fraction load */
+	a1posrd		/* A1 pointer read enable */
+	a1posfrd	/* A1 pointer fraction read enable */
+	a1ptrld		/* A1 window pointer load */
+	a1stepld	/* A1 window step load */
+	a1stepfld	/* A1 window step load */
+	a1winld         /* A1 window size register load */
+	a2baseld	/* A2 base register load */
+	a2flagld	/* A2 flags register load */
+	a2posrd		/* A2 pointer read enable */
+	a2ptrld		/* A2 window pointer load */
+	a2stepld	/* A2 window step load */
+	a2winld		/* A2 window size register load */
+	cmdld		/* command register load */
+	countld		/* load inner count register */
+	dstdld[0..1]	/* dest data load */
+	dstzld[0..1]	/* dest zed load */
+	iincld		/* I increment load */
+	intld[0..3]	/* computed intensities load */
+	patdld[0..1]	/* pattern data load (GPU writes) */
+	srcd1ld[0..1]	/* source register 1 load (GPU writes) */
+	srcz1ld[0..1]	/* source zed 1 load (GPU writes) */
+	srcz2ld[0..1]	/* source zed 2 load (GPU writes) */
+	statrd		/* blitter status read port */
+	stopld		/* collision stop register load */
+	zedld[0..3]	/* computed zeds load */
+	zincld		/* Z increment load */
+	:OUT;
+	a1fracldi	/* A1 window pointer fractions add */
+	a1ptrldi	/* A1 window pointer add */
+	a2ptrldi	/* A2 window pointer add */
+	blit_back	/* blitter bus acknowledge */
+	bliten		/* Blitter chip select */
+	dstdread	/* destination data read load enable */
+	dstzread	/* destination zed read load enable */
+INT24/	gpu_addr	/* GPU address bus */
+	gpu_memw	/* GPU write enable */
+	patdadd		/* pattern data gouraud add */
+	patfadd		/* pattern fraction gouraud add */
+	srcdread	/* source data read load enable */
+	srcz1add	/* zed data gouraud add */
+	srczread	/* source zed read load enable */
+	:IN);
+
+BEGIN
+
+Blit_back\	:= IV (blit_back\, blit_back);
+
+/* Decode write enables for synchronous registers.
+Transfers into the data section are prevented while the blitter is
+active. (2/22) */
+
+Gpua[2-4]	:= NIVM (gpua[2-4], gpu_addr{2-4});
+Gpua[5-7]	:= NIV (gpua[5-7], gpu_addr{5-7});
+Gpua\[2-7]	:= IV (gpua\[2-7], gpua[2-7]);
+
+Wren0		:= ND5 (wren\[0], gpua\[5], gpua\[6..7], bliten, 
+			gpu_memw);
+Wren1		:= ND5 (wren\[1], gpua[5], gpua\[6..7], bliten, 
+			gpu_memw);
+Wren2		:= ND6 (wren\[2], gpua\[5], gpua[6], gpua\[7], 
+			bliten, gpu_memw, blit_back\);
+Wren3		:= ND6 (wren\[3], gpua[5], gpua[6], gpua\[7], 
+			bliten, gpu_memw, blit_back\);
+Wren4		:= ND6 (wren\[4], gpua\[5], gpua\[6], gpua[7], 
+			bliten, gpu_memw, blit_back\);
+
+Dec0		:= D38GH (a1baseld, a1flagld, a1winld, a1ptrldg, 
+			a1stepld, a1stepfld, a1fracldg, a1incld, 
+			gpua[2..4], wren\[0]);
+Dec1		:= D38GH (a1incfld, a2baseld, a2flagld, a2winld, 
+			a2ptrldg, a2stepld, cmdldt, countldt, 
+			gpua[2..4], wren\[1]);
+Dec2		:= D38GH (srcd1ldg[0..1], dstdldg[0..1], 
+			dstzldg[0..1], srcz1ldg[0..1], 
+			gpua[2..4], wren\[2]);
+Dec3		:= D38GH (srcz2ld[0..1], patdldg[0..1], iincld, 
+			zincld, stopld, intld[0], 
+			gpua[2..4], wren\[3]);
+Dec4		:= D38GH (intld[1..3], zedld[0..3], unused[0],
+			gpua[2..4], wren\[4]);
+
+Cmdld		:= NIVU (cmdld, cmdldt);
+Countld		:= NIVU (countld, countldt);
+
+/* OR in load terms from state block */
+
+A1ptrld		:= OR2U (a1ptrld, a1ptrldi, a1ptrldg);
+A1fracld	:= OR2U (a1fracld, a1fracldi, a1fracldg);
+A2ptrld		:= OR2U (a2ptrld, a2ptrldi, a2ptrldg);
+Dstdld[0-1]	:= OR2 (dstdld[0-1], dstdldg[0-1], dstdread);
+Dstzld[0-1]	:= OR2 (dstzld[0-1], dstzldg[0-1], dstzread);
+Srcd1ld[0-1]	:= OR3U (srcd1ld[0-1], srcd1ldg[0-1], srcdread,
+			patfadd);
+Srcz1ld[0-1]	:= OR3U (srcz1ld[0-1], srcz1ldg[0-1], srczread, 
+			srcz1add);
+/* 17/8/92 enhancement in data.net, this combination done there
+**Srcz2ld[0-1]	:= OR3U (srcz2ld[0-1], srcz2ldg[0-1], srczread, 
+**			srcz2add);
+*/
+Patdld[0-1]	:= OR2U (patdld[0-1], patdldg[0-1], patdadd);
+
+/* Decode the limited selection of read enables */
+
+Gpu_memw\	:= IV (gpu_memw\, gpu_memw);
+Brd		:= AN2 (brd, bliten, gpu_memw\);
+
+Statrd		:= AN6U (statrd, brd, gpua\[2], gpua[3], gpua[4],
+			gpua[5], gpua\[6]);
+A1posrd		:= AN6U (a1posrd, brd, gpua[2], gpua\[3], gpua\[4],
+			gpua\[5], gpua\[6]);
+A1posfrd	:= AN6U (a1posfrd, brd, gpua\[2], gpua[3], gpua[4],
+			gpua\[5], gpua\[6]);
+A2posrd		:= AN6U (a2posrd, brd, gpua[2], gpua[3], gpua\[4],
+			gpua[5], gpua\[6]);
+
+Unused[0]	:= DUMMY (unused[0]);
+
+END;

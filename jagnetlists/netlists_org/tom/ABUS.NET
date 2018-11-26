@@ -1,0 +1,543 @@
+(*****************************************************************
+
+	abus.net
+
+This is the address bus data path in Tom.
+This module is responsible for deciding what bank an address falls
+into. For DRAM the module records the current active row address
+for each bank. This is used to decide whether a new RAS cycle or
+fast page mode cycle is required. The multiplexed address  is
+generated here.
+
+******************************************************************)
+
+IMPORT	tosh,		(* Toshiba gate & pad definitions *)
+	lego;
+
+DEF	ABUS	(ain[0..23],ainen,at[0..2],
+		din[0..14],newrow,resrow,mux,resetl,vcc,
+		memc1r, memc2r, memc1w, memc2w,
+		cfg[0..2],cfg[4..6],cfg[8],cfgw,cfgen,ack,clk,
+		ba,fc[0..2],siz[1],mreq,
+		dreqin,lbufa,d7a,readt,wet:IN;
+
+		aout[3..23],ma[0..10],match,
+		intdev,fintdev,fextdev,fdram,from,
+		dspd[0..1],romspd[0..1],iospd[0..1],
+		dram,mw[0..1],bs[0..3],cpu32,refrate[0..3],
+		bigend,ourack,nocpu,gpuread,gpuwrite,abs[2..3],
+		hilo,lba,lbb,lbt,clut,clutt,fastrom,m68k,
+		at[3..10]:IO;
+
+        	a[0..23],dr[0..15]:BUS);
+
+(*
+
+ack		synchronously latches the address from the main
+		address bus, marks the end/start of a memory cycle
+
+ainen,		enables the external address onto the main address bus
+
+match,		asynchronous flag indicating that main address bus
+		corresponds to an active row in dram
+		(undefined if current bank is not DRAM)
+
+only one of the following four signals will be active at one time
+
+fintdev,	asynchronous flag indicating that the main address
+		corresponds to fast internal device memory
+
+fextdev,	asynchronous flag indicating that the main address
+		corresponds to fast external device memory
+
+fdram,		asynchronous flag indicating that the main address
+		corresponds to DRAM
+
+from,		asynchronous flag indicating that the main address
+		corresponds to ROM
+
+newrow,		latches new row address into current bank
+
+mux,		selects row address/column address
+
+resrow,		synchronous signal invalidates all row latches
+
+intdev,		synchronous flag indicating that the current memory cycle
+		is to fast internal device memory
+
+mw[0..1]	memory width at address on main bus  
+		0->8 bits, 1->16, 2->32, 3->64
+
+
+*)
+		INT11/ma;
+BEGIN
+
+Ma :=		JOIN (ma,ma[0..10]);
+Mau :=		DUMMY (ma);
+
+(* memory configuration register ONE *)
+
+(* select data bus or configuration data *)
+
+M1d[0-2] :=	MX2 (m1d[0-2],cfg[0-2],din[0-2],cfgen);
+M1d[13] :=	MX2 (m1d[13],cfg[4],din[13],cfgen);
+M1d[14] :=	MX2 (m1d[14],cfg[5],din[14],cfgen);
+M2d[12] :=	MX2 (m2d[12],cfg[6],din[12],cfgen);
+
+(* combine the write strobes *)
+
+M1ld :=		OR2 (m1ld,memc1w,cfgw);
+M2ld :=		OR2 (m2ld,memc2,cfgw);
+
+
+Romhii :=	LDP1Q (romhii,m1d[0],m1ld);
+Romhi :=	NIVH (romhi,romhii);
+Romlo :=	IVH (romlo,romhii);
+Romwid[0-1] :=	LDP1Q (romwid[0-1],m1d[1-2],m1ld);
+Romspd[0-1] :=	LDP2Q (romspd[0-1],din[3-4],memc1w,resetl);
+Dspd[0-1] :=	LDP1Q (dspd[0-1],din[5-6],memc1w);
+Fastrom :=	LDP2Q (fastrom,din[7],memc1w,resetl);
+Iospd[0-1] :=	LDP1Q (iospd[0-1],din[11-12],memc1w);
+Nocpu :=	LDP1Q (nocpu,m1d[13],m1ld);
+Cpu32 :=	LDP1Q (cpu32,m1d[14],m1ld);
+
+D1[0] :=	TS (dr[0],romhi,memc1r);
+D1[1-2] :=	TS (dr[1-2],romwid[0-1],memc1r);
+D1[3-4] :=	TS (dr[3-4],romspd[0-1],memc1r);
+D1[5-6] :=	TS (dr[5-6],dspd[0-1],memc1r);
+D1[7] :=	TS (dr[7],fastrom,memc1r);
+D1[8-10] :=	TS (dr[8-10],gnd,memc1r);
+D1[11-12] :=	TS (dr[11-12],iospd[0-1],memc1r);
+D1[13] :=	TS (dr[13],nocpu,memc1r);
+D1[14] :=	TS (dr[14],cpu32,memc1r);
+D1[15] :=	TS (dr[15],gnd,memc1r);
+
+(* memory configuration register TWO *)
+
+Memc2 :=	AN2H (memc2,wet,memc2w);
+Cols0[0-1] :=	LDP1Q (cols0[0-1],din[0-1],memc2);
+Dwid0[0-1] :=	LDP1Q (dwid0[0-1],din[2-3],memc2);
+Cols1[0-1] :=	LDP1Q (cols1[0-1],din[4-5],memc2);
+Dwid1[0-1] :=	LDP1Q (dwid1[0-1],din[6-7],memc2);
+Refrate[0-3] :=	SLATCH (refrate[0-3],din[8-11],clk,memc2w);
+Bigd :=		LDP1Q (bigd,m2d[12],m2ld);
+Hiloi :=	LDP1Q (hiloi,din[13],memc2);
+Hilo :=		NIVH (hilo,hiloi);
+
+D2[0-1] :=	TS (dr[0-1],cols0[0-1],memc2r);
+D2[2-3] :=	TS (dr[2-3],dwid0[0-1],memc2r);
+D2[4-5] :=	TS (dr[4-5],cols1[0-1],memc2r);
+D2[6-7] :=	TS (dr[6-7],dwid1[0-1],memc2r);
+D2[8-11] :=	TS (dr[8-11],refrate[0-3],memc2r);
+D2[12] :=	TS (dr[12],bigd,memc2r);
+D2[13] :=	TS (dr[13],hilo,memc2r);
+D2[14-15] :=	TS (dr[14-15],gnd,memc2r);
+
+(*
+ sample bigend so that it can be changed by the processor without
+ the world shifting under its feet
+*)
+
+Bigendi :=	FD1Q (bigendi,bigd,clk);
+Bigend :=	NIVH (bigend,bigendi);
+
+(*
+ signal cfg[8] determines whether the microprocessor has a 68k style i/f
+*)
+ 
+Motorola :=     LDP1 (m68ki,not68k,cfg[8],cfgw);
+M68k :=		NIVH (m68k,m68ki);
+ 
+(* latch the main address at the start of memory cycles *)
+
+Aouti[3-15] :=	FD1QP (aouti[3-15],at[3-15],clk);
+At[3-15] :=	MX2H (at[3-15],aouti[3-15],a[3-15],ack);
+Aout[3-8] :=	NIVH (aout[3-8],aouti[3-8]);
+Aout[9] :=	NIVU (aout[9],aouti[9]);
+Aout[10-14] :=	NIVH (aout[10-14],aouti[10-14]);
+Aout[15] :=	NIVU (aout[15],aouti[15]);
+Aout[16-23] :=	FD1Q (aout[16-23],at[16-23],clk);
+At[16-23] :=	MX2M (at[16-23],aout[16-23],ab[16-23],ack);
+
+(*
+until the memory configuration is written the bootstrap ROM on CS0
+appears everywhere in the address space
+*)
+
+Mseti :=	FD2Q (mseti,vcc,memc1w,cfgen);
+Mset :=		NIVH (mset,mseti);
+
+(*
+generate asynchronous bank selects from the main address
+
+ROMCS[0] is the chip select for the bootstrap ROM. This appears everywhere until
+the memory configuration is setup. It may be placed either at the bottom or
+the top of memory to suit the processor.
+
+ROMCS[0]=	mreq * /mset
+	+	mreq * romlo * /a23 * /a22 * /a21
+	+	mreq * romhi  * a23 * a22 * a21
+
+ROMCS[1]=	mreq * romlo * /a23 * a22 * mset
+	+	mreq * romlo * /a23 * /a22 * a24 * mset
+	+	mreq * romhi * a23 * /a22 * mset
+	+	mreq * romhi * a23 * a22 * /a24 * mset
+
+RAS[0]	=	mreq * romlo * a23 * a22 * mset
+	+	mreq * romhi * /a23 * /a22 * mset
+ 
+RAS[1]	=	mreq * romlo * a23 * /a22 * mset
+	+	mreq * romhi * /a23 * a22 * mset
+*)
+Alb[10-23] :=	IVU (alb[10-23],a[10-23]);
+Ab[10-12] :=	IV (ab[10-12],alb[10-12]);
+Ab[15-23] :=	IVU (ab[15-23],alb[15-23]);
+Notmset :=	IV (notmset,mset);
+Ab23 :=		DUMMY (ab[23]);
+Mreqb :=	NIVM (mreqb,mreq);
+
+Abs01 :=	ND2 (abs01,mreqb,notmset);
+Abs02 :=	ND6 (abs02,vcc,mreqb,romlo,alb[23],alb[22],alb[21]);
+Abs03 :=	ND6 (abs03,vcc,mreqb,romhi,ab[23],ab[22],ab[21]);
+Abs0 :=		ND3 (abs[0],abs01,abs02,abs03);
+
+Abs10 :=	ND6(abs10,mreqb,romlo,alb[23],alb[22],ab[21],mset);
+Abs11	 :=	ND6(abs11,vcc,mreqb,romlo,alb[23],ab[22],mset);
+Abs12 :=	ND6(abs12,mreqb,romhi,ab[23],ab[22],alb[21],mset);
+Abs13	 :=	ND6(abs13,vcc,mreqb,romhi,ab[23],alb[22],mset);
+Abs1 :=		ND4(abs[1],abs10,abs11,abs12,abs13);
+
+Abs20 :=	ND6 (abs20,vcc,mreqb,romlo,ab[23],alb[22],mset);
+Abs21 :=	ND6 (abs21,vcc,mreqb,romhi,alb[23],ab[22],mset);
+Abs2 :=		ND2 (abs[2],abs20,abs21);
+
+Abs30 :=	ND6 (abs30,vcc,mreqb,romlo,ab[23],ab[22],mset);
+Abs31 :=	ND6 (abs31,vcc,mreqb,romhi,alb[23],alb[22],mset);
+Abs3 :=		ND2 (abs[3],abs30,abs31);
+
+(*
+fdram is asserted asynchronously if the main address corresponds to DRAM
+*)
+
+Fdram :=	OR2 (fdram,abs[2..3]);
+
+(*
+internal device memory is 1M from the base of ROM0
+external device memory is 1M+64K from the base of ROM0
+*)
+
+Fintdev1 :=	ND6 (fintdev1,abs[0],alb[16..19],ab[20]);
+Fintdev :=	IVH (fintdev,fintdev1);
+Fextdevl :=	ND6 (fextdevl,abs[0],ab[16],alb[17..19],ab[20]);
+Fextdev :=	IV (fextdev,fextdevl);
+
+(*
+from is asserted asynchronously if the main address corresponds to ROM
+*)
+
+/* old logic
+Fintdevl :=	IV (fintdevl,fintdev);
+Romcsl[0] :=	ND3 (romcsl[0],abs[0],fintdevl,fextdevl);
+Romcsl[1] :=	IV (romcsl[1],abs[1]);
+From :=		ND2 (from,romcsl[0..1]);
+*/
+
+Rom1 :=	ND6 (rom1,mset,romlo,alb[23],alb[22],alb[21],notdev);
+Rom2 :=	ND6 (rom2,mset,romhi,ab[23],ab[22],ab[21],notdev);
+Rom3 :=	ND6 (rom3,vcc,mset,romlo,alb[23],alb[22],ab[21]);
+Rom4 :=	ND6 (rom4,vcc,mset,romhi,ab[23],ab[22],alb[21]);
+Rom5 :=	ND4 (rom5,mset,romlo,alb[23],ab[22]);
+Rom6 :=	ND4 (rom6,mset,romhi,ab[23],alb[22]);
+Rom7 :=	ND2 (rom7,notmset,notdev);
+From :=	ND8 (from,rom7,rom1,rom2,rom3,rom4,rom5,rom6,vcc);
+
+Romcsl[0] :=	AN3 (romcsl[0],rom1,rom2,rom7);
+(*
+generate synchronous flags to show identity of current memory cycle
+*)
+
+Intdevi :=	SLATCHC (intdevi,fintdev,clk,ack,resetl);
+Intdev :=	NIVH (intdev,intdevi);
+Dram :=         SLATCH (dram,fdram,clk,ack);
+
+(*
+bs[0-3] are synchronous bank selects for the current memory cycle
+*)
+
+Rom0 :=		IV (rom0,romcsl[0]);
+Bs[0] :=	SLATCH (bs[0],rom0,clk,ack);
+Bs[1] :=	SLATCH (bs[1],abs[1],clk,ack);
+Bsi[2] :=	FD1Q (bsi[2],abti[2],clk);
+Abti[2] :=	MX2 (abti[2],bsi[2],abs[2],ack);
+Abt[2] :=	NIVH (abt[2],abti[2]);
+Bs[3] :=	SLATCH (bs[3],abs[3],clk,ack);
+Bs[2] :=	NIVM (bs[2],bsi[2]);
+
+(*
+compute the width of addressed memory
+internal memory may be 16 bit or 32 bit depending on a15
+*)
+
+/* old logic
+Mw[0] :=	MX2P (mw[0],jw[0],vcc,falcon);
+Mw[1] :=	MX2P (mw[1],jw[1],notfalcs,falcon);
+Jw[0] :=	MX4P (jw[0],rw[0],rw[0],dwid1[0],dwid0[0],ax[22],ax[23]);
+Jw[1] :=	MX4P (jw[1],rw[1],rw[1],dwid1[1],dwid0[1],ax[22],ax[23]);
+Rw[0] :=	MX2P (rw[0],romwid[0],notwidedev,dev);
+Rw[1] :=	MX2P (rw[1],romwid[1],widedev,dev);
+Dev0 :=		ND8 (dev0,alb[17..19],ab[20],ab[21..23],romhi);
+Dev1 :=		ND8 (dev1,alb[17..19],ab[20],alb[21..23],romlo);
+Dev :=		ND2 (dev,dev0,dev1);
+Notwiddev :=	ND2 (notwidedev,ab[15],alb[16]);
+Widedev :=	IV (widedev,notwidedev);
+Ax[22-23] :=	MX4P (ax[22-23],a[22-23],alb[22-23],gnd,gnd,romhi,notmset);
+*/
+
+Mw01 :=	ND3 (mw01,notmset,notdev,romwid[0]);
+Mw02 :=	ND2 (mw02,notmset,dev16);
+Mw03 :=	ND8 (mw03,vcc,mset,romlo,alb[23],alb[22],alb[21],notdev,romwid[0]);
+Mw04 :=	ND6 (mw04,mset,romlo,alb[23],alb[22],alb[21],dev16);
+Mw05 :=	ND8 (mw05,vcc,mset,romhi,ab[23],ab[22],ab[21],notdev,romwid[0]);
+Mw06 :=	ND6 (mw06,mset,romhi,ab[23],ab[22],ab[21],dev16);
+Mw07 :=	ND6 (mw07,mset,romlo,alb[23],alb[22],ab[21],romwid[0]);
+Mw08 :=	ND6 (mw08,mset,romhi,ab[23],ab[22],alb[21],romwid[0]);
+Mw09 :=	ND6 (mw09,vcc,mset,romlo,alb[23],ab[22],romwid[0]);
+Mw0a :=	ND6 (mw0a,vcc,mset,romhi,ab[23],alb[22],romwid[0]);
+Mw0b :=	ND6 (mw0b,vcc,mset,romlo,ab[23],alb[22],dwid1[0]);
+Mw0c :=	ND6 (mw0c,vcc,mset,romhi,alb[23],ab[22],dwid1[0]);
+Mw0d :=	ND6 (mw0d,vcc,mset,romlo,ab[23],ab[22],dwid0[0]);
+Mw0e :=	ND6 (mw0e,vcc,mset,romhi,alb[23],alb[22],dwid0[0]);
+
+Mw[0] := NAND14 (mw[0],mw01,mw02,mw03,mw04,mw05,mw06,mw07,
+		 	mw08,mw09,mw0a,mw0b,mw0c,mw0d,mw0e);
+
+Mw11 :=	ND3 (mw11,notmset,notdev,romwid[1]);
+Mw12 :=	ND2 (mw12,notmset,dev32);
+Mw13 :=	ND8 (mw13,vcc,mset,romlo,alb[23],alb[22],alb[21],notdev,romwid[1]);
+Mw14 :=	ND6 (mw14,mset,romlo,alb[23],alb[22],alb[21],dev32);
+Mw15 :=	ND8 (mw15,vcc,mset,romhi,ab[23],ab[22],ab[21],notdev,romwid[1]);
+Mw16 :=	ND6 (mw16,mset,romhi,ab[23],ab[22],ab[21],dev32);
+Mw17 :=	ND6 (mw17,mset,romlo,alb[23],alb[22],ab[21],romwid[1]);
+Mw18 :=	ND6 (mw18,mset,romhi,ab[23],ab[22],alb[21],romwid[1]);
+Mw19 :=	ND6 (mw19,vcc,mset,romlo,alb[23],ab[22],romwid[1]);
+Mw1a :=	ND6 (mw1a,vcc,mset,romhi,ab[23],alb[22],romwid[1]);
+Mw1b :=	ND6 (mw1b,vcc,mset,romlo,ab[23],alb[22],dwid1[1]);
+Mw1c :=	ND6 (mw1c,vcc,mset,romhi,alb[23],ab[22],dwid1[1]);
+Mw1d :=	ND6 (mw1d,vcc,mset,romlo,ab[23],ab[22],dwid0[1]);
+Mw1e :=	ND6 (mw1e,vcc,mset,romhi,alb[23],alb[22],dwid0[1]);
+
+Mw[1] := NAND14 (mw[1],mw11,mw12,mw13,mw14,mw15,mw16,mw17,
+		 	mw18,mw19,mw1a,mw1b,mw1c,mw1d,mw1e);
+
+Notdev := ND4P (notdev,ab[20],alb[19],alb[18],alb[17]);
+Dev32l := ND6 (dev32l,ab[20],alb[19],alb[18],alb[17],alb[16],ab[15]);
+Dev32 := IVM (dev32,dev32l);
+Dev160 := ND6 (dev160,ab[20],alb[19],alb[18],alb[17],alb[16],alb[15]);
+Dev161 := ND6 (dev161,ab[20],alb[19],alb[18],alb[17],ab[16],vcc);
+Dev16 := ND2P (dev16,dev160,dev161);
+
+(*
+enable the external address onto the internal address bus
+
+If the external processor is a 68k A[0] is synthesised from uds (siz[1])
+*)
+
+Notba :=	IV (notba,ba);
+Bm68k :=	AN2 (bm68k,notba,m68k);
+Ai[0] :=	MX2 (ai[0],ain[0],siz[1],bm68k);
+
+A[0] :=		TSM (a[0],ai[0],ainen);
+A[1-23] :=	TSM (a[1-23],ain[1-23],ainen);
+
+(*
+multiplex the DRAM address
+
+The address bits depend on the number of columns and the width
+
+DWID	Width		Column address
+
+0	8		A[0..10]
+1	16		A[1..11]
+2	32		A[2..12]
+3	64		A[3..13]
+
+DWID+COLS		Row address
+
+0			A[9..19]
+1			A[10..20]
+2			A[11..21]
+etc
+
+*)
+(* dwid is the dram width one cycle ahead  *)
+
+Dwidi[0-1] :=	MX2 (dwidi[0-1],dwid0[0-1],dwid1[0-1],abt[2]);
+Dwid[0-1] :=	NIVH (dwid[0-1],dwidi[0-1]);
+
+Ald[0-10] := MX4 (ald[0-10],at[0-10],at[1-11],at[2-12],at[3-13],
+			dwid[0..1]);
+
+(* add cols & dwid during the request phase *)
+
+Cw0i[0] :=	HA1 (cw0i[0],co0[0],dwid0[0],cols0[0]);
+Cw0i[1] :=	FA1 (cw0i[1],cw0i[2],dwid0[1],cols0[1],co0[0]);
+Cw0[0-2] :=	NIVM (cw0[0-2],cw0i[0-2]);
+
+Cw1i[0] :=	HA1 (cw1i[0],co1[0],dwid1[0],cols1[0]);
+Cw1i[1] :=	FA1 (cw1i[1],cw1i[2],dwid1[1],cols1[1],co1[0]);
+Cw1[0-2] :=	NIVM (cw1[0-2],cw1i[0-2]);
+
+(* select the row address during request phase *)
+
+Ahd0[0-9] :=	MX8 (ahd0[0-9],at[8-17],at[9-18],at[10-19],at[11-20],
+			at[12-21],at[13-22],at[14-23],gnd,cw0[0..2]);
+Ahd0[10] :=	MX8 (ahd0[10],at[18],at[19],at[20],at[21],
+			at[22],at[23],gnd,gnd,cw0[0..2]);
+Ahd1[0-9] :=	MX8 (ahd1[0-9],at[8-17],at[9-18],at[10-19],at[11-20],
+			at[12-21],at[13-22],at[14-23],gnd,cw1[0..2]);
+Ahd1[10] :=	MX8 (ahd1[10],at[18],at[19],at[20],at[21],
+			at[22],at[23],gnd,gnd,cw1[0..2]);
+Gnd :=		TIE0 (gnd);
+
+Ahd[0-10] :=	MX2 (ahd[0-10],ahd0[0-10],ahd1[0-10],abt[2]);
+Mad[0-10] :=	MX2 (mad[0-10],ald[0-10],ahd[0-10],mux);
+Ma[0-10] :=	FD1Q (ma[0-10],mad[0-10],clk);
+
+(*
+compare row address with the active row address in each bank
+*)
+	
+Newrow[0] :=	AN2H (newrow[0],bs[3],newrow);
+Newrow[1] :=	AN2H (newrow[1],bs[2],newrow);
+Reset :=	IV (reset,resetl);
+Bankresl :=	NR2 (bankresl,reset,resrow);
+
+Bank[0] :=	BANK (match[0],ahd0[0..10],newrow[0],bankresl);
+Bank[1] :=	BANK (match[1],ahd1[0..10],newrow[1],bankresl);
+
+M[0] :=		ND2 (m[0],match[0],abs[3]);
+M[1] :=		ND2 (m[1],match[1],abs[2]);
+Match :=	ND2 (match,m[0..1]);
+
+(*
+ identify interrupt acknowledge cycles
+ in Motorola mode this is identified by fc[0..2]
+ in Intel mode by fc[0] (intal)
+*)
+
+Intd0 :=	ND6 (intd0,dreqin,fc[0..2],ainen,m68k);
+Intd1 :=	ND2 (intd1,fcl[0],not68k);
+Intd :=		ND2 (intd,intd0,intd1);
+Intas :=	FD1Q (ouracki,intd,clk);
+Notourack :=	IVM (notourack,ouracki);
+Ourack :=	IVH (ourack,notourack);
+
+Fcl[0] :=	IV (fcl[0],fc[0]);
+
+(* generate look-ahead gpu read & write signals *)
+
+Gpuadd :=	OR2 (gpuadd,at[13..14]);	(* GPU 2000-7FFF & A000-FFFF *)
+Gpuread :=	AN3 (gpuread,gpuadd,readt,d7a);
+Gpuwrite :=	AN3 (gpuwrite,gpuadd,writet,d7a);
+Wr :=		IV (writet,readt);
+
+(* generate line buffer and clut chip selects synchronously *)
+
+Lbufb :=	IV (lbufb,lbufa);
+Lba0 :=		ND6 (lba0,fintdev,ab[11],alb[12..14],notourack);
+Lba1 :=		ND8 (lba1,fintdev,ab[11..12],alb[13..14],lbufb,notourack,vcc);
+Lbad :=		ND2 (lbad,lba0,lba1);
+Lbb0 :=		ND6 (lbb0,fintdev,alb[11],ab[12],alb[13..14],notourack);
+Lbb1 :=		ND8 (lbb1,fintdev,ab[11..12],alb[13..14],lbufa,notourack,vcc);
+Lbbd :=		ND2 (lbbd,lbb0,lbb1);
+Clutd :=	AN8 (clutd,fintdev,ab[10],alb[11..15],notourack);
+Lb0 :=		ND6 (lb0,fintdev,ab[11],alb[13..14],notourack,vcc);
+Lb1 :=		ND6 (lb1,fintdev,ab[12],alb[13..14],notourack,vcc);
+Lbd :=		ND2 (lbd,lb0,lb1);
+
+Lbat :=		MX2 (lbat,lba,lbad,ack);
+Lbai :=		FD2QP (lba,lbat,clk,resetl);
+
+Lbbt :=		MX2 (lbbt,lbb,lbbd,ack);
+Lbbi :=		FD2QP (lbb,lbbt,clk,resetl);
+
+Lbt :=		MX2H (lbt,lb,lbd,ack);
+Lbi :=		FD2QP (lb,lbt,clk,resetl);
+
+Clutt :=	MX2H (clutt,clut,clutd,ack);
+Cluti :=	FD2QP (clut,clutt,clk,resetl);
+
+END;
+
+
+
+DEF	BANK	(match:IO;
+
+		a[0..10],newrow,resl:IN);
+
+BEGIN
+
+(* latch the current row address *)
+
+Ra[0-10] :=	LDP1Q (ra[0-10],a[0-10],newrow);
+
+(* use a SR latch to record whether row address is valid *)
+
+Newrowl :=	IV (newrowl,newrow);
+Valid :=	LSRA (valid,resl,newrowl);
+
+(* compare the current main address with the last row address *)
+
+M[0-10] :=	EN (m[0-10],ra[0-10],a[0-10]);
+
+M1 :=		ND6 (m1,m[0..5]);
+M2 :=		ND6 (m2,m[6..10],valid);
+Match :=	NR2 (match,m1,m2);
+
+
+END;
+
+DEF	NAND14	(z:IO;
+
+		a,b,c,d,e,f,g,h,i,j,k,l,m,n:IN);
+
+BEGIN
+
+Z0 :=	AN4 (z0,a,b,c,d);
+Z1 :=	AN4 (z1,e,f,g,h);
+Z2 :=	AN4 (z2,i,j,k,l);
+Z3 :=	AN2 (z3,m,n);
+Z :=	ND4P (z,z0,z1,z2,z3);
+
+END;
+
+DEF     SLATCHCP (q:IO; d,clk,en,resl:IN);
+ 
+        d1:IO;
+(* high power synchronous latch with async active low clear *)
+ 
+BEGIN
+ 
+D       :=      MX2 (d1,q,d,en);
+Q       :=      FD2QP (q,d1,clk,resl);
+ 
+END;
+DEF	AN26	(z:IO; a[0..25]:IN);
+
+BEGIN
+
+Z0 :=	AN4 (z0,a[0..3]);
+Z1 :=	AN4 (z1,a[4..7]);
+Z2 :=	AN4 (z2,a[8..11]);
+Z3 :=	AN4 (z3,a[12..15]);
+Z4 :=	AN4 (z4,a[16..19]);
+Z5 :=	AN4 (z5,a[20..23]);
+Z6 :=	AN2 (z6,a[24..25]);
+Z :=	AN8 (z,z0,z1,z2,z3,z4,z5,z6,vcc);
+
+Vcc :=	TIE1 (vcc);
+
+END;
+
+ 

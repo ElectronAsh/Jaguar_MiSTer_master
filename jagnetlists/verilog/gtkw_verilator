@@ -1,0 +1,55 @@
+[*]
+[*] GTKWave Analyzer v3.3.39 (w)1999-2012 BSI
+[*] Wed May 01 04:36:45 2013
+[*]
+[dumpfile] "D:\FPGA\JagNetlists\verilog\vtb.fst"
+[savefile] "D:\FPGA\JagNetlists\verilog\gtkw_verilator"
+[timestart] 0
+[size] 1920 1021
+[pos] -1 -1
+*-29.497892 4075000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.v.
+[treeopen] TOP.v.tom_inst.
+[treeopen] TOP.v.tom_inst.gpu_inst.
+[sst_width] 197
+[signals_width] 352
+[sst_expanded] 1
+[sst_vpaned_height] 313
+@28
+TOP.sys_clk
+TOP.xpclk
+TOP.xvclk
+@22
+TOP.v.xa_r[23:0]
+TOP.v.xd_r[63:0]
+TOP.v.j_xd_oe[0:31]
+@28
+TOP.v.dram_oe[0:3]
+TOP.v.rasl
+TOP.v.casl
+TOP.v.xoel[0:2]
+TOP.v.xwel[0:7]
+TOP.v.xdreql_in
+TOP.v.xdtackl
+TOP.v.xbrl_in
+TOP.v.xba_in
+TOP.v.xintl
+@22
+TOP.v.j68_address_final[23:0]
+@28
+TOP.v.j68_rd_ena
+TOP.v.j68_wr_ena
+TOP.v.j68_data_ack
+@22
+TOP.v.j68_rd_data[15:0]
+TOP.v.j68_wr_data[15:0]
+@28
+TOP.v.j68_fc[2:0]
+TOP.v.obbreq
+TOP.v.tom_inst.ob_inst.obback
+TOP.v.tom_inst.ob_inst.obdone
+@22
+TOP.v.xb[0:7]
+[pattern_trace] 1
+[pattern_trace] 0

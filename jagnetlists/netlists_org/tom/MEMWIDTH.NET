@@ -1,0 +1,348 @@
+(*****************************************************************
+
+	memwidth.net
+
+This module is responsible for breaking wide memory cycles into smaller
+ones.
+
+******************************************************************)
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego,
+	duplo;
+
+
+DEF	MEMWIDTH	(w[0..3],ba[0..2],mw[0..1],ack,nextc,
+		clk,vcc,gnd,bigend:IN;
+
+		maskw[0..3],maska[0..2],at[0..2],lastcycle,lastc,bm[0..7]:IO);
+
+
+(* GE 24/06/2012 - Changed comment layout *)
+
+(* w[0..3],	(* main bus cycle width in bits *)
+(* mw[0..1],	(* requested memory width in bytes 0->1,1->2,2->4,3->8 *)
+(* ba[0..2]	(* byte address of main bus cycle *)
+(* maskw[0..3],	(* data width in bytes for read modify write cycle *)
+(* maska[0..2],	(* start address in bytes for read modify write *)
+(* ack,		(* acknowledges memory cycle request *)
+(* nextc,		(* marks the end of a memory subcycle *)
+(* lastcycle,	(* indicates that the current subcycle is the last *)
+(* direct,		(* indicates that the next subcycle is a simple
+		read or write equal to the width of the memory *)
+
+	INT4/rw,w,maskw,rw1 INT3/maska,ba1 : IO;
+
+BEGIN
+
+Rw :=	JOIN (rw,rw[0..3]);
+Rwu :=	DUMMY (rw);
+Rw1 :=	JOIN (rw1,rw1[0..3]);
+Rw1u :=	DUMMY (rw1);
+W :=	JOIN (w,w[0..3]);
+Wu :=	DUMMY (w);
+Mw:=	JOIN (maskw,maskw[0..3]);
+Mwu :=	DUMMY (maskw);
+Ma:=	JOIN (maska,maska[0..2]);
+Mau :=	DUMMY (maska);
+Ba:=	JOIN (ba1,ba1[0..2]);
+Bau :=	DUMMY (ba1);
+
+(*
+
+ Cycle size and type determination
+ *********************************
+
+The memory width mw[0..1] is determined from the memory type and
+the configuration register.
+
+The remaining width, rw[0..3] is initialised from the requested width
+w[0..3] and is reduced by the actual cycle width maskw[0..3]
+
+The cycle width is the smaller of mw-ba or rw
+
+NB mw-ba actually means mw-ba%mw
+
+*)
+(* select either the requested width or the remaining width *)
+
+RW1[0-3] :=	MX2H (rw1[0-3],rw[0-3],w[0-3],ack);
+
+(* latch the remaining width *)
+
+Pw[0-3] :=	SLATCH (pw[0-3],rw1[0-3],clk,nextc);
+
+(* select either the requested address or the next address *)
+
+Ba1[0-2] :=	MX2H (ba1[0-2],nba[0-2],ba[0-2],ack);
+Ba1l[0-2] :=	IV (ba1l[0-2],ba1[0-2]);
+
+(* Latch the address *)
+
+Maskai[0-2] :=	FD1Q (maskai[0-2],at[0-2],clk);
+At[0-2] :=	MX2 (at[0-2],maskai[0-2],ba1[0-2],nextc);
+Maska[0] :=	NIVU (maska[0],maskai[0]);
+Maska[1] :=	NIVU2 (maska[1],maskai[1]);
+Maska[2] :=	NIVU (maska[2],maskai[2]);
+
+
+
+
+/* old logic
+
+Mba[0]	:=	MX4 (mba[0],gnd,ba1[0],ba1[0],ba1[0],mw[0..1]);
+Mba[1]	:=	MX4 (mba[1],gnd,gnd,ba1[1],ba1[1],mw[0..1]);
+Mba[2]	:=	MX4 (mba[2],gnd,gnd,gnd,ba1[2],mw[0..1]);
+
+Bal[0-2] :=	IV (bal[0-2],mba[0-2]);
+
+D[0] :=		FA1P (d[0],mbc[0],bal[0],mw8,vcc);
+D[1] :=		FA1P (d[1],mbc[1],bal[1],mw16,mbc[0]);
+D[2] :=		FA1P (d[2],mbc[2],bal[2],mw32,mbc[1]);
+D[3] :=		FA1P (d[3],mbc[3],vcc,mw64,mbc[2]);
+D :=		ADD4 (d[0..3],mbc[3],bal[0..2],vcc,mw8,mw16,mw32,mw64,vcc);
+Mbc[3] :=	DUMMY (mbc[3]);
+
+*/
+
+
+/* old logic
+S[0]	:=	FA1P (s[0],sc[0],rw1[0],mba[0],gnd);
+S[1-2] :=	FA1P (s[1-2],sc[1-2],rw1[1-2],mba[1-2],sc[0-1]);
+S[3] 	:=	HA1P (s[3],sc[3],rw1[3],sc[2]);
+*/
+
+Mwl[0-1] :=	IV (mwl[0-1],mw[0-1]);
+
+/* old logic
+
+S :=		ADD4 (s[0..3],sc[3],rw1[0..3],mba[0..2],gnd,gnd);
+Sc[3] :=	DUMMY (sc[3]);
+Sl[0-3] :=	IV (sl[0-3],s[0-3]);
+
+La	:=	IV (la,mw64);		
+Lb	:=	ND3 (lb,mw32,sl[3],sl[2]);
+Le	:=	ND6 (le,mw32,sl[3],s[2],sl[1],sl[0],vcc);
+Lc	:=	ND4 (lc,mw16,sl[3],sl[2],sl[1]);
+Lf	:=	ND6 (lf,mw16,sl[3],sl[2],s[1],sl[0],vcc);
+Ld	:=	ND4 (ld,mw8,sl[3],sl[2],sl[1]);
+Lastc	:=	ND6 (lastc,la,lb,lc,ld,le,lf);
+
+*/
+
+(* use lastc to select the smaller of rw and mw-ba%mw *)
+
+Cw1[0-3] :=	MX2P (cw1[0-3],d[0-3],rw1[0-3],lastc);
+
+(* use this or the memory width as the width of the next cycle *)
+
+Mw8 :=         AN2P (mw8,mwl[1],mwl[0]);
+Mw16 :=        AN2P (mw16,mwl[1],mw[0]);
+Mw32 :=        AN2P (mw32,mw[1],mwl[0]);
+Mw64 :=        AN2P (mw64,mw[1],mw[0]);
+
+Cw2[0] :=	MX2P (cw2[0],cw1[0],mw8,direct);
+Cw2[1] :=	MX2P (cw2[1],cw1[1],mw16,direct);
+Cw2[2] :=	MX2P (cw2[2],cw1[2],mw32,direct);
+Cw2[3] :=	MX2P (cw2[3],cw1[3],mw64,direct);
+
+Maskw[0-3] :=	SLATCH (maskw[0-3],cw2[0-3],clk,nextc);
+
+
+(* Subtract the cycle width from the width to get the remaining width *)
+
+maskwl[0-3] :=	IV (maskwl[0-3],maskw[0-3]);
+
+Rw[0]	:=	FA1 (rw[0],rwc[0],pw[0],maskwl[0],vcc);
+Rw[1-3]	:=	FA1 (rw[1-3],rwc[1-3],pw[1-3],maskwl[1-3],rwc[0-2]);
+
+(* test for completion *)
+
+Zerol	:=	OR4 (zerol,rw[0..3]);
+Lastcycle :=	ND2 (lastcycle,zerol,rwc[3]);
+
+(* Add the cycle width to the address to get the next address *)
+
+Nba[0]	:=	FA1 (nba[0],nbc[0],maska[0],maskw[0],gnd);
+Nba[1-2]:=	FA1 (nba[1-2],nbc[1-2],maska[1-2],maskw[1-2],nbc[0-1]);
+Nbc[2] :=	DUMMY (nbc[2]);
+
+(* determine if the cycle is direct (ie equal to the memory width) *)
+
+Dra	:=	ND3 (dra,mw[1],mw[0],rw1[3]);
+Drb	:=	ND6 (drb,mw[1],mwl[0],ba1l[0..1],w32,vcc);
+Drc	:=	ND4 (drc,mwl[1],mw[0],ba1l[0],w16);
+Drd	:=	ND2 (drd,mwl[1],mwl[0]);
+Direct	:=	ND4P (direct,dra,drb,drc,drd);
+
+(* w32 is asserted if rw1 >= 32, w16 is asserted if rw1 >= 16 etc *)
+
+W32	:=	OR2 (w32,rw1[2..3]);
+W16	:=	OR3 (w16,rw1[1..3]);
+
+(************* Generate a byte mask **************)
+
+(*
+ the start address is ba1[0..2] the width is rw1[0..3]
+ the byte mask is restricted by the memory width
+*)
+
+Sa :=		DEC38H (sa[0..7],ba1[0..2]);
+
+Rwl[1-3] :=	IVH (rwl[1-3],rw1[1-3]);
+Rwgt1 :=	ND3P (rwgt1,rwl[1],rwl[2],rwl[3]);	/* rw1 > 1 */
+Rwgt2a :=	ND2 (rwgt2a,rw1[0],rw1[1]);		/* rw1 = 3 */
+Rwgt2 :=	ND3P (rwgt2,rwgt2a,rwl[2],rwl[3]);	/* rw1 > 2 */
+Rwgt3 :=	ND2P (rwgt3,rwl[2],rwl[3]);		/* rw1 > 3 */
+Rwgt4a :=	ND2 (rwgt4a,rw1[0],rw1[2]);		/* rw1 = 5,7 */
+Rwgt4b :=	ND2 (rwgt4b,rw1[1],rw1[2]);		/* rw1 = 6,7 */
+Rwgt4 :=	ND3P (rwgt4,rwgt4a,rwgt4b,rwl[3]);	/* rw1 > 4 */
+Rwgt5 :=	ND2P (rwgt5,rwgt4b,rwl[3]);		/* rw1 > 5 */
+Rwgt6a :=	ND3 (rwgt6a,rw1[0],rw1[1],rw1[2]);	/* rw1 = 7 */
+Rwgt6 :=	ND2P (rwgt6,rwgt6a,rwl[3]);		/* rw1 > 6 */
+Rwlte1 :=	IVH (rwlte1,rwgt1);			/* rw1 <= 1 */
+Rwlte2 :=	IVH (rwlte2,rwgt2);			/* rw1 <= 2 */
+Rwlte3 :=	IVH (rwlte3,rwgt3);			/* rw1 <= 3 */
+Rwlte4 :=	IVH (rwlte4,rwgt4);			/* rw1 <= 4 */
+
+/* Byte mask for byte wide memory is sa[0..7] */
+/* Byte mask for word wide memory */
+
+Bmwa[1] :=	IV (bmwa[1],sa[1]);
+Bmwb[1] :=	ND2 (bmwb[1],sa[0],rwgt1);
+Bmw[1] :=	ND2 (bmw[1],bmwa[1],bmwb[1]);
+Bmwa[3] :=	IV (bmwa[3],sa[3]);
+Bmwb[3] :=	ND2 (bmwb[3],sa[2],rwgt1);
+Bmw[3] :=	ND2 (bmw[3],bmwa[3],bmwb[3]);
+Bmwa[5] :=	IV (bmwa[5],sa[5]);
+Bmwb[5] :=	ND2 (bmwb[5],sa[4],rwgt1);
+Bmw[5] :=	ND2 (bmw[5],bmwa[5],bmwb[5]);
+Bmwa[7] :=	IV (bmwa[7],sa[7]);
+Bmwb[7] :=	ND2 (bmwb[7],sa[6],rwgt1);
+Bmw[7] :=	ND2 (bmw[7],bmwa[7],bmwb[7]);
+
+/* Byte mask for long memory */
+
+Bmla[2] :=	IV (bmla[2],sa[2]);
+Bmlb[2] :=	ND2 (bmlb[2],sa[0],rwgt2);
+Bmlc[2] :=	ND2 (bmlc[2],sa[1],rwgt1);
+Bml[2] :=	ND3 (bml[2],bmla[2],bmlb[2],bmlc[2]);
+Bmla[3] :=	IV (bmla[3],sa[3]);
+Bmlb[3] :=	ND2 (bmlb[3],sa[0],rwgt3);
+Bmlc[3] :=	ND2 (bmlc[3],sa[1],rwgt2);
+Bmld[3] :=	ND2 (bmld[3],sa[2],rwgt1);
+Bml[3] :=	ND4 (bml[3],bmla[3],bmlb[3],bmlc[3],bmld[3]);
+Bmla[6] :=	IV (bmla[6],sa[6]);
+Bmlb[6] :=	ND2 (bmlb[6],sa[4],rwgt2);
+Bmlc[6] :=	ND2 (bmlc[6],sa[5],rwgt1);
+Bml[6] :=	ND3 (bml[6],bmla[6],bmlb[6],bmlc[6]);
+Bmla[7] :=	IV (bmla[7],sa[7]);
+Bmlb[7] :=	ND2 (bmlb[7],sa[4],rwgt3);
+Bmlc[7] :=	ND2 (bmlc[7],sa[5],rwgt2);
+Bmld[7] :=	ND2 (bmld[7],sa[6],rwgt1);
+Bml[7] :=	ND4 (bml[7],bmla[7],bmlb[7],bmlc[7],bmld[7]);
+
+/* Byte mask for phrase memory */
+
+Bmpa[4] :=	IV (bmpa[4],sa[4]);
+Bmpb[4] :=	ND2 (bmpb[4],sa[0],rwgt4);
+Bmpc[4] :=	ND2 (bmpc[4],sa[1],rwgt3);
+Bmpd[4] :=	ND2 (bmpd[4],sa[2],rwgt2);
+Bmpe[4] :=	ND2 (bmpe[4],sa[3],rwgt1);
+Bmp[4] :=	ND6 (bmp[4],bmpa[4],bmpb[4],bmpc[4],bmpd[4],bmpe[4],vcc);
+Bmpa[5] :=	IV (bmpa[5],sa[5]);
+Bmpb[5] :=	ND2 (bmpb[5],sa[0],rwgt5);
+Bmpc[5] :=	ND2 (bmpc[5],sa[1],rwgt4);
+Bmpd[5] :=	ND2 (bmpd[5],sa[2],rwgt3);
+Bmpe[5] :=	ND2 (bmpe[5],sa[3],rwgt2);
+Bmpf[5] :=	ND2 (bmpf[5],sa[4],rwgt1);
+Bmp[5] :=	ND6 (bmp[5],bmpa[5],bmpb[5],bmpc[5],bmpd[5],bmpe[5],bmpf[5]);
+Bmpa[6] :=	IV (bmpa[6],sa[6]);
+Bmpb[6] :=	ND2 (bmpb[6],sa[0],rwgt6);
+Bmpc[6] :=	ND2 (bmpc[6],sa[1],rwgt5);
+Bmpd[6] :=	ND2 (bmpd[6],sa[2],rwgt4);
+Bmpe[6] :=	ND2 (bmpe[6],sa[3],rwgt3);
+Bmpf[6] :=	ND2 (bmpf[6],sa[4],rwgt2);
+Bmpg[6] :=	ND2 (bmpg[6],sa[5],rwgt1);
+Bmp[6] :=	ND8 (bmp[6],bmpa[6],bmpb[6],bmpc[6],bmpd[6],
+			bmpe[6],bmpf[6],bmpg[6],vcc);
+Bmpa[7] :=	IV (bmpa[7],sa[7]);
+Bmpb[7] :=	ND2 (bmpb[7],sa[0],rw1[3]);
+Bmpc[7] :=	ND2 (bmpc[7],sa[1],rwgt6);
+Bmpd[7] :=	ND2 (bmpd[7],sa[2],rwgt5);
+Bmpe[7] :=	ND2 (bmpe[7],sa[3],rwgt4);
+Bmpf[7] :=	ND2 (bmpf[7],sa[4],rwgt3);
+Bmpg[7] :=	ND2 (bmpg[7],sa[5],rwgt2);
+Bmph[7] :=	ND2 (bmph[7],sa[6],rwgt1);
+Bmp[7] :=	ND8 (bmp[7],bmpa[7],bmpb[7],bmpc[7],bmpd[7],
+			bmpe[7],bmpf[7],bmpg[7],bmph[7]);
+
+(* select appropriate mask *)
+
+Bmd[0] :=	NIV (bmd[0],sa[0]);
+Bmd[1] :=	MX4P (bmd[1],sa[1],bmw[1],bmw[1],bmw[1],mw[0..1]);
+Bmd[2] :=	MX4P (bmd[2],sa[2],sa[2],bml[2],bml[2],mw[0..1]);
+Bmd[3] :=	MX4P (bmd[3],sa[3],bmw[3],bml[3],bml[3],mw[0..1]);
+Bmd[4] :=	MX4P (bmd[4],sa[4],sa[4],sa[4],bmp[4],mw[0..1]);
+Bmd[5] :=	MX4P (bmd[5],sa[5],bmw[5],bmw[5],bmp[5],mw[0..1]);
+Bmd[6] :=	MX4P (bmd[6],sa[6],sa[6],bml[6],bmp[6],mw[0..1]);
+Bmd[7] :=	MX4P (bmd[7],sa[7],bmw[7],bml[7],bmp[7],mw[0..1]);
+
+(* Reverse the byte mask for big-endian systems *)
+ 
+Bmd1[0] :=        MX2 (bmd1[0],bmd[0],bmd[7],bigend);
+Bmd1[1] :=        MX2 (bmd1[1],bmd[1],bmd[6],bigend);
+Bmd1[2] :=        MX2 (bmd1[2],bmd[2],bmd[5],bigend);
+Bmd1[3] :=        MX2 (bmd1[3],bmd[3],bmd[4],bigend);
+Bmd1[4] :=        MX2 (bmd1[4],bmd[4],bmd[3],bigend);
+Bmd1[5] :=        MX2 (bmd1[5],bmd[5],bmd[2],bigend);
+Bmd1[6] :=        MX2 (bmd1[6],bmd[6],bmd[1],bigend);
+Bmd1[7] :=        MX2 (bmd1[7],bmd[7],bmd[0],bigend);
+ 
+Bm[0-7] :=	SLATCH (bm[0-7],bmd1[0-7],clk,nextc);
+
+/* identify when this is the last subcycle */
+
+/* eight bit memory remaining width must be less than 2 */
+
+/* 16 bit memory */
+
+Last16a :=	ND2 (last16a,ba1[0],rwlte1);
+Last16b :=	ND2 (last16b,ba1l[0],rwlte2);
+Last16 :=	ND2 (last16,last16a,last16b);
+
+/* 32 bit memory */
+
+Last32a :=	ND3 (last32a,ba1[1],ba1[0],rwlte1);
+Last32b :=	ND3 (last32b,ba1[1],ba1l[0],rwlte2);
+Last32c :=	ND3 (last32c,ba1l[1],ba1[0],rwlte3);
+Last32d :=	ND3 (last32d,ba1l[1],ba1l[0],rwlte4);
+Last32 :=	ND4 (last32,last32a,last32b,last32c,last32d);
+
+/* 64 bit memory always the last cycle */
+
+Lastc :=	MX4P (lastc,rwlte1,last16,last32,vcc,mw[0..1]);
+
+/*
+ compute the number of bytes (d[0..3]) from the byte address to
+ the memory width boundary
+*/
+
+/* compute negba[0.3] = 8 - ba */
+
+Negba[0] :=	HA1P (negba[0],nbac[0],ba1l[0],vcc);
+Negba[1] :=	HA1P (negba[1],nbac[1],ba1l[1],nbac[0]);
+Negba[2] :=	HA1P (negba[2],negba[3],ba1l[2],nbac[1]);
+
+/* select bits depending on memory width */
+
+D[0] :=		MX4P (d[0],vcc,negba[0],negba[0],negba[0],mw[0..1]);
+D[1] :=		MX4P (d[1],gnd,ba1l[0],negba[1],negba[1],mw[0..1]);
+D[2] :=		MX4P (d[2],gnd,gnd,d216,negba[2],mw[0..1]);
+D[3] :=		MX4P (d[3],gnd,gnd,gnd,negba[3],mw[0..1]);
+
+D216 :=		AN2 (d216,ba1l[0],ba1l[1]);
+
+END;
+
+

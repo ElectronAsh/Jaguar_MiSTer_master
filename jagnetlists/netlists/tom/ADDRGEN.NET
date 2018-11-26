@@ -1,0 +1,386 @@
+/******************************************************************
+addrgen
+3/12/90
+
+Blitter address generator
+-------------------------
+
+This module produces physical and bit addresses from the blitter 
+window description.
+
+To avoid a hardware multiplier in this module, windows are 
+physically restricted to a finite set of widths, given by a very 
+simple floating point format.  This width multiplies the Y address 
+to give the Y component of the offset from the pixel base address.
+
+The width specification represents windows between 1 and 32768 
+pixels wide, and has a three bit mantissa (top bit implicit, 
+point after implicit 1) and four bit exponent (2^0 to 2^12).  
+The width is also stored as a 15-bit integer in the window size 
+register for clipping purposes, and may take any value less than 
+the physical width.
+
+The largest physical height of a window is 4096 pixels.
+
+WARNING - Addresses take a significant time to compute
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ADDRGEN (
+INT24/	address		/* byte address */
+	pixa[0..2]	/* bit part of address, un-pipe-lined */
+	:OUT;
+INT16/	a1_x
+INT16/	a1_y
+INT21/	a1_base
+	a1_pitch[0..1]
+	a1_pixsize[0..2]
+	a1_width[0..5]
+	a1_zoffset[0..1]
+INT16/	a2_x
+INT16/	a2_y
+INT21/	a2_base
+	a2_pitch[0..1]
+	a2_pixsize[0..2]
+	a2_width[0..5]
+	a2_zoffset[0..1]
+	apipe		/* load address pipe-line latch */
+	clk		/* co-processor clock */
+	gena2		/* generate A2 as opposed to A1 */
+	zaddr		/* generate Z address */
+	:IN);
+
+INT16/	pa_b
+INT24/	pa_a
+INT25/	pa
+INT21/	base
+INT27/	pixadr
+INT24/	addrgen, addressi
+:LOCAL;
+BEGIN
+
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+Zeroa		:= TIE0 (zerob);	
+Zerob		:= TIE0 (zeroc);
+/* extra zeroes to cope with translate quirk of multiple inputs
+tied to the same thing in MX12B and MX16 */
+
+Gena2b[0-1]	:= NIVU (gena2b[0-1], gena2);
+
+/* Multiplex between A1 and A2 */
+
+X[0-15]		:= MX2 (x[0-15], a1_x{0-15}, a2_x{0-15}, 
+			gena2b[0]);
+
+Y[0-11]		:= MX2 (y[0-11], a1_y{0-11}, a2_y{0-11}, 
+			gena2b[0]);
+
+Width[0-5]	:= MX2U (width[0-5], a1_width[0-5], a2_width[0-5],
+			gena2b[1]);
+Width\[4]	:= IV (width\[4], width[4]);
+
+Pixsize[0-2]	:= MX2U (pixsize[0-2], a1_pixsize[0-2], 
+			a2_pixsize[0-2], gena2b[1]);
+Pissizeb[0]	:= NIVU (pixsizeb[0], pixsize[0]);
+
+Pitch[0-1]	:= MX2P (pitch[0-1], a1_pitch[0-1], a2_pitch[0-1],
+			gena2b[1]);
+Pitch\[0-1]	:= IV (pitch\[0-1], pitch[0-1]);
+
+Base		:= MX2P (base, a1_base, a2_base, gena2);
+
+Zoffset[0-1]	:= MX2 (zoffset[0-1], a1_zoffset[0-1], 
+			a2_zoffset[0-1], gena2b[1]);
+
+/* Generate Y times mantissa width, with a pair of adders, and
+appropriate enables for the less significant positions. 
+
+The result is ytm - Y times mantissa 
+
+A FA332 is used here because the path was too slow.  
+The alternative, two FAS16s is only 120 grids smaller.
+If only there was a FA316.  (2/48) */
+
+Ym1[0-11]	:= AN2P (ym1[0-11], width[1], y[0-11]);
+Ym2[0-11]	:= AN2P (ym2[0-11], width[0], y[0-11]);
+
+Yadd		:= FA332 (ytmt[0..31], co[0..1], zero, zero,   
+			ym2[0],  zero,    zero, 
+			ym2[1],  ym1[0],  zero, 
+			ym2[2],  ym1[1],  y[0], 
+			ym2[3],  ym1[2],  y[1], 
+			ym2[4],  ym1[3],  y[2], 
+			ym2[5],  ym1[4],  y[3], 
+			ym2[6],  ym1[5],  y[4], 
+			ym2[7],  ym1[6],  y[5], 
+			ym2[8],  ym1[7],  y[6], 
+			ym2[9],  ym1[8],  y[7], 
+			ym2[10], ym1[9],  y[8], 
+			ym2[11], ym1[10], y[9], 
+			zero,    ym1[11], y[10], 
+			zero,    zero,    y[11], 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero, 
+	zero, zero, zero, zero, zero, zero, zero, zero, zero);
+
+Co[0-1]		:= DUMMY (co[0-1]);
+Ytmt[15-31]	:= DUMMY (ytmt[15-31]);
+
+Ytm[0-14]	:= NIVH (ytm[0-14], ytmt[0-14]);
+
+/* ytm is now multiplied by an amount between 2^0 and 2^11, using
+shifts, this is with regard to the top bit, so the shift on ytm 
+is actually between -2 and 9. */
+
+Lowen		:= OR2 (lowen, width[4..5]);
+Yaddr[0]	:= MX4G  (ya[0], ytm[2], ytm[1], ytm[0], zero,   
+			width[2..3], lowen);
+Yaddr[1]	:= MX4G  (ya[1], ytm[3], ytm[2], ytm[1], ytm[0], 
+			width[2..3], lowen);
+Yaddr[2]	:= MX8G  (ya[2], ytm[4], ytm[3], ytm[2], ytm[1], 
+			ytm[0], zero,   zero,   zero,   
+			width[2..5]);
+Yaddr[3]	:= MX8G  (ya[3], ytm[5], ytm[4], ytm[3], ytm[2], 
+			ytm[1], ytm[0], zero,   zero,   
+			width[2..5]);
+Yaddr[4]	:= MX8G  (ya[4], ytm[6], ytm[5], ytm[4], ytm[3], 
+			ytm[2], ytm[1], ytm[0], zero,   
+			width[2..5]);
+Yaddr[5]	:= MX8G  (ya[5], ytm[7], ytm[6], ytm[5], ytm[4], 
+			ytm[3], ytm[2], ytm[1], ytm[0], 
+			width[2..5]);
+Yaddr[6]	:= MX12B (ya[6], ytm[8], ytm[7], ytm[6], ytm[5], 
+			ytm[4], ytm[3], ytm[2], ytm[1], ytm[0], 
+			zero,   zerob,   zeroc, width[2..5]);
+Yaddr[7]	:= MX12B (ya[7], ytm[9], ytm[8], ytm[7], ytm[6], 
+			ytm[5], ytm[4], ytm[3], ytm[2], ytm[1], 
+			ytm[0], zero,   zero, width[2..5]);
+Yaddr[8]	:= MX12B (ya[8], ytm[10], ytm[9], ytm[8], ytm[7], 
+			ytm[6], ytm[5], ytm[4], ytm[3], ytm[2], 
+			ytm[1], ytm[0], zero, width[2..5]);
+Yaddr[9]	:= MX12B (ya[9], ytm[11], ytm[10], ytm[9], ytm[8], 
+			ytm[7], ytm[6], ytm[5], ytm[4], ytm[3], 
+			ytm[2], ytm[1], ytm[0], width[2..5]);
+Yaddr[10]	:= MX12B  (ya[10], ytm[12], ytm[11], ytm[10], 
+			ytm[9], ytm[8], ytm[7], ytm[6], ytm[5], 
+			ytm[4], ytm[3], ytm[2], ytm[1], 
+			width[2..5]);
+Yaddr[11]	:= MX12B (ya[11], ytm[13], ytm[12], ytm[11], 
+			ytm[10], ytm[9], ytm[8], ytm[7], ytm[6], 
+			ytm[5], ytm[4], ytm[3], ytm[2], 
+			width[2..5]);
+Yaddr[12]	:= MX12B (ya[12], ytm[14], ytm[13], ytm[12], 
+			ytm[11], ytm[10], ytm[9], ytm[8], ytm[7], 
+			ytm[6], ytm[5], ytm[4], ytm[3], 
+			width[2..5]);
+Yaddr[13]	:= MX12B (ya[13], zero, ytm[14], ytm[13], 
+			ytm[12], ytm[11], ytm[10], ytm[9], ytm[8], 
+			ytm[7], ytm[6], ytm[5], ytm[4], 
+			width[2..5]);
+Yaddr[14]	:= MX12B (ya[14], zero, zero, ytm[14], 
+			ytm[13], ytm[12], ytm[11], ytm[10], 
+			ytm[9], ytm[8], ytm[7], ytm[6], ytm[5], 
+			width[2..5]);
+Yaddr[15]	:= MX12B (ya[15], zero, zero, zero, 
+			ytm[14], ytm[13], ytm[12], ytm[11], 
+			ytm[10], ytm[9], ytm[8], ytm[7], ytm[6], 
+			width[2..5]);
+/* bits 16-19 use MX8G enabled for shifts 4-11, the low four and
+high four must be swapped */
+Mid8en\		:= EN (mid8en\, width[4..5]);
+Yaddr[16]	:= MX8G  (ya[16], 
+			ytm[10], ytm[9], ytm[8], ytm[7], 
+			ytm[14], ytm[13], ytm[12], ytm[11], 
+			width[2..4], mid8en\);
+Yaddr[17]	:= MX8G  (ya[17], 
+			ytm[11], ytm[10], ytm[9], ytm[8], 
+			zero, ytm[14], ytm[13], ytm[12], 
+			width[2..4], mid8en\);
+Yaddr[18]	:= MX8G (ya[18], 
+			ytm[12], ytm[11], ytm[10], ytm[9], 
+			zero, zero, ytm[14], ytm[13], 
+			width[2..4], mid8en\);
+Yaddr[19]	:= MX8G  (ya[19], 
+			ytm[13], ytm[12], ytm[11], ytm[10], 
+			zero, zero, zero, ytm[14], 
+			width[2..4], mid8en\);
+Tm4en\		:= ND2 (tm4en\, width\[4], width[5]);
+Yaddr[20]	:= MX4G (ya[20], ytm[14], ytm[13], ytm[12], 
+			ytm[11], width[2..3], tm4en\);
+Yaddr[21]	:= MX4G (ya[21], zero, ytm[14], ytm[13], ytm[12], 
+			width[2..3], tm4en\);
+Yaddr[22]	:= MX4G (ya[22], zero, zero, ytm[14], ytm[13], 
+			width[2..3], tm4en\);
+Yaddr[23]	:= AN5 (ya[23], ytm[14], width[2..3], width\[4], 
+			width[5]);
+
+/* Add the X address and shift by the pixel size to give the bit
+offset and the phrase address 
+*/
+
+Pa_a		:= JOIN (pa_a, ya[0..23]);	/* debug only */
+Pa_ad		:= DUMMY (pa_a);
+Pa_b		:= JOIN (pa_b, x[0..15]);	/* debug only */
+Pa_bd		:= DUMMY (pa_b);
+Pa		:= JOIN (pa,   pa[0..24]);	/* debug only */
+Pad		:= DUMMY (pa);
+
+Palow		:= FAS16_S (pa[0..15], pacy\[15], one, one, ya[0], 
+			x[0], ya[1], x[1], ya[2], x[2], ya[3], 
+			x[3], ya[4], x[4], ya[5], x[5], ya[6], 
+			x[6], ya[7], x[7], ya[8], x[8], ya[9], 
+			x[9], ya[10], x[10], ya[11], x[11], 
+			ya[12], x[12], ya[13], x[13], ya[14], 
+			x[14], ya[15], x[15]);
+Pacy[15]	:= IV (pacy[15], pacy\[15]);
+Pa[16-19]	:= HA1 (pa[16-19], pacy[16-19], ya[16-19], 
+			pacy[15-18]);
+Pa[20]		:= EOP (pa[20], ya[20], pacy[19]);
+Pacy[20]	:= AN6M (pacy[20], pacy[15], ya[16..20]);
+Pa[21-22]	:= HA1 (pa[21-22], pacy[21-22], ya[21-22], 
+			pacy[20-21]);
+Pa[23]		:= HA1 (pa[23..24], ya[23], pacy[22]);
+
+/* now shift up to give a multiply by the pixel size */
+
+Pixa4		:= MX6 (pixa[4], pa[4], pa[3], pa[2], pa[1], pa[0],
+			zero, pixsize[0..2]);
+Pixa3		:= MX6 (pixa[3], pa[3], pa[2], pa[1], pa[0], zero, 
+			zero, pixsize[0..2]);
+Pixa2		:= MX6 (pixa[2], pa[2], pa[1], pa[0], zero, zero, 
+			zero, pixsize[0..2]);
+Pixa1		:= MX6 (pixa[1], pa[1], pa[0], zero, zero, zero, 
+			zero, pixsize[0..2]);
+Pixa0		:= MX6 (pixa[0], pa[0], zero, zero, zero, zero, 
+			zero, pixsize[0..2]);
+Pixa[5-12]	:= MX6 (pixa[5-12], pa[5-12], pa[4-11], pa[3-10], 
+			pa[2-9], pa[1-8], pa[0-7], 
+			pixsize[0..2]);
+Pixa[13-24]	:= MX6 (pixa[13-24], pa[13-24], pa[12-23], 
+			pa[11-22], pa[10-21], pa[9-20], pa[8-19], 
+			pixsizeb[0], pixsize[1..2]);
+Pixa[25]	:= MX6 (pixa[25], zero, pa[24], pa[23], pa[22], 
+			pa[21], pa[20], pixsizeb[0], 
+			pixsize[1..2]);
+Pixa[26]	:= MX6 (pixa[26], zero, zero, pa[24], pa[23], 
+			pa[22], pa[21], pixsizeb[0], 
+			pixsize[1..2]);
+
+Pixadr		:= JOIN (pixadr, pixa[0..26]);	/* debug only */
+Pixadrd		:= DUMMY (pixadr);
+
+/* The phrase address is given by the phrase part of the pixel
+address multiplied by the pitch value, and added to the base 
+address.  The pitch values indicate how far apart in phrases
+successive pixel phrases are, i.e. 0 = contiguous, 1 = one phrase
+gap, 2 = 3 phrase gap, 3 = special case 4 phrase */
+
+/* add 1 to the stored value */
+
+Pt0		:= AN2U  (pt[0], pitch[0], pitch\[1]);
+Pt1		:= AN2U  (pt[1], pitch[1], pitch\[0]);
+
+Phradr[0]	:= MX4P (phradr[0], pixa[6], zero, zero, zero, 
+			pt[0..1]);
+Phradr[1]	:= MX4P (phradr[1], pixa[7], pixa[6], zero, zero, 
+			pt[0..1]);
+Phradr[2]	:= MX4P (phradr[2], pixa[8], pixa[7], pixa[6], 
+			zero, pt[0..1]);
+Phradr[3-20]	:= MX4P (phradr[3-20], pixa[9-26], pixa[8-25], 
+			pixa[7-24], zero, pt[0..1]);
+
+/* The shifted up version for offset of 3 */
+
+Shupen		:= AN2U (shupen, pitch[0..1]);
+Shup[0-19]	:= AN2 (shup[0-19], pixa[6-25], shupen);
+
+/* the actual address is computed to phrase resolution, and the
+Z offset is added here, if enabled 
+The bottom 3 bits add phradr, phradr shifted up 1, zoffset and base
+The higher bits do not add Z offset
+*/
+
+Za[0-1]		:= AN2 (za[0-1], zoffset[0-1], zaddr);
+
+Addr[0]		:= FA1 (addr[0], adcy0, base{0}, phradr[0], 
+			za[0]);
+Addr1t		:= FA1 (addr1t, adcy1a, base{1}, phradr[1],
+			za[1]);
+Addr[1]		:= FA1 (addr[1], adcy1b, addr1t, shup[0],
+			adcy0);
+Addr2t		:= FA1 (addr2t, adcy2a, base{2}, phradr[2],
+			adcy1a);
+Addr[2]		:= FA1 (addr[2], adcy2b, addr2t, shup[1],
+			adcy1b);
+Addr3t28	:= FA332 (addr[3..20], unused[0..15],
+			adcy2a, adcy2b, 
+			shup[2], base{3}, phradr[3],
+			shup[3], base{4}, phradr[4],
+			shup[4], base{5}, phradr[5],
+			shup[5], base{6}, phradr[6],
+			shup[6], base{7}, phradr[7],
+			shup[7], base{8}, phradr[8],
+			shup[8], base{9}, phradr[9],
+			shup[9], base{10}, phradr[10],
+			shup[10], base{11}, phradr[11],
+			shup[11], base{12}, phradr[12],
+			shup[12], base{13}, phradr[13],
+			shup[13], base{14}, phradr[14],
+			shup[14], base{15}, phradr[15],
+			shup[15], base{16}, phradr[16],
+			shup[16], base{17}, phradr[17],
+			shup[17], base{18}, phradr[18],
+			shup[18], base{19}, phradr[19],
+			shup[19], base{20}, phradr[20],
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero,
+			zero, zero, zero, 
+			zero, zero, zero);
+
+Addrgen		:= JOIN (addrgen, pixa[3..5], addr[0..20]); 
+
+/* The address is pipe-lined here */
+
+Apipeb		:= NIVU (apipeb, apipe);
+Addressi	:= MX2P (address, addressi, addrgen, apipeb);
+Address		:= FD1Q (addressi, address, clk);
+
+Unused[0-15]	:= DUMMY (unused[0-15]);
+
+END;
+
+/*  YMX9 - Y multiplexer, select first term if MSB is low */
+
+DEF YMX9 (q :OUT; a[0..8], sel[0..3] :IN);
+
+BEGIN
+Hisel		:= MX8 (hisel, a[1..8], sel[0..2]);
+Q		:= MX2 (q, a[0], hisel, sel[3]);
+END;
+
+/*  YMX5 - Y multiplexer, select first term if either of the two
+MSBs are low */
+
+DEF YMX5 (q :OUT; a[0..4], sel[0..3] :IN);
+
+BEGIN
+Hisel		:= MX4 (hisel, a[1..4], sel[0..1]);
+Loen		:= ND2 (loen, sel[2..3]);
+Q		:= MX2 (q, hisel, a[0], loen);
+END;

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simPackage>
+ <file path="pll_jag_sim/pll_jag.vo" type="VERILOG" />
+ <topLevel name="pll_jag" />
+ <deviceFamily name="cyclonev" />
+</simPackage>

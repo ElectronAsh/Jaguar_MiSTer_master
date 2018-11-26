@@ -1,0 +1,47 @@
+(*****************************************************************
+
+	gpu1.net
+
+This module interfaces the graphics processor to the rest
+of the Jaguar video chip.
+A similar module in file gpu2.net provides an empty well behaved
+placebo.
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	graphics;	(* graphics processor *)
+
+
+DEF 	GRI	(ima[0..15],din[0..31],ack,blback,gpback,dmback,
+		resetl,clk[0],clk[2],cst,
+                dmreql,grpintreq,abort,tint,
+		gpuread,gpuwrite,nocpu,d[0..63],at[1]:IN;
+
+		blbreq,gpbreq,dmbreq,dmackl,gpuint:IO;
+
+		wd[0..63],a[0..31],w[0..3],rw,mreq,dr[0..15],justify:BUS);
+
+	INT16/dread,io_addr:IO;
+
+BEGIN
+
+Graphics :=	GRAPHICS (a[0..31],wd[0..63],justify,mreq,rw,w[0..3],dread,
+		blbreq,gpuint,dmbreq,dmack,gpbreq,
+		abort,ack,at[1],blback,clk[0],clk[2],d[0..63],dmback,
+		din[0..31], gpback, dmreq, tint, grpintreq, io_addr, 
+		gpuread, gpuwrite, resetl,nocpu);
+		
+(* convert busses into integers & vice versa *) 
+
+Dr[0-15] :=	JOIN_BUS (dr[0-15],dread{0-15});
+Io_addr :=	JOIN (io_addr,ima[0..15]);
+
+
+(* invert DMA request/ack  *)
+
+Dmreq :=	IV (dmreq,dmreql);
+Dmackl :=	IV (dmackl,dmack);
+
+END;
+

@@ -1,0 +1,52 @@
+[*]
+[*] GTKWave Analyzer v3.3.39 (w)1999-2012 BSI
+[*] Wed May 01 10:03:11 2013
+[*]
+[dumpfile] "D:\FPGA\JagNetlists\verilog\tb_s2.fst"
+[savefile] "D:\FPGA\JagNetlists\verilog\tb_s2_gtkw"
+[timestart] 0
+[size] 1920 1021
+[pos] -9 -9
+*-27.699907 714000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] tb.
+[treeopen] tb.top.
+[treeopen] tb.top.jag.
+[treeopen] tb.top.jag.tom_inst.
+[treeopen] tb.top.jag.tom_inst.vid_inst.
+[sst_width] 233
+[signals_width] 259
+[sst_expanded] 1
+[sst_vpaned_height] 301
+@28
+tb.top.xresetl
+tb.top.sys_clk
+tb.top.jag.xpclk
+tb.top.jag.xvclk
+@22
+#{tb.top.jag.xa_r[23:0]} tb.top.jag.xa_r[23] tb.top.jag.xa_r[22] tb.top.jag.xa_r[21] tb.top.jag.xa_r[20] tb.top.jag.xa_r[19] tb.top.jag.xa_r[18] tb.top.jag.xa_r[17] tb.top.jag.xa_r[16] tb.top.jag.xa_r[15] tb.top.jag.xa_r[14] tb.top.jag.xa_r[13] tb.top.jag.xa_r[12] tb.top.jag.xa_r[11] tb.top.jag.xa_r[10] tb.top.jag.xa_r[9] tb.top.jag.xa_r[8] tb.top.jag.xa_r[7] tb.top.jag.xa_r[6] tb.top.jag.xa_r[5] tb.top.jag.xa_r[4] tb.top.jag.xa_r[3] tb.top.jag.xa_r[2] tb.top.jag.xa_r[1] tb.top.jag.xa_r[0]
+#{tb.top.jag.xd_r[63:0]} tb.top.jag.xd_r[63] tb.top.jag.xd_r[62] tb.top.jag.xd_r[61] tb.top.jag.xd_r[60] tb.top.jag.xd_r[59] tb.top.jag.xd_r[58] tb.top.jag.xd_r[57] tb.top.jag.xd_r[56] tb.top.jag.xd_r[55] tb.top.jag.xd_r[54] tb.top.jag.xd_r[53] tb.top.jag.xd_r[52] tb.top.jag.xd_r[51] tb.top.jag.xd_r[50] tb.top.jag.xd_r[49] tb.top.jag.xd_r[48] tb.top.jag.xd_r[47] tb.top.jag.xd_r[46] tb.top.jag.xd_r[45] tb.top.jag.xd_r[44] tb.top.jag.xd_r[43] tb.top.jag.xd_r[42] tb.top.jag.xd_r[41] tb.top.jag.xd_r[40] tb.top.jag.xd_r[39] tb.top.jag.xd_r[38] tb.top.jag.xd_r[37] tb.top.jag.xd_r[36] tb.top.jag.xd_r[35] tb.top.jag.xd_r[34] tb.top.jag.xd_r[33] tb.top.jag.xd_r[32] tb.top.jag.xd_r[31] tb.top.jag.xd_r[30] tb.top.jag.xd_r[29] tb.top.jag.xd_r[28] tb.top.jag.xd_r[27] tb.top.jag.xd_r[26] tb.top.jag.xd_r[25] tb.top.jag.xd_r[24] tb.top.jag.xd_r[23] tb.top.jag.xd_r[22] tb.top.jag.xd_r[21] tb.top.jag.xd_r[20] tb.top.jag.xd_r[19] tb.top.jag.xd_r[18] tb.top.jag.xd_r[17] tb.top.jag.xd_r[16] tb.top.jag.xd_r[15] tb.top.jag.xd_r[14] tb.top.jag.xd_r[13] tb.top.jag.xd_r[12] tb.top.jag.xd_r[11] tb.top.jag.xd_r[10] tb.top.jag.xd_r[9] tb.top.jag.xd_r[8] tb.top.jag.xd_r[7] tb.top.jag.xd_r[6] tb.top.jag.xd_r[5] tb.top.jag.xd_r[4] tb.top.jag.xd_r[3] tb.top.jag.xd_r[2] tb.top.jag.xd_r[1] tb.top.jag.xd_r[0]
+#{tb.top.jag.j68_address_final[23:0]} tb.top.jag.j68_address_final[23] tb.top.jag.j68_address_final[22] tb.top.jag.j68_address_final[21] tb.top.jag.j68_address_final[20] tb.top.jag.j68_address_final[19] tb.top.jag.j68_address_final[18] tb.top.jag.j68_address_final[17] tb.top.jag.j68_address_final[16] tb.top.jag.j68_address_final[15] tb.top.jag.j68_address_final[14] tb.top.jag.j68_address_final[13] tb.top.jag.j68_address_final[12] tb.top.jag.j68_address_final[11] tb.top.jag.j68_address_final[10] tb.top.jag.j68_address_final[9] tb.top.jag.j68_address_final[8] tb.top.jag.j68_address_final[7] tb.top.jag.j68_address_final[6] tb.top.jag.j68_address_final[5] tb.top.jag.j68_address_final[4] tb.top.jag.j68_address_final[3] tb.top.jag.j68_address_final[2] tb.top.jag.j68_address_final[1] tb.top.jag.j68_address_final[0]
+@28
+tb.top.jag.j68_rd_ena
+tb.top.jag.j68_wr_ena
+@22
+#{tb.top.jag.j68_rd_data[15:0]} tb.top.jag.j68_rd_data[15] tb.top.jag.j68_rd_data[14] tb.top.jag.j68_rd_data[13] tb.top.jag.j68_rd_data[12] tb.top.jag.j68_rd_data[11] tb.top.jag.j68_rd_data[10] tb.top.jag.j68_rd_data[9] tb.top.jag.j68_rd_data[8] tb.top.jag.j68_rd_data[7] tb.top.jag.j68_rd_data[6] tb.top.jag.j68_rd_data[5] tb.top.jag.j68_rd_data[4] tb.top.jag.j68_rd_data[3] tb.top.jag.j68_rd_data[2] tb.top.jag.j68_rd_data[1] tb.top.jag.j68_rd_data[0]
+#{tb.top.jag.j68_wr_data[15:0]} tb.top.jag.j68_wr_data[15] tb.top.jag.j68_wr_data[14] tb.top.jag.j68_wr_data[13] tb.top.jag.j68_wr_data[12] tb.top.jag.j68_wr_data[11] tb.top.jag.j68_wr_data[10] tb.top.jag.j68_wr_data[9] tb.top.jag.j68_wr_data[8] tb.top.jag.j68_wr_data[7] tb.top.jag.j68_wr_data[6] tb.top.jag.j68_wr_data[5] tb.top.jag.j68_wr_data[4] tb.top.jag.j68_wr_data[3] tb.top.jag.j68_wr_data[2] tb.top.jag.j68_wr_data[1] tb.top.jag.j68_wr_data[0]
+@28
+tb.top.jag.j68_data_ack
+tb.top.jag.obbreq
+tb.top.jag.tom_inst.ob_inst.start
+tb.top.jag.tom_inst.vid_inst.vdbeq
+tb.top.jag.tom_inst.vid_inst.vdbwr
+tb.top.jag.tom_inst.vid_inst.vdb_inst.count_0
+tb.top.jag.tom_inst.vid_inst.vdb_inst.cr_0
+tb.top.jag.tom_inst.vid_inst.vdb_inst.cr_1
+tb.top.jag.tom_inst.vid_inst.vdb_inst.cr_8
+tb.top.jag.tom_inst.vid_inst.vdb_inst.crwr
+tb.top.jag.tom_inst.vid_inst.hdb1eq
+tb.top.jag.tom_inst.vid_inst.vvactive
+tb.top.jag.tom_inst.vid_inst.vdbeq
+@29
+tb.top.jag.tom_inst.vid_inst.vdeeq
+[pattern_trace] 1
+[pattern_trace] 0

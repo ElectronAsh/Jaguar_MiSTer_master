@@ -1,0 +1,184 @@
+/******************************************************************
+dsp_int.net
+12/3/91
+
+Interrupt control logic
+-----------------------
+This module contains the logic for generating the code for GPU
+interrupt service procedures.
+
+Interrupts may come from a variety of sources, four pulse driven
+interrupt sources are supported (the pulse is one tick wide).
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DSP_INT (
+	gpu_dout[3..13]	/* GPU data bit-wise read bus */
+	gpu_dout[16..17]
+	:TRI;
+	imaski		/* look-ahead version */
+INT16/	intins		/* The interrupt service instructions */
+	intser		/* Interrupt service instruction override*/
+	:OUT;
+	atomic		/* Instruction flow is atomic */
+	clk		/* Co-processor clock */
+INT32/	gpu_din		/* Graphics processor data bus */
+	flagrd		/* Flag register read */
+	flagwr		/* Flag register write */
+	gpu_irq[0..5]	/* Interrupt request lines */
+	reset\		/* System reset */
+	romold		/* instruction being latched in ins_exec */
+	statrd		/* GPU status port read */
+	:IN;
+	);
+
+INT3/	int
+INT16/	ins[0..7]
+:LOCAL;
+BEGIN
+
+Zero		:= TIE0 (zero);
+
+Atomic\		:= IV (atomic\, atomic);
+
+/* The interrupt control part of the flags register:
+bit 3 is the interrupt mask
+bits 4-8 are the interrupt enables
+bits 9-13 are the interrupt latches
+*/
+
+Int_ena[0-4]	:= FDSYNCR (int_ena[0-4], gpu_din{4-8}, flagwr,
+			clk, reset\);
+Int_ena[5]	:= FDSYNCR (int_ena[5], gpu_din{16}, flagwr,
+			clk, reset\);
+
+/* The interrupt latches are set when the corresponding interrupt
+pulse occurs, and cleared when a one is written by software.
+The interrupt mask prevents them being set. */
+
+Ilclr\[0-4]	:= ND2 (ilclr\[0-4], gpu_din{9-13}, flagwr);
+Ilclr\[5]	:= ND2 (ilclr\[5], gpu_din{17}, flagwr);
+Ilt[0-5]	:= ND2 (ilt[0-5], ilatch[0-5], ilclr\[0-5]);
+Gpu_irqm[0-5]	:= ND2 (irqm\[0-5], gpu_irq[0-5], int_ena[0-5]);
+Ils[0-5]	:= ND2 (ils[0-5], irqm\[0-5], ilt[0-5]);
+Ilatch[0-5]	:= FD2Q (ilatch[0-5], ils[0-5], clk, reset\);
+
+/* read these bits */
+
+Flagrd[4-8]	:= TS (gpu_dout[4-8], int_ena[0-4], flagrd);
+Flagrd[9-13]	:= TS (gpu_dout[9-13], zero, flagrd);
+Flagrd[16]	:= TS (gpu_dout[16], int_ena[5], flagrd);
+Flagrd[17]	:= TS (gpu_dout[17], zero, flagrd);
+Statrd[6-10]	:= TS (gpu_dout[6-10], ilatch[0-4], statrd);
+Statrd[16]	:= TS (gpu_dout[16], ilatch[5], statrd);
+Statrd[17]	:= TS (gpu_dout[17], zero, statrd);
+
+/* A pending interrupt request is given by an latched interrupt. */
+
+Irq		:= OR6 (irq, ilatch[0..5]);
+
+/* encode the interrupt being serviced (as this is only sampled
+on the edge where the second immediate load is performed there
+is no need to double buffer it), interrupt 4 is highest priority.
+Bit 0 =    interrupt 5
+	+ (/interrupt 4 . (  interrupt 3
+			   + /interupt 2 . interrupt 1))
+Bit 1 = (interrupt 2 + interrupt 3) . /(interrupt 4 + interrupt 5)
+Bit 2 =  interrupt 4 + interrupt 5
+*/
+
+Ilatch\[1]	:= IV (ilatch\[1], ilatch[1]);
+Int0t0		:= NR2 (int0t0, ilatch\[1], ilatch[2]);
+Int0t1		:= NR2 (int0t1, ilatch[3], int0t0);
+Int0t2		:= NR2 (int0t2, ilatch[4], int0t1);
+Int[0]		:= OR2 (int[0], ilatch[5], int0t2);
+Int1t0		:= OR2 (int1t0,  ilatch[2..3]);
+Int1t1		:= NR2 (int1t1,  ilatch[4..5]);
+Int[1]		:= AN2 (int[1], int1t1, int1t0);
+Int[2]		:= OR2 (int[2], ilatch[4..5]);
+Int		:= JOIN (int, int[0..2]);
+
+/* The interrupt service over-ride latch indicates that the 
+interrupt block will supplant the pre-fetch unit as the source of
+instructions.  The flow of these instructions is hidden from 
+the pre-fetch unit.  It is prevented from being set when atomic is
+active, so that the MOVEI instruction is atomic.
+*/
+
+Isrset	:= AN4 (isrset, irq, intser\, imask\, atomic\);
+Isrclr	:= AN2 (isrclr, jumped, intsert);
+Isrt0	:= NR2 (isrt0, isrset, intsert);
+Isrt1	:= NR2 (isrt1, isrt0, isrclr);
+Intsert	:= FD2 (intsert, intser\, isrt1, clk, reset\);
+Intser	:= NIVH (intser, intsert);
+
+/* The interrupt mask is set by romold and intser, and is cleared
+by software.  The reason it is not set until romold is so that it
+does not disturb the register addressing of the previous 
+instruction */
+
+Imset		:= ND2 (imset\, romold, intser);
+Gpu_data\[3]	:= IV (gpu_din\[3], gpu_din{3});
+Imclr		:= ND2 (imclr\, flagwr, gpu_din\[3]);
+Imt0		:= ND2 (imt[0], imask, imclr\);
+Imt1		:= ND2 (imaski, imset\, imt[0]);
+Imask		:= FD2Q (imask, imaski, clk, reset\);
+Imask\		:= IV (imask\, imask);
+Flagrd[3]	:= TS (gpu_dout[3], imask, flagrd);
+
+/* This 3 bit counter selects which of the interrupt service
+instructions is selected.  It is enabled for count by romold when
+intser is active. */
+
+Cnten		:= AN2 (cnten, romold, intser);
+Cnter		:= CNTE3 (icount[0..2], cnten, clk, reset\);
+
+Jumped	:= AN4 (jumped, romold, icount[0..2]);
+
+/* The hard-wired instructions used to force an interrupt are:
+000111 00100 11111 	subqt	r31,4
+110011 00000 11110	move	r30,pc 
+101111 11111 11110	store	(r31),r30
+100110 00000 11110	movei	r30,service address
+---  service  ----	(low word)
+---  address  ----	(high word)
+110100 11110 00000	jump	(r30)
+111001 00000 00000	nop
+
+The service address is based on 00F1B000h, plus 16 * the interrupt
+number - to allow 8 instructions at each location, enough for
+a jump or a simple acknowledge.
+*/
+
+High		:= TIE1 (i);
+Low		:= TIE0 (o);
+Ins0		:= JOIN (ins[0], i i i i  i o o i  o o i i  i o o o);
+Ins1		:= JOIN (ins[1], o i i i  i o o o  o o i i  o o i i);
+Ins2		:= JOIN (ins[2], o i i i  i i i i  i i i i  i i o i);
+Ins3		:= JOIN (ins[3], o i i i  i o o o  o o o i  i o o i);
+Ins4		:= JOIN (ins[4], o o o o  int   o  o o o o  i i o i);
+Ins5		:= JOIN (ins[5], i o o o  i i i i  o o o o  o o o o);
+Ins6		:= JOIN (ins[6], o o o o  o o i i  i i o o  i o i i);
+Ins7		:= JOIN (ins[7], o o o o  o o o o  o o i o  o i i i);
+
+Inssel		:= MX8P (intins, ins[0..7], icount[0..2]); 
+
+END;
+
+/* Three bit counter with count enable */
+DEF CNTE3 (BIT/count[0..2] :OUT; 
+	BIT/cnten, BIT/clk, BIT/reset\ :IN);
+BEGIN
+Add1	:= HA1 (sum[1], carry[1], count[1], count[0]);
+Add2	:= EO (sum[2], count[2], carry[1]);
+Cnti0	:= MX2 (cnti[0], count[0], count\[0], cnten);
+Cnti1	:= MX2 (cnti[1], count[1], sum[1], cnten);
+Cnti2	:= MX2 (cnti[2], count[2], sum[2], cnten);
+Count0	:= FD2P (countt[0], count\[0], cnti[0], clk, reset\);
+Count1	:= FD2QP (countt[1], cnti[1], clk, reset\);
+Count2	:= FD2QP (countt[2], cnti[2], clk, reset\);
+Icount[0-2]	:= NIVU (count[0-2], countt[0-2]);
+END;
+

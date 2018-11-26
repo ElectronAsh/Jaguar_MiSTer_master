@@ -1,0 +1,443 @@
+/******************************************************************
+dsp_mem.net
+14/2/91
+
+Graphics Processor memory interface
+-----------------------------------
+This module is the local bus controller associated for the 
+graphics processor, and is also responsible for controlling local
+memory.
+
+Memory requests are made by a request signal, and acknowledged by
+a one-tick wide acknowledge cycle.  The request should be cleared
+asynchronously by the acknowledge or another cycle will be 
+generated.
+
+This mechanism does not allow time for external memory transfers.
+These are handled by the gateway unit, which performs the external
+transfer, while allowing GPU execution to continue.  The score-
+board mechanism prevents a second transfer starting while one is
+active, although both program and data transfers may be 
+concurrently pending.
+
+Program data from external memory is transferred by the gateway 
+requesting ownership of the local bus for a cycle, during which
+program read data is placed on the gpu_data bus.  Load instruction
+data is transferred directly to the registers unit without using 
+the gpu_data bus.  This saves a lot of logic, although obviously 
+at the expense of interconnect density.
+
+Memory requests can be made by (in decreasing priority)
+-	the IO read mechanism
+-	the gateway transferring program load data
+-	data read/write
+-	program fetch
+
+The address must be held until the end of the cycle containing the
+acknowledge.  It should be set up with the request.
+
+Transfers with external memory are handled by the gateway, and
+appear to complete in one tick.  In the case of data transfers
+execution can continue, with the score-board mechanism flagging
+the register as incomplete.  Program transfers may not complete,
+and the acknowledge is therefore held back here.
+
+Note that the program fetch unit can retract requests, and this 
+must be handled cleanly - i.e. do not generate an ack
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DSP_MEM (
+INT32/	gpu_data	/* graphics processor data bus */
+	gpu_dout[0..31] /* bit read GPU data bus */
+	:BUS;
+	accumrd		/* read the MAC accumulated high value */
+	big_instr	/* Instruction stream is big-endian */
+	big_io		/* IO interface is big-endian */
+	ctrlwr		/* GPU control register write */
+	dacw[0..1]	/* DAC write strobes */
+	datack		/* data load/store acknowledge */
+	dbgrd		/* read debug information */
+	del_xld		/* delayed external load starting */
+	divwr		/* write to the divide controller */
+	externalb	/* external address decoded */
+	flagrd		/* flag register read */
+	flagwr		/* flag register write */
+	gateack		/* gateway transfer acknowledge */
+INT24/	gpu_addr	/* graphics processor address bus */
+	gpu_memw	/* graphics processor bus write enable */
+	i2sr[0..2]	/* I2S interface read strobes */
+	i2sw[0..3]	/* I2S interface write strobes */
+INT32/	mem_data	/* pipe-lined RAM read data for loads */
+	modulowr	/* write to the modulo register */
+	mtxawr		/* write to matrix address register */
+	mtxcwr		/* write to matrix control register */
+	pcrd		/* read the program counter */
+	pcwr		/* write to program counter */
+	progack		/* program fetch acknowledge */
+	progserv	/* current cycle is a program fetch */
+	ram_addr[2..11]	/* address to internal RAM */
+	ramen[0..1]	/* cycle into local RAM */
+	remrd		/* read the remainder register */
+	romen		/* ROM enable */
+	statrd		/* GPU status port read */
+	:OUT;
+	clk		/* system clock */
+INT13/	cpuaddr		/* CPU access address */
+INT32/	cpudata		/* CPU access write data */
+INT24/	dataddr		/* Data load/store address */
+INT32/	dstd		/* Data for instruction data write */
+	dstdgate	/* latch store instruction data */
+	datreq		/* Data fetch request */
+	datwe		/* Data fetch write enable */
+	gatereq		/* bus transfer from external load */
+	go		/* GPU running flag */
+INT32/	gpu_din		/* GPU data bus for inputs */
+	ioreq		/* Look-ahead IO request */
+	iowr		/* CPU access write request */
+	pabort		/* aborting program fetch request */
+INT22/	progaddr	/* Program fetch address */
+	progreq		/* Program fetch request */
+	reset\		/* System reset */
+	:IN;	
+	);
+
+INT32/	datdata, datdata\, wdata
+:LOCAL;
+BEGIN
+
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+
+Datreq\		:= IV (datreq\, datreq);
+Datwe\		:= IV (datwe\, datwe);
+Gatereq\	:= IV (gatereq\, gatereq);
+Go\		:= IV (go\, go);
+Ioreq\		:= IV (ioreq\, ioreq);
+Pabort\		:= IVS (pabort\, pabort);
+Progreq\	:= IV (progreq\, progreq);
+
+/* Arbitration for memory cycle */
+
+Gatereqa	:= AN2 (gatereqa, gatereq, ioreq\);
+Datreqa		:= AN3H (datreqa, datreq, gatereq\, ioreq\);
+Progreqa	:= AN5P (progreqa, progreq, datreq\, gatereq\, 
+			ioreq\, xprogi\);
+
+/* Memory transfer is a one-tick cycle following the arbitrated 
+request */
+
+Ioservt		:= FD2Q (ioservt, ioreq, clk, reset\);
+Ioserv		:= NIV (ioserv, ioservt);
+Ioserv\		:= IV (ioserv\, ioservt);
+Ioserva[0-2]	:= FD2Q (ioserva[0-2], ioreq, clk, reset\);
+Gateserv	:= FD2Q (gateserv, gatereqa, clk, reset\);
+Gateserv\	:= IV (gateserv\, gateserv);
+Datservt	:= FD2Q (datservt, datreqa, clk, reset\);
+Datservb[0-4]	:= FD2QP (datservb[0-4], datreqa, clk, reset\);
+Datserv		:= NIVU (datserv, datservt);
+Datserv\	:= IV (datserv\, datservt);
+Progservt	:= FD2Q (progservt, progreqa, clk, reset\);
+Progserv	:= NIVM (progserv, progservt);
+Progserv\	:= IV (progserv\, progservt);
+
+/* Flag the bus as active */
+
+Busactive\	:= NR4 (busactive\, ioserv, gateserv, datserv, 
+			progserv);
+
+/* If a program fetch is aborted, this fact can be logged, and a 
+mask generated to conceal the ack. This is only relevant for 
+external memory. 
+This mask condition is set by :
+	xprog . /progreq . /gateserv
+and is cleared by
+	gateserv
+(2/184) */
+
+Xpabortset	:= ND3 (xpabortset\, xprog, progreq\, gateserv\);
+Xpabortt0	:= ND2 (xpabortt[0], xpabort, gateserv\);
+Xpabortt1	:= ND2 (xpabortt[1], xpabortset\, xpabortt[0]);
+Xpabort		:= FD2Q (xpabort, xpabortt[1], clk, reset\);
+Xpabort\	:= IV (xpabort\, xpabort);
+
+/* When an external data or program transfer has occurred, the 
+gateway will generate the appropriate external cycle, and for
+program data transfers from external memory it will
+generate gatereq when load data is ready.  Here we must latch
+who requested external data, so that appropriate action can occur.
+
+External program transfers are always reads, datwe indicates that
+data transfers are not reads.  One of these will be set when 
+gateserv occurs.
+*/
+
+Xprogset\	:= ND3P (xprogset\, progserv, externalb, pabort\);
+Xprogt0		:= ND2 (xprogt[0], xprog, gateserv\);
+Xprogi		:= ND2 (xprogi, xprogt[0], xprogset\);
+Xprogi\		:= IV (xprogi\, xprogi);
+Xprog		:= FD2Q (xprog, xprogi, clk, reset\);
+Xprog\		:= IV (xprog\, xprog);
+
+/* When a load is external, a data transfer will complete with no
+data.  This  has to be logged with the score-board, so that later
+on when the correct data appears, the destination address has been
+latched, and the score-board mechanism can prevent premature uses
+of the data.  This signal is called del_xld, delayed external load,
+and is given by:
+	datserv . external . \datwe
+*/
+
+Del_xld		:= AN3M (del_xld, datserv, external, datwe\);
+
+/* From this, generate the acknowledges */
+
+/* Program acknowledge is given by:
+	 /(xprog + xprogset) . progserv . /pabort
+	+ (xprog + xprogset) . gateserv . /xpabort
+*/
+
+Xprt		:= ND2P (xprt, xprog\, xprogset\);
+Xprt\		:= IV (xprt\, xprt);
+Progat0		:= ND3 (progat[0], xprt\, progserv, pabort\);
+Progat1		:= ND3 (progat[1], xprt, gateserv, xpabort\);
+Progack		:= ND2U (progack, progat[0..1]);
+
+/* Data acknowledge is active on service */
+
+Datack		:= NIVU (datack, datserv);
+
+/* Gateway acknowledge is on service */
+
+Gateack		:= NIVU (gateack, gateserv);
+
+/* Write control **************************************************
+Writes can only be performed by two sources, data or CPU.  Write 
+is only active during datserv or ioserv 
+*/
+
+Gpu_memwi	:= AOR2 (gpu_memwi, datwe, datreqa, iowr, 
+			ioreq);
+Gpu_memwt	:= FD1Q (gpu_memwt, gpu_memwi, clk);
+Gpu_memw\	:= IVM (gpu_memw\, gpu_memwt);
+Gpu_memw	:= NIVH (gpu_memw, gpu_memwt);
+
+/* Write data
+This data path is also used when the IO mechanism is READING from
+the GPU registers, given by gpuprd.  This forces selection of
+datdata and enables the tri-state driver.  datdata follows dstd
+when the GPU is idle.
+
+This is the default bus driver, and is therefore also driven by
+/busactive + external
+
+A flip-flop has to be used here as RAM data is being loaded.
+*/
+
+Dstdld		:= NR2U (dstdld\, dstdgate, go\);
+Datdata		:= FD1E (datdata, datdata\, dstd, clk, datdata, 
+			dstdld\);
+Dummy		:= DUMMY (datdata\);
+
+Cpusel		:= AN2U (cpudsel, ioserv, gpuprd\);
+Gpuden		:= OR4U (gpuden, gpu_memw, gpuprd, busactive\, 
+			externalb);
+Wseld		:= MX2 (wdata, datdata, cpudata, cpudsel);
+Gpu_data	:= TS (gpu_data, wdata, gpuden);
+
+/* Read data
+Read data is pipe-lined here for load operations and CPU reads */
+
+Mem_data	:= FD1Q (mem_data, gpu_din, clk);
+
+/* Address control ************************************************
+The address is multiplexed from the appropriate source when a 
+corresponding memory cycle is active */
+
+/* Select between the three input sources 
+-	because CPU cycles are forced to be local, high address bits
+	are don't care during its cycles
+-	bits 2-12, for the RAM, use different select terms to make
+	them faster
+*/
+
+Gpu_addr[0-1]	:= AN2 (gpu_addr[0-1], dataddr{0-1}, datserv);
+Amux[2-5]	:= MX4P (ram_addr[2-5], progaddr{0-3}, 
+			dataddr{2-5}, cpuaddr{0-3}, zero, 
+			datservb[0], ioserva[0]);
+Amux[6-9]	:= MX4P (ram_addr[6-9], progaddr{4-7}, 
+			dataddr{6-9}, cpuaddr{4-7}, zero, 
+			datservb[1], ioserva[1]);
+Amux[10-14]	:= MX4P (ram_addr[10-14], progaddr{8-12}, 
+			dataddr{10-14}, cpuaddr{8-12}, zero, 
+			datservb[2], ioserva[2]);
+Ram_addr\[12-14] := IV (ram_addr\[12-14], ram_addr[12-14]);
+Gpu_addr[2-14]	:= NIVM (gpu_addr[2-14], ram_addr[2-14]);
+
+Amux[15-23]	:= MX2 (gpu_addr[15-23], progaddr{13-21}, 
+			dataddr{15-23}, datserv);
+Gpu_addr	:= JOIN (gpu_addr, gpu_addr[0..23]);
+
+/* The address is decoded to provide decodes
+to local memory, which is 8K bytes, 2K long words, i.e. 11 address
+lines. 
+
+Local space is at 00F18000h to 00F1FFFFh
+*/
+
+Gpua\[2]	:= IVML (gpu_addr\[2], gpu_addr{2});
+Gpua\[3]	:= IVML (gpu_addr\[3], gpu_addr{3});
+Gpua\[4]	:= IVML (gpu_addr\[4], gpu_addr{4});
+Gpua\[5-6]	:= IVML (gpu_addr\[5-6], gpu_addr{5-6});
+Gpua\[7-12]	:= IV (gpu_addr\[7-12], gpu_addr{7-12});
+Gpua\[14]	:= IV (gpu_addr\[14], gpu_addr{14});
+
+/* generate local  */
+/* external CPU IO addresses are always local 
+localaddr = F18000 - F1FFFF
+	  = 1111 0001 1XXX XXXX XXXX XXXX 
+local = ioserv + (localaddr . (progserv + datserv))
+*/
+
+Locala[15-16]	:= MX2P (locala[15-16], progaddr{13-14}, 
+			dataddr{15-16}, datservb[3]);
+Locala[17-19]	:= MXI2P (locala\[17-19], progaddr{15-17}, 
+			dataddr{17-19}, datservb[3]);
+Locala[20-21]	:= MX2P (locala[20-21], progaddr{18-19}, 
+			dataddr{20-21}, datservb[3]);
+Locala[22-23]	:= MX2P (locala[22-23], progaddr{20-21}, 
+			dataddr{22-23}, datservb[4]);
+Localaddr\	:= ND9 (localaddr\, locala[15..16], 
+			locala\[17..19], locala[20..23]);
+
+Localt0		:= ND2 (localt[0], progserv\, datserv\);
+Localt1		:= ND10 (localt[1], locala[15..16], 
+			locala\[17..19], locala[20..23], 
+			localt[0]);
+Local		:= ND2P (local, ioserv\, localt[1]);
+Localf		:= ND2 (localf, ioserv\, localt[1]);
+
+/* external = (progserv + datserv) . /localaddr */
+
+Extt		:= ND2 (extt, datserv\, progserv\);
+External	:= AN2 (external, localaddr\, extt);
+Externalb	:= NIVM (externalb, external);
+
+/* Local space is configured as (in byte addresses from the base
+of the ASIC area):
+2000 - 21FF	graphics processor control registers
+3000 - 3FFF	cache RAM 0 of 1K long-words
+4000 - 4FFF	cache RAM 1 of 1K long-words
+5000 - 57FF	sine table ROM
+*/
+
+Idle\		:= OR3 (idle\, ioserv, datserv, progserv);
+Gpuen		:= AN8 (gpuen, gpu_addr\[9..12], gpu_addr[13], 
+			gpu_addr\[14], local, idle\);
+Rament[0]	:= AN3 (rament[0], ram_addr[12..13], 
+			ram_addr\[14]);
+Rament[1]	:= AN3 (rament[1], ram_addr\[12..13], 
+			ram_addr[14]);
+Ramen[0-1]	:= AN3P (ramen[0-1], rament[0-1], localf, idle\);
+Romen		:= AN6P (romen, ram_addr[12], ram_addr\[13], 
+			ram_addr[14], localf, idle\, one);
+
+/* Decode graphics processor registers */
+
+/* transfer to internal processor registers */
+
+Gpuprd\		:= ND4 (gpuprd\, gpuen, gpu_addr\[8], go\, 
+			gpu_memw\);
+Gpuprd		:= IV (gpuprd, gpuprd\);
+
+/* and decode for other internal registers */
+
+Gpuireg		:= AN3H (gpuireg, gpuen, gpu_addr\[7], 
+			gpu_addr{8});
+
+/* synchronous register write strobes */
+
+Gpu_addrb[2]	:= NIVM (gpu_addrb[2], gpu_addr{2});
+Gpu_addrb[3]	:= NIVH (gpu_addrb[3], gpu_addr{3});
+Gpu_addrb[4]	:= NIVM (gpu_addrb[4], gpu_addr{4});
+Gpu_addrb[5]	:= NIV  (gpu_addrb[5], gpu_addr{5});
+Gpu_addrb[6]	:= NIVM (gpu_addrb[6], gpu_addr{6});
+
+Flagwr		:= AN7H (flagwr, gpu_addr\[2..6], gpuireg, 
+			gpu_memw);
+Mtxcwr		:= AN7M (mtxcwr, gpu_addrb[2], gpu_addr\[3], 
+			gpu_addr\[4..6], gpuireg, gpu_memw);
+Mtxawr		:= AN7M (mtxawr, gpu_addr\[2], gpu_addrb[3], 
+			gpu_addr\[4..6], gpuireg, gpu_memw);
+Bigwr		:= AN7 (bigwr, gpu_addrb[2..3], gpu_addr\[4..6], 
+			gpuireg, gpu_memw);
+Pcwr		:= AN7 (pcwr, gpu_addr\[2..3], gpu_addrb[4], 
+			gpu_addr\[5..6], gpuireg, gpu_memw);
+Ctrlwr		:= AN7M (ctrlwr, gpu_addrb[2], gpu_addr\[3], 
+			gpu_addrb[4], gpu_addr\[5..6], gpuireg, 
+			gpu_memw);
+Modulowr	:= AN7U (modulowr, gpu_addr\[2], gpu_addrb[3..4], 
+			gpu_addr\[5..6], gpuireg, gpu_memw);
+Divwr		:= AN7 (divwr, gpu_addrb[2..4], gpu_addr\[5..6], 
+			gpuireg, gpu_memw);
+
+
+Dacw[0]		:= AN7H (dacw[0], gpu_addr\[2..5], gpu_addrb[6], 
+			gpuireg, gpu_memw);
+Dacw[1]		:= AN7H (dacw[1], gpu_addr[2], gpu_addr\[3..5], 
+			gpu_addrb[6], gpuireg, gpu_memw);
+I2sw[0]		:= AN7H (i2sw[0], gpu_addr\[2], gpu_addr[3], 
+			gpu_addr\[4..5], gpu_addrb[6], gpuireg, 
+			gpu_memw);
+I2sw[1]		:= AN7H (i2sw[1], gpu_addr[2], gpu_addr[3], 
+			gpu_addr\[4..5], gpu_addrb[6], gpuireg, 
+			gpu_memw);
+I2sw[2]		:= AN7H (i2sw[2], gpu_addr\[2], gpu_addr\[3], 
+			gpu_addr[4], gpu_addr\[5], gpu_addrb[6], 
+			gpuireg, gpu_memw);
+I2sw[3]		:= AN7H (i2sw[3], gpu_addr[2], gpu_addr\[3], 
+			gpu_addr[4], gpu_addr\[5], gpu_addrb[6], 
+			gpuireg, gpu_memw);
+
+/* readable locations */
+
+Flagrd		:= AN7H (flagrd, gpu_addr\[2..6], gpuireg, 
+			gpu_memw\);
+Pcrd		:= AN7U (pcrd, gpu_addr\[2..3], gpu_addrb[4], 
+			gpu_addr\[5..6], gpuireg, gpu_memw\);
+Statrd		:= AN7H (statrd, gpu_addrb[2], gpu_addr\[3], 
+			gpu_addrb[4], gpu_addr\[5..6], gpuireg, 
+			gpu_memw\);
+Remrd		:= AN7U (remrd, gpu_addrb[2..4], gpu_addr\[5..6], 
+			gpuireg, gpu_memw\);
+Accumrd		:= AN7U (accumrd, gpu_addr\[2..4], gpu_addrb[5], 
+			gpu_addr\[6], gpuireg, gpu_memw\);
+
+Dbgrd		:= OR2_H (dbgrd, flagrd, statrd);
+
+I2sr[0]		:= AN7H (i2sr[0], gpu_addr\[2], gpu_addr[3], 
+			gpu_addr\[4..5], gpu_addrb[6], gpuireg, 
+			gpu_memw\);
+I2sr[1]		:= AN7H (i2sr[1], gpu_addr[2], gpu_addr[3], 
+			gpu_addr\[4..5], gpu_addrb[6], gpuireg, 
+			gpu_memw\);
+I2sr[2]		:= AN7H (i2sr[2], gpu_addr\[2], gpu_addr\[3], 
+			gpu_addr[4], gpu_addr\[5], gpu_addrb[6], 
+			gpuireg, gpu_memw\);
+
+/* drive the top half of the data bus in i2s reads */
+
+I2shien		:= OR3_H (i2shien, i2sr[0..2]);
+I2shid[16-31]	:= TS (gpu_dout[16-31], gpu_dout[0-15], i2shien);
+
+/**  Graphics sub-system Endian Control Register  ****************/
+
+Big_ioi		:= MX2 (big_ioi, big_iot, gpu_din{0}, bigwr);
+Big_iot		:= FD4Q (big_iot, big_ioi, clk, reset\);
+Big_io		:= NIVU2 (big_io, big_iot);
+
+Big_instr	:= FDSYNCR (big_instr, gpu_din{2}, bigwr, clk, 
+			reset\);
+END;

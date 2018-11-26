@@ -1,0 +1,263 @@
+
+(*****************************************************************
+
+	wbk.net
+
+This module computes the write-back values for Jaguar
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego,
+	duplo;
+
+DEF 	WBK	(d[14..23], d[43..63],obld[0],obld[2],dwidth[0..9],
+                vscale[0..7],clk,resetl,scaled,wbkstart:IN;
+
+                newdata[0..20],newheight[0..9],newrem[0..7],
+		heightnz,wbkdone:IO);
+
+	INT9/newrem,INT10/newheight,INT21/newdata:IO;
+BEGIN
+
+Newrem :=	JOIN (newrem,newrem[0..8]);
+Newremu :=	DUMMY (newrem);
+Newheight :=	JOIN (newheight,newheight[0..9]);
+Newheightu :=	DUMMY (newheight);
+Newdata :=	JOIN (newdata,newdata[0..20]);
+Newdatau :=	DUMMY (newdata);
+
+(* write-back state machine
+
+0	wbkdone
+	if (wbkstart) goto 1
+	else goto 0
+
+1	if (notscaled) decheight, addnewdata, goto 0
+	else if (scaled) decrem, goto 2
+
+2	if (height == 0) goto 0
+	else if (rem < 1) addrem, addnewdata, decheight, goto 2 
+	else goto 0
+
+*)
+
+Q0 :=	FD4Q (q0,d0,clk,resetl);	 
+Q1 :=	FD2Q (q1,d1,clk,resetl);	 
+Q2 :=	FD2Q (q2,d2,clk,resetl);	 
+
+D00 :=	ND2 (d00,q0,notwbkstart);
+D01 :=	ND2 (d01,q1,notscaled);
+D02 :=	ND2 (d02,q2,heightz);
+D03 :=	ND2 (d03,q2,intremnz);
+D0 :=	ND4 (d0,d00,d01,d02,d03);
+
+D1 :=	AN2 (d1,q0,wbkstart);
+
+D20 :=	ND2 (d20,q1,scaled);
+D21 :=	ND3 (d21,q2,heightnz,intremz);
+D2 :=	ND2 (d2,d20,d21);
+
+Wbkdone :=	NIVH (wbkdone,q0);
+
+Decheight :=	ND2 (decheight,d01,d21);
+Addnewdata :=	ND2 (addnewdata,d01,d21);
+Addrem :=	IV (addrem,d21);
+Decrem :=	IVM (decrem,d20);
+
+Notwbkstart :=	IV (notwbkstart,wbkstart);
+Notscaled :=	IV (notscaled,scaled);
+
+(* intremz is asserted if newrem < 1 *)
+
+Intremz0 :=	NR4 (intremz0,newrem[5..8]);
+Intremz :=	OR2 (intremz,intremz0,newrem[8]);
+Intremnz :=	IV (intremnz,intremz);
+
+
+(******************* REMAINDER *****************)
+
+
+(* either subtract one or add vscale to newrem *)
+
+Rd[0-4] :=	MX2 (rd[0-4],vscale[0-4],gnd,decrem);
+Rd[5-7] :=	MX2 (rd[5-7],vscale[5-7],vcc,decrem);
+Rd[8] :=	NIV (rd[8],decrem);
+
+Rs[0] :=	HA1 (rs[0],rc[0],newrem[0],rd[0]);
+Rs[1-8] :=	FA1 (rs[1-8],rc[1-8],newrem[1-8],rd[1-8],rc[0-7]);
+
+(* select either the sum or the object data *)
+
+Rem[0-7] :=	MX2 (rem[0-7],rs[0-7],d[16-23],obld[2]);
+Rem[8] :=	MX2 (rem[8],rs[8],gnd,obld[2]);
+
+Newrem[0-8] :=	SLATCH (newrem[0-8],rem[0-8],clk,latchrem);
+
+Latchremi :=	NR3 (latchremi,obld[2],addrem,decrem);
+Latchrem :=	IVM (latchrem,latchremi);
+
+
+(********************* HEIGHT ********************)
+
+Newheighti[0] := DNCNT (newheighti[0],hc[0],d[14],clk,decheight,obld[0],resetl);
+Newheighti[1] := DNCNT (newheighti[1],hc[1],d[15],clk,hc[0],obld[0],resetl);
+Newheight[2-9] := DNCNT (newheight[2-9],hc[2-9],d[16-23],clk,hc[1-8],obld[0],resetl);
+Newheight[0-1] := NIVM (newheight[0-1],newheighti[0-1]);
+
+Heightz0 :=	NR6 (heightz0,newheight[0..5]);
+Heightz1 :=	NR4 (heightz1,newheight[6..9]);
+Heightnz :=	ND2 (heightnz,heightz0,heightz1);
+Heightz :=	IV (heightz,heightnz);
+
+
+(****************** DATA ADDRESS *****************)
+
+(* add the data width to the new address *)
+
+Ds[0] := ADD4 (ds[0..3],dc[3],dwidth[0..3],newdata[0..3],gnd);
+Ds[1] := ADD4 (ds[4..7],dc[7],dwidth[4..7],newdata[4..7],dc[3]);
+Ds[2] := ADD4 (ds[8..11],dc[11],dwidth[8..9],gnd,gnd,newdata[8..11],dc[7]);
+Ds[3] := HA9 (ds[12..20],newdata[12..20],dc[11]);
+
+
+(* select either the sum or the object data *)
+
+Data[0-20] := MX4P (data[0-20],newdata[0-20],newdata[0-20],ds[0-20],d[43-63],
+			obld[0],newdataclk);
+Newdata[0-10] := FD1Q (newdata[0-10],data[0-10],clk);
+Newdatai[11-15] := FD1Q (newdatai[11-15],data[11-15],clk);
+Newdata[16-20] := FD1Q (newdata[16-20],data[16-20],clk);
+Newdata[11-15] := NIVH (newdata[11-15],newdatai[11-15]);
+
+Latchdata :=	OR2 (latchdata, obld[0], addnewdata);
+Newdataclk :=	NIVH (newdataclk,latchdata);
+
+Gnd :=	TIE0 (gnd);
+Vcc :=	TIE1 (vcc);
+
+(* tie up all unused outputs *)
+
+Hcu :=	DUMMY (hc[9]);
+Rcu :=	DUMMY (rc[8]);
+
+
+END;
+
+
+/*  HA4 - 4-bit half adder */
+DEF HA4 (q[0..3], co :OUT; a[0..3], ci :IN);
+BEGIN
+
+C		:= NIV (c, ci);
+Q0		:= EO (q[0], a[0], c);
+
+Q1t[2]		:= ND2 (q1t[2], a[0], c);
+Q1		:= EN (q[1], a[1], q1t[2]);
+
+Q2t[3]		:= ND3 (q2t[3], a[1], a[0], c);
+Q2		:= EN (q[2], a[2], q2t[3]);
+
+Q3t[4]		:= ND4 (q3t[4], a[2], a[1], a[0], c);
+Q3		:= EN (q[3], a[3], q3t[4]);
+
+Co		:= AN6 (co, a[3], a[2], a[1], a[0], c, vcc);
+
+Vcc		:= TIE1 (vcc);
+
+END;
+
+/*  HA8 - 8-bit half adder */
+DEF HA8 (q[0..7]:OUT; a[0..7], ci :IN);
+BEGIN
+
+C	:= NIVH (c, ci);
+Q0	:= EO (q[0], a[0], c);
+
+Q1t	:= ND2 (q1t, a[0], c);
+Q1	:= EN (q[1], a[1], q1t);
+
+Q2t	:= ND3 (q2t, a[1], a[0], c);
+Q2	:= EN (q[2], a[2], q2t);
+
+Q3t	:= ND4 (q3t, a[2], a[1], a[0], c);
+Q3	:= EN (q[3], a[3], q3t);
+
+Q4t	:= ND8 (q4t, vcc, vcc, vcc, a[3], a[2], a[1], a[0], c);
+Q4	:= EN (q[4], a[4], q4t);
+
+Q5t	:= ND8 (q5t, vcc, vcc, a[4], a[3], a[2], a[1], a[0], c);
+Q5	:= EN (q[5], a[5], q5t);
+
+Q6t	:= ND8 (q6t, vcc, a[5], a[4], a[3], a[2], a[1], a[0], c);
+Q6	:= EN (q[6], a[6], q6t);
+
+Q7t	:= ND8 (q7t, a[6], a[5], a[4], a[3], a[2], a[1], a[0], c);
+Q7	:= EN (q[7], a[7], q7t);
+
+Vcc		:= TIE1 (vcc);
+
+END;
+
+/*  HA9 - 9-bit half adder */
+DEF HA9 (q[0..8]:OUT; a[0..8], ci :IN);
+BEGIN
+
+C	:= NIVH (c, ci);
+Q0	:= EO (q[0], a[0], c);
+
+Q1t	:= ND2 (q1t, a[0], c);
+Q1	:= EN (q[1], a[1], q1t);
+
+Q2t	:= ND3 (q2t, a[1], a[0], c);
+Q2	:= EN (q[2], a[2], q2t);
+
+Q3t	:= ND4 (q3t, a[2], a[1], a[0], c);
+Q3	:= EN (q[3], a[3], q3t);
+
+Q4t	:= ND8 (q4t, vcc, vcc, vcc, a[3], a[2], a[1], a[0], c);
+Q4	:= EN (q[4], a[4], q4t);
+
+Q5t	:= ND8 (q5t, vcc, vcc, a[4], a[3], a[2], a[1], a[0], c);
+Q5	:= EN (q[5], a[5], q5t);
+
+Q6t	:= ND8 (q6t, vcc, a[5], a[4], a[3], a[2], a[1], a[0], c);
+Q6	:= EN (q[6], a[6], q6t);
+
+Q7t	:= ND8 (q7t, a[6], a[5], a[4], a[3], a[2], a[1], a[0], c);
+Q7	:= EN (q[7], a[7], q7t);
+
+Q8t	:= ND9 (q8t, a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0], c);
+Q8	:= EN (q[8], a[8], q8t);
+
+Vcc		:= TIE1 (vcc);
+
+END;
+
+/*  ADD2 - 2-bit full adder, based on LS83 */
+(* GE 24/06/2012 - Non-working and unused, so commented out *)
+(*
+DEF ADD2 (q[0..1], co :OUT; a[0..1], b[0..1], ci :IN);
+BEGIN
+
+Aab\[0-1]	:= ND2 (aab\[0-1], a[0-1], b[0-1]);
+Aab[0-1]	:= IV (aab[0-1], aab\[0-1]);
+Aob\[0-1]	:= NR2M (aob\[0-1], a[0-1], b[0-1]);
+Aob[1]		:= IV (aob[1], aob\[1]);
+Ci\		:= IV (ci\, ci);
+
+Q0t		:= NR2 (q0t, aab[0], aob\[0]);
+Q0		:= EN (q[0], q0t, ci\);
+
+Q1t[0]		:= NR2 (q1t[0], aab[1], aob\[1]);
+Q1t[1]		:= AN2 (q1t[1], aab\[0], ci\);
+Q1t[2]		:= NR2 (q1t[2], aob\[0], q1t[1]);
+Q1		:= EO (q[1], q1t[0], q1t[2]);
+
+Cot[2]		:= ND2 (cot[2], aab\[1], aob\[0]);
+Cot[3]		:= ND3 (cot[3], aab\[1], aab\[0], ci\);
+Co		:= AN3 (co, aob[1], cot[0..1]);
+*)
+
+END;
+

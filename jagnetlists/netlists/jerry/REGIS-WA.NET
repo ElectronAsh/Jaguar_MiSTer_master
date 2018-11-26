@@ -1,0 +1,136 @@
+/******************************************************************
+registers.net
+7/2/91
+
+Graphics processor registers
+----------------------------
+The graphics processor registers are a block of 64 x 32-bit dual
+port RAM.
+
+******************************************************************/
+
+IMPORT tosh, duplo, moto;
+
+DEF REGISTERS (
+INT32/	srcd 		/* source data bus */
+INT32/	srcdp 		/* source data bus - pipe-lined */
+INT32/	srcdpa		/* unbuffered version of above for addr */
+INT32/	dstd 		/* destination data bus */
+INT32/	dstdp 		/* destination data bus - pipe-lined */
+	:OUT;
+	clk		/* system clock */
+INT6/	dsta 		/* destination port address */
+	dstrwen\	/* destination port write enable */
+INT32/	dstwd		/* destination port write data */
+	exe		/* current instruction is being executed */
+	locden		/* instruction source data select */
+INT32/	locsrc		/* source data from instruction */
+INT32/	mem_data	/* pipe-lined memory read data */
+	mtx_dover	/* connect gpu_data to dstd */
+INT6/	srca 		/* source port address */
+	srcrwen\	/* source port write enable */
+INT32/	srcwd		/* source port write data */
+	:IN);
+
+INT32/	dstdr, srcdr, dstdpt0, dstdpt1, zero32
+:LOCAL;
+BEGIN
+
+Exeb		:= NIVU	(exeb, exe);
+Locden\		:= IV (locden\, locden);
+Dstrwen		:= IV (dstrwen, dstrwen\);
+Srcrwen		:= IV (srcrwen, srcrwen\);
+
+Zero		:= TIE0 (zero);
+Zero32		:= JOIN (zero32, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero);
+
+/* spot when the two addresses are the same */
+
+Addreq		:= CMP6 (addreq, srca, dsta);
+Dwtosr		:= ND3 (dwtosr\, addreq, dstrwen, srcrwen\);
+Swtodr		:= AN3 (swtodr, addreq, dstrwen\, srcrwen);
+
+Srcdsel[0]	:= ND2U (srcdsel[0], srcrwen\, locden\);
+Srcdsel[1]	:= ND2U (srcdsel[1], dwtosr\, locden\);
+
+Dstdsel[0]	:= NIVU (dstdsel[0], dstrwen);
+Dstdsel[1]	:= NIVU (dstdsel[1], swtodr);
+
+/* The RAM block 
+Read data is pipe-lined here */
+#if FLARE
+/* Generate the register chip select */
+
+Regcs		:= NIVH (regcs, clk);
+
+Reg_ram		:= AF6032A (srcdr, dstdr, 
+			regcs, srcrwen\, srca, srcwd, 
+        		regcs, dstrwen\, dsta, dstwd);
+#endif
+#if TOSHIBA
+/* Generate the register chip select */
+
+Regcs		:= NIVH (regcs, clk);
+
+Reg_ram		:= AF6032A (srcdr, dstdr, 
+			regcs, srcrwen\, srca, srcwd, 
+        		regcs, dstrwen\, dsta, dstwd);
+#endif
+#if VERILOG
+
+/* Produce a strobe from delayed clock */
+Stba		:= DLY8 (stba, clk);
+Stbb		:= DLY8 (stbb, stba);
+Stbc		:= DLY8 (stbc, stbb);
+Stbd		:= DLY8 (stbd, stbc);
+Stbe		:= DLY8 (stbe, stbd);
+Stb		:= DLY8 (stb, stbe);
+
+(* GE RD64X32 -> RD64X32D for debugging purposes *)
+Reg_ram		:= RD64X32D (srcdr[31],srcdr[30],srcdr[29],srcdr[28],
+	srcdr[27],srcdr[26],srcdr[25],srcdr[24],srcdr[23],srcdr[22],
+	srcdr[21],srcdr[20],srcdr[19],srcdr[18],srcdr[17],srcdr[16],
+	srcdr[15],srcdr[14],srcdr[13],srcdr[12],srcdr[11],srcdr[10],
+	srcdr[9],srcdr[8],srcdr[7],srcdr[6],srcdr[5],srcdr[4],
+	srcdr[3],srcdr[2],srcdr[1],srcdr[0],dstdr[31],dstdr[30],
+	dstdr[29],dstdr[28],dstdr[27],dstdr[26],dstdr[25],dstdr[24],
+	dstdr[23],dstdr[22],dstdr[21],dstdr[20],dstdr[19],dstdr[18],
+	dstdr[17],dstdr[16],dstdr[15],dstdr[14],dstdr[13],dstdr[12],
+	dstdr[11],dstdr[10],dstdr[9],dstdr[8],dstdr[7],dstdr[6],
+	dstdr[5],dstdr[4],dstdr[3],dstdr[2],dstdr[1],dstdr[0],
+	srcrwen\,stb,
+	srca{5},srca{4},srca{3},srca{2},srca{1},srca{0},
+	srcwd{31},srcwd{30},srcwd{29},srcwd{28},srcwd{27},srcwd{26},
+	srcwd{25},srcwd{24},srcwd{23},srcwd{22},srcwd{21},srcwd{20},
+	srcwd{19},srcwd{18},srcwd{17},srcwd{16},srcwd{15},srcwd{14},
+	srcwd{13},srcwd{12},srcwd{11},srcwd{10},srcwd{9},srcwd{8},
+	srcwd{7},srcwd{6},srcwd{5},srcwd{4},srcwd{3},srcwd{2},
+	srcwd{1},srcwd{0},
+	dstrwen\,stb,
+	dsta{5},dsta{4},dsta{3},dsta{2},dsta{1},dsta{0},
+	dstwd{31},dstwd{30},dstwd{29},dstwd{28},dstwd{27},dstwd{26},
+	dstwd{25},dstwd{24},dstwd{23},dstwd{22},dstwd{21},dstwd{20},
+	dstwd{19},dstwd{18},dstwd{17},dstwd{16},dstwd{15},dstwd{14},
+	dstwd{13},dstwd{12},dstwd{11},dstwd{10},dstwd{9},dstwd{8},
+	dstwd{7},dstwd{6},dstwd{5},dstwd{4},dstwd{3},dstwd{2},
+	dstwd{1},dstwd{0});
+Srcdr		:= JOIN (srcdr, srcdr[0..31]);
+Dstdr		:= JOIN (dstdr, dstdr[0..31]);
+#endif
+Srcd		:= MX4P (srcd, srcdr, srcwd, dstwd, locsrc, 
+			srcdsel[0..1]);
+Srcdpt		:= FDSYNC32 (srcdpa, srcd, exeb, clk);
+Srcdp		:= NIVH (srcdp, srcdpa);
+
+Dstd		:= MX4P (dstd, dstdr, dstwd, srcwd, zero32, 
+			dstdsel[0..1]);
+Dstdpt		:= FD1Q (dstdpt0, dstd, clk);
+Mtx_doverp	:= FD1QU (mtx_doverp, mtx_dover, clk);
+Dstdpt1		:= MX2P (dstdpt1, dstdpt0, mem_data, mtx_doverp);
+Dstdp		:= NIVH (dstdp, dstdpt1);
+
+END;

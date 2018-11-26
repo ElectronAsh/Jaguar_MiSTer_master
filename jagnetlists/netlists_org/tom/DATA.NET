@@ -1,0 +1,307 @@
+/******************************************************************
+data.net
+22/11/90
+
+Blitter Data Path
+-----------------
+This is the top level of the blitter data path
+
+******************************************************************/
+
+IMPORT addarray, datacomp, datamux, lfu, srcshift, duplo, tosh;
+
+DEF DATA (
+	wdata[0..63]	/* co-processor write data bus */
+	:BUS;
+	dcomp[0..7]	/* data byte equal flags */
+	srcd[0..7]	/* bits to use for bit to byte expansion */
+	zcomp[0..3]	/* output from Z comparators */
+	:OUT; 
+	big_pix		/* pixel organisation is big-endian */
+	blit_back	/* blitter bus acknowledge */
+	blit_breq[0..1]	/* blitter bus request */
+	clk		/* co-processor clock */
+	/* GE clk[2] */ clk2		/* co-processor clock for register load */
+	cmpdst		/* compare dest rather than source */
+	daddasel[0..2]	/* data adder input A selection */
+	daddbsel[0..2]	/* data adder input B selection */
+	daddmode[0..2]	/* data adder mode */
+	daddq_sel	/* select adder output vs. GPU data */
+	data[0..63]	/* co-processor read data bus */
+	data_ena	/* enable write data */
+	data_sel[0..1]	/* select data to write */
+	dbinh\[0..7]	/* byte oriented changed data inhibits */
+	dend[0..5]	/* end of changed write data zone */
+	dpipe[0..1]	/* load computed data pipe-line latch */
+	dstart[0..5]	/* start of changed write data zone */
+	dstdld[0..1]	/* dest data load (two halves) */
+	dstzld[0..1]	/* dest zed load (two halves) */
+INT32/	gpu_din		/* GPU data bus */
+	iincld		/* I increment load */
+	intld[0..3]	/* computed intensities load */
+	lfu_func[0..3]	/* LFU function code */
+	load_strobe	/* clk[2] derived timing for gpu_data ld */
+	patdld[0..1]	/* pattern data load (two halves) */
+	phrase_mode	/* phrase write mode */
+	reset\		/* system reset */
+	srcd1ld[0..1]	/* source register 1 load (two halves) */
+	srcdread	/* source data read load enable */
+	srczread	/* source zed read load enable */
+	srcshift[0..5]	/* source alignment shift */
+	srcz1ld[0..1]	/* source zed 1 load (two halves) */
+	srcz2add	/* zed fraction gouraud add */
+	srcz2ld[0..1]	/* source zed 2 load (two halves) */
+	zedld[0..3]	/* computed zeds load */
+	zincld		/* Z increment load */
+	zmode[0..2]	/* Z comparator mode */
+	zpipe[0..1]	/* load computed zed pipe-line latch */
+	:IN);
+
+INT16/	addb[0..3], gpu_dinlo, gpu_dinhi, zero16
+INT16/	local_data0lo, local_data0hi, local_data1lo, local_data1hi
+INT16/	sz1[0..3], srcz1i[0..3], sz2[0..3], srcz2i[0..3]
+INT16/	srcd1i[0..3], sd1[0..3]
+INT32/	dstd[0..1], dstz[0..1], iinc, lfu[0..1], 
+INT32/	local_data[0..1], local_data0, local_data1, 
+INT32/	patd[0..1], patdu[0..1], patdo[0..1], 
+INT32/	srcd1[0..1], srcd2[0..1]
+INT32/	srcz1[0..1], srcz2[0..1]
+(* GE 18/06/2012 WTF INT32/	srczo[0..1], srczp[0-1], srczpt[0-1] *)
+INT32/	srczo[0..1], srczp[0..1], srczpt[0..1], srcdlo, srcdhi
+INT32/	zinc, load_data[0..1], srcz[0..1]
+INT16/	adda[0..3], addq[0..3]
+:LOCAL;
+BEGIN
+
+Gpu_datalo	:= JOIN (gpu_dinlo, gpu_din{0..15});
+Gpu_datahi	:= JOIN (gpu_dinhi, gpu_din{16..31});
+Zero		:= TIE0 (zero);
+Zero16		:= JOIN (zero16, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero, zero, zero, zero, 
+			zero, zero, zero, zero);
+
+/* The source data registers 
+There is an implicit shift from register 1 to register 2 whenever 
+data is read into register 1 
+17/8/92 - enhancement
+Allow intensity values to be written individually and unpartitioned
+*/
+
+Intldb[0-3]	:= NIVU (intldb[0-3], intld[0-3]);
+Srcd1i[0]	:= MX4 (srcd1i[0], sd1[0], local_data0lo, 
+			gpu_dinlo, zero16, srcd1ld[0], intldb[0]);
+Srcd1i[1]	:= MX4 (srcd1i[1], sd1[1], local_data0hi, 
+			gpu_dinlo, zero16, srcd1ld[0], intldb[1]);
+Srcd1i[2]	:= MX4 (srcd1i[2], sd1[2], local_data1lo, 
+			gpu_dinlo, zero16, srcd1ld[1], intldb[2]);
+Srcd1i[3]	:= MX4 (srcd1i[3], sd1[3], local_data1hi, 
+			gpu_dinlo, zero16, srcd1ld[1], intldb[3]);
+Sd1[0-3]	:= FD1QP (sd1[0-3], srcd1i[0-3], clk);
+Srcd1[0]	:= JOIN (srcd1[0], sd1[0], sd1[1]);
+Srcd1[1]	:= JOIN (srcd1[1], sd1[2], sd1[3]);
+
+Srcd2ldg[0-1]	:= AN2U (srcd2ldg[0-1], srcdread, load_strobe);
+Srcd2[0-1]	:= LDP1Q (srcd2[0-1], srcd1[0-1], srcd2ldg[0-1]);
+
+/* Source data alignment shifter */
+
+Src_shift	:= SRCSHIFT (srcdlo, srcdhi, big_pix, srcd1[0..1], 
+			srcd2[0..1], srcshift[0..5]);
+
+Srcd[0-7]	:= NIV (srcd[0-7], srcdlo{0-7});
+
+/* Source / internal Z registers 
+Implicit shift, as per the data registers 
+17/8/92 - enahncement
+Broke into 16-bit sections to allow 16.16 bit Z writes
+*/
+
+/* Source Z register 1, or computed Z integer parts */
+
+Zedldb[0-3]	:= NIVH (zedldb[0-3], zedld[0-3]);
+Srcz1i[0]	:= MX4 (srcz1i[0], sz1[0], local_data0lo, 
+			gpu_dinhi, zero16, srcz1ld[0], zedldb[0]);
+Srcz1i[1]	:= MX4 (srcz1i[1], sz1[1], local_data0hi, 
+			gpu_dinhi, zero16, srcz1ld[0], zedldb[1]);
+Srcz1i[2]	:= MX4 (srcz1i[2], sz1[2], local_data1lo, 
+			gpu_dinhi, zero16, srcz1ld[1], zedldb[2]);
+Srcz1i[3]	:= MX4 (srcz1i[3], sz1[3], local_data1hi, 
+			gpu_dinhi, zero16, srcz1ld[1], zedldb[3]);
+
+Sz1[0-3]	:= FD1QP (sz1[0-3], srcz1i[0-3], clk);
+Srcz1[0]	:= JOIN (srcz1[0], sz1[0], sz1[1]);
+Srcz1[1]	:= JOIN (srcz1[1], sz1[2], sz1[3]);
+
+/* Source Z register 2, or computed Z fractional parts 
+srczread   - load from srcz1
+srcz2ld[n] - load from local_data
+srcz2add   - load from local_data
+zedld[n]   - load from gpu_din
+*/
+
+Sz20sel0	:= OR2_H (sz20sel[0], srczread, zedldb[0]);
+Sz20sel1	:= OR3_H (sz20sel[1], srcz2ld[0], srcz2add, 
+			zedldb[0]);
+Srcz2i[0]	:= MX4 (srcz2i[0], sz2[0], sz1[0], local_data0lo, 
+			gpu_dinlo, sz20sel[0..1]);
+Sz21sel0	:= OR2_H (sz21sel[0], srczread, zedldb[1]);
+Sz21sel1	:= OR3_H (sz21sel[1], srcz2ld[0], srcz2add, 
+			zedldb[1]);
+Srcz2i[1]	:= MX4 (srcz2i[1], sz2[1], sz1[1], local_data0hi, 
+			gpu_dinlo, sz21sel[0..1]);
+Sz22sel0	:= OR2_H (sz22sel[0], srczread, zedldb[2]);
+Sz22sel1	:= OR3_H (sz22sel[1], srcz2ld[1], srcz2add, 
+			zedldb[2]);
+Srcz2i[2]	:= MX4 (srcz2i[2], sz2[2], sz1[2], local_data1lo, 
+			gpu_dinlo, sz22sel[0..1]);
+Sz23sel0	:= OR2_H (sz23sel[0], srczread, zedldb[3]);
+Sz23sel1	:= OR3_H (sz23sel[1], srcz2ld[1], srcz2add, 
+			zedldb[3]);
+Srcz2i[3]	:= MX4 (srcz2i[3], sz2[3], sz1[3], local_data1hi, 
+			gpu_dinlo, sz23sel[0..1]);
+
+Sz2[0-3]	:= FD1QP (sz2[0-3], srcz2i[0-3], clk);
+Srcz2[0]	:= JOIN (srcz2[0], sz2[0], sz2[1]);
+Srcz2[1]	:= JOIN (srcz2[1], sz2[2], sz2[3]);
+
+
+/* Destination data register */
+
+Dstdldg[0-1]	:= AN2U (dstdldg[0-1], dstdld[0-1], load_strobe);
+Dstd[0-1]	:= LDP1Q (dstd[0-1], load_data[0-1], 
+			dstdldg[0-1]); 
+
+/* Destination Z register */
+
+Dstzldg[0-1]	:= AN2U (dstzldg[0-1], dstzld[0-1], load_strobe);
+Dstz[0-1]	:= LDP1Q (dstz[0-1], load_data[0-1], 
+			dstzldg[0-1]); 
+
+/* Pattern data register 
+This is fed through a pipe-line latch which is used to pipe-line
+computed intensities, but enabled all the time for pattern. 
+17/8/92 - enhancement
+The pattern data may also be written by the intld signals, these
+only affect the intensity part.
+*/
+
+Patdi[0-7]	:= MX4 (patdi[0-7], pdu[0-7], local_data0{0-7}, 
+			gpu_din{16-23}, zero, patdld[0], 
+			intldb[0]);
+Patdi[8-15]	:= MX2 (patdi[8-15], pdu[8-15], local_data0{8-15}, 
+			patdld[0]);
+Patdi[16-23]	:= MX4 (patdi[16-23], pdu[16-23], 
+			local_data0{16-23}, gpu_din{16-23}, zero, 
+			patdld[0], intldb[1]);
+Patdi[24-31]	:= MX2 (patdi[24-31], pdu[24-31], 
+			local_data0{24-31}, patdld[0]);
+Patdi[32-39]	:= MX4 (patdi[32-39], pdu[32-39], 
+			local_data1{0-7}, gpu_din{16-23}, zero, 
+			patdld[1], intldb[2]);
+Patdi[40-47]	:= MX2 (patdi[40-47], pdu[40-47], 
+			local_data1{8-15}, patdld[1]);
+Patdi[48-55]	:= MX4 (patdi[48-55], pdu[48-55], 
+			local_data1{16-23}, gpu_din{16-23}, zero, 
+			patdld[1], intldb[3]);
+Patdi[56-63]	:= MX2 (patdi[56-63], pdu[56-63], 
+			local_data1{24-31}, patdld[1]);
+Pdu[0-63]	:= FD1Q (pdu[0-63], patdi[0-63], clk); 
+Patdu[0]	:= JOIN (patdu[0], pdu[0..31]);
+Patdu[1]	:= JOIN (patdu[1], pdu[32..63]);
+Dpipeg[0-1]	:= AN2U (dpipeg[0-1], dpipe[0], /* GE clk[2] */ clk2);
+Patd[0-1]	:= LDP1Q (patd[0-1], patdu[0-1], dpipeg[0-1]);
+
+/*
+27/7/92 - bug fix
+Delay the pattern write data with a further pipeline stage
+*/
+
+Dpipe1b[0-1]	:= NIVU (dpipe1b[0-1], dpipe[1]);
+Patdo[0-1]	:= FDSYNC32 (patdo[0-1], patd[0-1], dpipe1b[0-1], 
+			clk);
+
+/* Logic function unit */
+
+Lfu		:= LFU (lfu[0..1], srcdlo, srcdhi, dstd[0..1], 
+			lfu_func[0..3]);
+
+/* Z increment register */
+
+Zincldg		:= AN2U (zincldg, zincld, load_strobe);
+Zinc		:= LDP1Q (zinc, gpu_din, zincldg);
+
+/* I increment register */
+
+Iincldg		:= AN2U (iincldg, iincld, load_strobe);
+Iinc		:= LDP1Q (iinc, gpu_din, iincldg);
+
+/* Pixel data comparator */
+
+Datacomp	:= DATACOMP (dcomp[0..7], cmpdst, dstd[0..1], 
+			patd[0..1], srcdlo, srcdhi);
+
+/* Z alignment */
+
+Zedshift	:= ZEDSHIFT (srcz[0..1], srcz1[0..1], srcz2[0..1],
+			srcshift[4..5]);
+
+/* Z pipe-lining
+Z is available to the Z comparator on zpipe, and is then held
+after the end of zpipe for output. */
+
+Zpipe0b[0-1]	:= NIVU (zpipe0b[0-1], zpipe[0]);
+Srczp[0]	:= MX2P (srczp[0], srczpt[0], srcz[0], zpipe0b[0]);
+Srczp[1]	:= MX2P (srczp[1], srczpt[1], srcz[1], zpipe0b[1]);
+Srczpt[0-1]	:= FD1Q (srczpt[0-1], srczp[0-1], clk);
+
+/* Zed comparator for Z-buffer operations */
+
+Zedcomp		:= ZEDCOMP (zcomp[0..3], srczp[0..1], dstz[0..1], 
+			zmode[0..2]);
+
+/*
+27/7/92 - bug fix
+Delay the Z write data with a further pipeline stage
+*/
+
+Zpipe1b[0-1]    := NIVU (zpipe1b[0-1], zpipe[1]);
+Srczo[0-1]      := FDSYNC32 (srczo[0-1], srczp[0-1], zpipe1b[0-1], 
+                        clk);
+
+/* Adder input A multiplexer */
+
+Addamux		:= DADDAMUX (adda[0..3], dstd[0..1], srcdlo, 
+			srcdhi, patdu[0..1], srcz1[0..1], 
+			srcz2[0..1], daddasel[0..2]);
+
+/* Adder input B multiplexer */
+
+Addbmux		:= DADDBMUX (addb[0..3], srcdlo, srcdhi, iinc, 
+			zinc, daddbsel[0..2]);
+
+/* Adder array for Z and intensity increments */
+
+Addarray	:= ADDARRAY (addq[0..3], adda[0..3], addb[0..3], 
+			daddmode[0..2], clk, reset\);
+
+/* Local data bus multiplexer */
+
+Data_local	:= LOCAL_MUX (local_data[0..1], load_data[0..1], 
+			addq[0..3], gpu_din, data[0..63], 
+			blit_back, blit_breq[0..1], daddq_sel);
+Local_data0	:= JOIN (local_data0, local_data[0]);
+Local_data1	:= JOIN (local_data1, local_data[1]);
+Local_data0lo	:= JOIN (local_data0lo, local_data0{0..15});
+Local_data0hi	:= JOIN (local_data0hi, local_data0{16..31});
+Local_data1lo	:= JOIN (local_data1lo, local_data1{0..15});
+Local_data1hi	:= JOIN (local_data1hi, local_data1{16..31});
+
+/* Data output multiplexer and tri-state drive */
+
+Data_out	:= DATA_MUX (wdata[0..63], addq[0..3], big_pix, 
+			dstd[0..1], dstz[0..1], data_sel[0..1], 
+			data_ena, dstart[0..5], dend[0..5], 
+			dbinh\[0..7], lfu[0..1], patdo[0..1], 
+			phrase_mode, srczo[0..1]);
+
+END;

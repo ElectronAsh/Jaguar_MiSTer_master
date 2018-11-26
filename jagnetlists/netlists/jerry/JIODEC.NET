@@ -1,0 +1,138 @@
+(*****************************************************************
+
+	jiodec.net
+
+This is the address decode in Jerry.
+
+******************************************************************)
+
+IMPORT  tosh,           (* Toshiba gate & pad definitions *)
+        lego;
+
+
+
+DEF JIODEC	(a[0..15],dspcsl,wel0,oel0,dspen:IN;
+
+		pit1w, pit2w, pit3w, pit4w, clk1w, clk2w, clk3w, int1w, 
+		u2dwr, u2ctwr,u2psclw, 
+		test1w, joy1rl, joy2rl, joy1wl, gpiol[0..5],
+		int1r, u2drd, u2strd,u2psclr, 
+/*
+		pad1r, pad2r, pad3r, pad4r, 
+*/
+		pit1r, pit2r, pit3r, pit4r,
+		internal:IO;
+
+		dr[0..15]:TRI);
+
+		INT16/addr:IO;
+BEGIN
+
+Addr :=		JOIN (addr,a[0..15]);
+Addru :=	DUMMY (addr);
+
+Gnd :=		TIE0	(gnd);
+
+Al[1-14] :=	IV	(al[1-14],a[1-14]);
+Al[15] :=	IVH	(al[15],a[15]);
+Dspcs :=	IVH 	(dspcs,dspcsl);
+Wet :=		IVH	(wet,wel0);
+Oet :=		IVH	(oet,oel0);
+
+Nota00xx_ :=	ND8	(nota00xx,al[8..15]);
+I00xxi	:=	NR2	(i00xxi,nota00xx,dspcsl);
+I00xx :=	NIVU	(i00xx,i00xxi);
+
+Axxx0	:=	AN3H	(axxx0,al[3],al[2],al[1]);
+Axxx2	:=	AN3	(axxx2,al[3],al[2],a[1]);
+Axxx4	:=	AN3	(axxx4,al[3],a[2],al[1]);
+Axxx6	:=	AN3	(axxx6,al[3],a[2],a[1]);
+Axxx8	:=	AN3	(axxx8,a[3],al[2],al[1]);
+Axxxa	:=	AN3	(axxxa,a[3],al[2],a[1]);
+Axxxc	:=	AN3	(axxxc,a[3],a[2],al[1]);
+
+Axx0x	:=	AN4	(axx0x,al[7],al[6],al[5],al[4]);
+Axx1x	:=	AN4	(axx1x,al[7],al[6],al[5],a[4]);
+Axx2x	:=	AN4	(axx2x,al[7],al[6],a[5],al[4]);
+Axx3x	:=	AN4H	(axx3x,al[7],al[6],a[5],a[4]);
+Axx6x	:=	AN4	(axx6x,al[7],a[6],a[5],al[4]);
+
+/* general purpose IO decodes 4000h to 7FFFh 
+
+ 0.....4800-4FFF
+ 1.....5000-5FFF
+ 2.....6000-6FFF
+ 3.....7000-77FF
+ 4.....7800-7BFF
+ 5.....7C00-7FFF
+
+*/
+
+Gpiol[0] := ND6 (gpiol[0],dspcs,al[15],a[14],al[13],al[12],a[11]);
+Gpiol[1] := ND6 (gpiol[1],dspcs,al[15],a[14],al[13],a[12],vcc);
+Gpiol[2] := ND6 (gpiol[2],dspcs,al[15],a[14],a[13],al[12],vcc);
+Gpiol[3] := ND6 (gpiol[3],dspcs,al[15],a[14],a[13],a[12],al[11]);
+Gpiol[4] := ND8 (gpiol[4],dspcs,al[15],a[14],a[13],a[12],a[11],al[10],vcc);
+Gpiol[5] := ND8 (gpiol[5],dspcs,al[15],a[14],a[13],a[12],a[11],a[10],vcc);
+
+Joy1r	:= ND8	(joy1rl,dspcs,al[15],a[14],al[13],al[12],al[11],axxx0,oet);
+Joy2r	:= ND8	(joy2rl,dspcs,al[15],a[14],al[13],al[12],al[11],axxx2,oet);
+Joy1w	:= ND8	(joy1wl,dspcs,al[15],a[14],al[13],al[12],al[11],axxx0,wet);
+
+Gpio :=		ND2	(notgpio,al[15],a[14]);
+Internal :=	AN2	(internal,dspcs,notgpio);
+
+/*	read strobes	*/
+
+Int1r	:=	AN4H	(int1r,i00xx,axx2x,axxx0,oet);
+U2drd	:=	AN4H	(u2drd,i00xx,axx3x,axxx0,oet);
+U2strd	:=	AN4H	(u2strd,i00xx,axx3x,axxx2,oet);
+U2psclr	:=	AN4H	(u2psclr,i00xx,axx3x,axxx4,oet);
+
+Pit1r	:=	AN4H	(pit1r,i00xx,axx3x,axxx6,oet);
+Pit2r	:=	AN4H	(pit2r,i00xx,axx3x,axxx8,oet);
+Pit3r	:=	AN4H	(pit3r,i00xx,axx3x,axxxa,oet);
+Pit4r	:=	AN4H	(pit4r,i00xx,axx3x,axxxc,oet);
+/*
+Pad1r	:=	AN4H	(pad1r,i00xx,axx4x,axxx8,oet);
+Pad2r	:=	AN4H	(pad2r,i00xx,axx4x,axxxa,oet);
+Pad3r	:=	AN4H	(pad3r,i00xx,axx4x,axxxc,oet);
+Pad4r	:=	AN4H	(pad4r,i00xx,axx4x,axxxe,oet);
+*/
+
+(*
+ in order to stop dr[0-15] floating enable memcon1 when nothing else
+ is being read
+*)
+
+Float1 := NR6	(float1,int1r,u2drd,u2strd,u2psclr,dspen,gnd);
+/*
+Float2 := NR8	(float2,pit1r,pit2r,pit3r,pit4r,pad1r,pad2r,pad3r,pad4r);
+*/
+Float2 := NR4	(float2,pit1r,pit2r,pit3r,pit4r);
+Float3 := AN2	(float3,float1,float2);
+
+Float :=	NIVH	(float,float3);
+Dr[0-15] :=	TS	(dr[0-15],gnd,float);
+
+/*	write strobes	*/
+
+Pit1w	:=	AN4H	(pit1w,i00xx,axx0x,axxx0,wet);
+Pit2w	:=	AN4H	(pit2w,i00xx,axx0x,axxx2,wet);
+Pit3w	:=	AN4H	(pit3w,i00xx,axx0x,axxx4,wet);
+Pit4w	:=	AN4H	(pit4w,i00xx,axx0x,axxx6,wet);
+Clk1w	:=	AN4H	(clk1w,i00xx,axx1x,axxx0,wet);
+Clk2w	:=	AN4H	(clk2w,i00xx,axx1x,axxx2,wet);
+Clk3w	:=	AN4H	(clk3w,i00xx,axx1x,axxx4,wet);
+Int1w	:=	AN4H	(int1w,i00xx,axx2x,axxx0,wet);
+U2dwr	:=	AN4H	(u2dwr,i00xx,axx3x,axxx0,wet);
+U2ctwr	:=	AN4H	(u2ctwr,i00xx,axx3x,axxx2,wet);
+U2psclw	:=	AN4H	(u2psclw,i00xx,axx3x,axxx4,wet);
+(* GE Test1w	:=	AN4H	(test1w,i00xx,axx6x,axxx0,wet); *)
+Test1w	:= TIE0(test1w);
+
+Vcc :=		TIE1 (vcc);
+
+END;
+
+

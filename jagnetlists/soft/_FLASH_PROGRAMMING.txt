@@ -1,0 +1,9 @@
+Quartus 9.1
+Open C:\altera\61\nios2eds\examples\verilog\niosII_stratixII_2s60_rohs\standard\standard.qpf
+Open programmer, program the .sof
+Open SOPC Builder
+Launch the Nios II Command shell
+
+   28  bin2flash --input=/cygdrive/D/FPGA/JagNetlists/soft/Tempest_2000.jag --output=/cygdrive/D/FPGA/JagNetlists/soft/Tempest_2000.srec --location=0x800000
+   31  nios2-flash-programmer.exe --b 0 -c 2 /cygdrive/D/FPGA/JagNetlists/soft/Tempest_2000.srec 
+   32  nios2-flash-programmer.exe  --base 0 -c 2  --read /cygdrive/D/FPGA/flash.srec

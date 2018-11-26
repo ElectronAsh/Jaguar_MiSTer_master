@@ -1,0 +1,194 @@
+/******************************************************************
+dcontrol.net
+29/3/91
+
+Data Section Control Logic
+--------------------------
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF DCONTROL (
+	daddasel[0..2]	/* data adder input A selection */
+	daddbsel[0..2]	/* data adder input B selection */
+	daddmode[0..2]	/* data adder mode */
+	data_sel[0..1]	/* select data to write */
+	daddq_sel       /* select adder output in data path */
+	gourd		/* enable gouraud data computation */
+	gourz		/* enable gouraud zed computation */
+	patdadd		/* pattern data gouraud add */
+	patfadd		/* pattern fraction gouraud add */
+	srcz1add	/* zed data gouraud add */
+	srcz2add	/* zed fraction gouraud add */
+	:OUT;
+	atick[0..1]	/* data compute timing */
+	clk[0]		/* co-processor clock */
+	cmdld		/* command register load */
+	dwrite		/* inner loop dest data write state */
+	dzwrite		/* inner loop dest zed write state */
+	dzwrite1	/* ... one pipe-lien stage on */
+INT32/	gpu_din		/* GPU data bus */
+	srcdreadd	/* timing of extra load for srcshade */
+	srcshade	/* use intensity increment on source data*/
+	:IN);
+
+BEGIN
+
+/* Data update control bits */
+
+Gourd		:= FDSYNCM (gourd,   gpu_din{12}, cmdld, clk[0]);
+Gourz		:= FDSYNCM (gourz,   gpu_din{13}, cmdld, clk[0]);
+Topben		:= FDSYNC (topben, gpu_din{14}, cmdld, clk[0]);
+Topnen		:= FDSYNC (topnen, gpu_din{15}, cmdld, clk[0]);
+Patdsel		:= FDSYNC (patdsel, gpu_din{16}, cmdld, clk[0]);
+Adddsel		:= FDSYNC (adddsel, gpu_din{17}, cmdld, clk[0]);
+
+Gourd\		:= IV (gourd\, gourd);
+Gourz\		:= IV (gourz\, gourz);
+Topben\		:= IV (topben\, topben);
+
+/**  Data Adder Control  *****************************************/
+
+Atickboth	:= OR2P (atickboth, atick[0..1]);
+
+/* Data adder control, input A selection
+000   Destination data
+100   Source data      - computed intensity fraction
+101   Pattern data     - computed intensity
+110   Source zed 1     - computed zed
+111   Source zed 2     - computed zed fraction
+
+Bit 0 =   dwrite  . gourd . atick[1]
+	+ dzwrite . gourz . atick[0]
+Bit 1 =   dzwrite . gourz . (atick[0] + atick[1])
+Bit 2 =   gourd 
+	+ gourz 
+	+ dwrite  . srcshade
+*/
+
+Shadeadd\	:= ND2P (shadeadd\, dwrite, srcshade);
+Shadeadd	:= IVS (shadeadd, shadeadd\);
+Dasel0t0	:= ND3 (dasel0t[0], dwrite, gourd, atick[1]);
+Dasel0t1	:= ND3 (dasel0t[1], dzwrite, gourz, atick[0]);
+Daddasel[0]	:= ND2P (daddasel[0], dasel0t[0..1]);
+Daddasel[1]	:= AN3P (daddasel[1], dzwrite, gourz, atickboth);
+Daddasel[2]	:= OR3P (daddasel[2], gourd, gourz, shadeadd);
+
+/* Data adder control, input B selection
+000	Source data
+100	Bottom 16 bits of I inc repeated four times
+101	Top 16 bits of I inc repeated four times
+110	Bottom 16 bits of Z inc repeated four times
+111	Top 16 bits of Z inc repeated four times
+
+Bit 0 =   dwrite  . gourd . atick[1]
+	+ dzwrite . gourz . atick[1]
+	+ dwrite  . srcshade
+Bit 1 =   dzwrite . gourz . (atick[0] + atick[1])
+Bit 2 =   dwrite  . gourd . (atick[0] + atick[1])
+	+ dzwrite . gourz . (atick[0] + atick[1])
+	+ dwrite  . srcshade
+*/
+
+Dbsel0t0	:= ND3 (dbsel0t[0], dwrite, gourd, atick[1]);
+Dbsel0t1	:= ND3 (dbsel0t[1], dzwrite, gourz, atick[1]);
+Daddbsel[0]	:= ND3P (daddbsel[0], dbsel0t[0..1], shadeadd\);
+Daddbsel[1]	:= AN3P (daddbsel[1], dzwrite, gourz, atickboth);
+Dbsel2t0	:= ND3 (dbsel2t[0], dwrite, gourd, atickboth);
+Dbsel2t1	:= ND3 (dbsel2t[1], dzwrite, gourz, atickboth);
+Daddbsel[2]	:= ND3P (daddbsel[2], dbsel2t[0..1], shadeadd\);
+
+/* Data adder mode control
+X00	16-bit normal add
+001	16-bit saturating add with carry
+010	8-bit saturating add with carry, carry into top byte is 
+	inhibited (YCrCb)
+011	8-bit saturating add with carry, carry into top byte and 
+	between top nybbles is inhibited (CRY)
+101	16-bit saturating add
+110	8-bit saturating add, carry into top byte is inhibited
+111	8-bit saturating add, carry into top byte and between top 
+	nybbles is inhibited
+
+The first four are used for Gouraud calculations, the latter three
+for adding source and destination data
+
+Bit 0 =   dzwrite . gourz . atick[1]
+	+ dwrite  . gourd . atick[1] . /topnen . /topben
+	+ dwrite  . gourd . atick[1] .  topnen .  topben
+	+ /gourd . /gourz . /topnen . /topben
+	+ /gourd . /gourz .  topnen .  topben
+	+ shadeadd . /topnen . /topben
+	+ shadeadd .  topnen .  topben
+	
+Bit 1 =   dwrite . gourd . atick[1] . /topben
+	+ /gourd . /gourz .  /topben
+	+ shadeadd .  /topben
+
+Bit 2 =   /gourd . /gourz
+	+ shadeadd
+*/
+
+Dm0t0		:= ND3 (dm0t[0], dzwrite, gourz, atick[1]);
+Dm0t1		:= EN (dm0t[1], topben, topnen);
+Dm0t2		:= ND4 (dm0t[2], dwrite, gourd, atick[1], dm0t[1]);
+Dm0t3		:= ND3 (dm0t[3], gourd\, gourz\, dm0t[1]);
+Dm0t4		:= ND2 (dm0t[4], shadeadd, dm0t[1]);
+Daddmode[0]	:= ND4P (daddmode[0], dm0t[0], dm0t[2..4]);
+
+Dm1t0		:= ND4 (dm1t[0], dwrite, gourd, atick[1], topben\);
+Dm1t1		:= ND3 (dm1t[1], gourd\, gourz\, topben\);
+Dm1t2		:= ND2 (dm1t[2], shadeadd, topben\);
+Daddmode[1]	:= ND3H (daddmode[1], dm1t[0..2]);
+
+Daddmode[2]	:= AOR1P (daddmode[2], gourd\, gourz\, shadeadd);
+
+/* Data add load controls 
+Pattern fraction (dest data) is loaded on 
+	dwrite . gourd . atick[0]
+Pattern data is loaded on
+	dwrite . gourd . atick[1]
+Source z1 is loaded on 
+	dzwrite . gourz . atick[1]
+Source z2 is loaded on 
+	dzwrite . gourz . atick[0]
+Texture map shaded data is loaded on
+	srcdreadd . srcshade
+*/
+
+Patfadd		:= AN3 (patfadd, dwrite, gourd, atick[0]);
+Patdadd		:= AN3 (patdadd, dwrite, gourd, atick[1]);
+Srcz1add	:= AN3 (srcz1add, dzwrite, gourz, atick[1]);
+Srcz2add	:= AN3 (srcz2add, dzwrite, gourz, atick[0]);
+Srcshadd	:= AN2 (srcshadd, srcdreadd, srcshade);
+Daddq_sel	:= OR5 (daddq_sel, patfadd, patdadd, srcz1add,
+			srcz2add, srcshadd);
+
+/**  Data Output Control  ****************************************/
+
+/* Select write data
+This has to be controlled from stage 1 of the pipe-line, delayed
+by one tick, as the write occurs in the cycle after the ack.
+
+00	pattern data
+01	lfu data
+10	adder output
+11	source zed
+
+Bit 0 =  /patdsel . /adddsel
+	+ dzwrite1d
+Bit 1 =   adddsel
+	+ dzwrite1d
+*/
+
+Dzwrite1d	:= FD1Q (dzwrite1d, dzwrite1, clk[0]);
+
+Dsel0t		:= NR2 (dsel0t, patdsel, adddsel);
+Data_sel[0]	:= OR2 (data_sel[0], dzwrite1d, dsel0t);
+
+Data_sel[1]	:= OR2 (data_sel[1], dzwrite1d, adddsel);
+
+
+
+END;

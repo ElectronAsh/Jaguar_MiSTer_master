@@ -1,0 +1,220 @@
+/******************************************************************
+graphics.net
+21/2/91
+
+The top-level of the Graphics Processing System
+-----------------------------------------------
+This module contains the graphics processor core, the blitter,
+the local memory, and interfaces to the CPU IO bus, and a
+gateway between the graphics processor bus and the co-processor
+bus.
+
+******************************************************************/
+
+IMPORT blit, gateway, gpu_cpu, gpu_ram, arith, divide, gpu_ctrl, 
+	gpu_mem, ins_exec, registers, sboard, moto;
+
+DEF GRAPHICS (
+	ima[0..15]	/* I/O address */
+	dwrite[0..31]	/* I/O write data */
+	ack		/* co-processor memory acknowledge */
+	blit_back	/* Blitter bus acknowledge */
+	gpu_back	/* GPU normal bus acknowledge */
+	reset\		/* system reset */
+	clk		/* system clock */
+	tlw		/* transparent latch write enable timing */
+	dint		/* DSP interrupt request */
+	gpu_irq[3]	/* object processor interrupt request */
+	gpu_irq[2]	/* timer interrupt request */
+	iord		/* Look-ahead I/O read strobe for GPU */
+	iowr		/* Look-ahead I/O write strobe for GPU */
+	reset_lock	/* set the state of the lock bit at reset*/
+	data[0..63]	/* co-processor write data bus */
+	at[1]		/* look-ahead IO address bit 1 */
+	:IN;
+	blit_breq[0..1]	/* Blitter bus requests */
+	gpu_breq	/* GPU normal bus request */
+	dma_breq	/* GPU high-priority bus request */
+	cpu_int		/* GPU interrupt to CPU */
+	lock		/* the system is locked fron the CPU */
+	:OUT;
+	wdata[0..63]	/* co-processor write data bus */
+	a[0..23]	/* co-processor address bus */
+	width[0..3]	/* co-processor cycle width (in bytes) */
+	read		/* co-processor read request */
+	mreq		/* co-processor cycle request */
+	dr[0..15]	/* I/O read data */
+	justify		/* data position on memory transfers */
+	:BUS);
+
+INT4/	width
+INT16/	io_addr
+INT32/	gpu_din
+(* GE 18/06/2012 Added missing declarations *)
+INT24/	dataddr, gpu_addr
+INT32/	immdata, locsrc
+INT32/	result, srcd, srcdp, srcdpa, dstwd, srcwd, load_data, mem_data, quotient, dstdp, dstd
+INT32/	cpudata
+INT3/	alufunc
+INT6/	dstanwi, srcanwi, dstat
+INT6/	dsta, srca
+INT22/	progaddr
+INT13/	cpuaddr
+:LOCAL;
+INT16/  dread:BUS; (* GE - declared as BUS *)
+INT24/	address:BUS;
+INT32/	gpu_data:BUS;
+gpu_dout[0..31]:BUS;
+BEGIN
+
+Io_addr :=      JOIN (io_addr,ima[0..15]);
+Dr[0-15] :=     JOIN_BUS (dr[0-15],dread{0-15});
+
+Width	:= JOIN (width, width[0..3]);	/* for debug only */
+Widthd	:= DUMMY (width);
+A[0-23] := JOIN_BUS (a[0-23],address{0-23});
+
+/* Use dint for gpu_irq[1] (edge-triggered) */
+
+Dintd		:= FD1 (dintd, dintd\, dint, clk[11]);
+Dintdum		:= DUMMY (dintd);
+Gpu_irq[1]	:= AN2 (gpu_irq[1], dint, dintd\);
+
+Resetl[4]	:= BUF8X6 (resetl[4],reset\);
+Resetl[5]	:= BUF8X2 (resetl[5],reset\);
+Resetl[6]	:= BUF1 (resetl[6],reset\);
+Resetl[7]	:= BUF1 (resetl[7],reset\);
+Resetl[8]	:= BUF4 (resetl[8],reset\);
+Resetl[9]	:= BUF1 (resetl[9],reset\);
+Resetl[10]	:= BUF1 (resetl[10],reset\);
+Resetl[11]	:= BUF2 (resetl[11],reset\);
+Resetl[12]	:= BUF1 (resetl[12],reset\);
+Clk[5]		:= BUF64 (clk[5],clk);
+Clk[6]		:= BUF48 (clk[6],clk);
+Clk[7]		:= BUF24 (clk[7],clk);
+Clk[8]		:= BUF48 (clk[8],clk);
+Clk[9]		:= BUF24 (clk[9],clk);
+Clk[10]		:= BUF24 (clk[10],clk);
+Clk[11]		:= BUF4  (clk[11],clk);
+Clk[15]		:= BUF16 (clk[15],clk);
+
+/* Instruction execution control logic */
+
+Ins_exec	:= INS_EXEC (gpu_data gpu_dout[3..14] 
+			gpu_dout[16..31] alufunc brlmux[0..1] 
+			dataddr datreq datwe datwe_raw div_instr 
+			div_start dstanwi dstat dstdgate dstrrd 
+			dstrrdi dstrwr dstrwri dstwen exe 
+			flag_depend flagld immdata immld immwri 
+			insexei locden locsrc macop memrw 
+			msize[0..1] mtx_dover multsel multsign 
+			pabort precomp progaddr progreq resld 
+			ressel[0..2] reswr rev_sub satsz[0..1] 
+			srcrrd single_stop srcanwi big_instr 
+			carry_flag clk[5] tlw datack dbgrd 
+			div_activei external flagrd flagwr 
+			gate_active go gpu_din 
+			gpu_irq[0..4] mtxawr mtxcwr nega_flag pcrd 
+			pcwr progack resaddrldi resetl[4] result 
+			sbwait sdatreq single_go single_step 
+			srcaddrldi srcd srcdp srcdpa statrd 
+			zero_flag);
+
+/* Score-boarding and register write control */
+
+Sboard		:= SBOARD (dsta sdatreq dstrwen\ dstwd,
+			resaddrldi sbwait srca srcaddrldi srcrwen\ 
+			srcwd clk[6] datack datwe datwe_raw 
+			del_xld div_activei div_instr 
+			div_start dstanwi dstat dstrrd dstrrdi 
+			dstrwr dstrwri dstwen exe flag_depend 
+			flagld gate_active immdata immld 
+			immwri insexei load_data mem_data 
+			memrw mtx_dover precomp quotient resetl[5] 
+			reswr result srcanwi srcdp srcrrd 
+			xld_ready);
+
+
+/* Arithmetic logic - ALU, multiplier, etc. */
+
+Arith		:= ARITH (gpu_dout[0..2], carry_flag, nega_flag, 
+			result, zero_flag, dstdp, srcdp, srcd{31}, 
+			alufunc, brlmux[0..1], clk[7], flagld, 
+			flagrd, flagwr, gpu_din, macop, multsel, 
+			multsign, resetl[6], resld, ressel[0..2], rev_sub, 
+			satsz[0..1]);
+
+/* the serial divide unit */
+
+Divide		:= DIVIDER (gpu_data div_activei quotient clk[8] 
+			div_start divwr dstd gpu_din remrd resetl[7] 
+			srcd);
+
+/* processor registers */
+
+Registers	:= REGISTERS (srcd, srcdp, srcdpa, dstd, dstdp, 
+			clk[9], dsta, dstrwen\, dstwd, exe, 
+			locden, locsrc, mem_data, mtx_dover, srca, 
+			srcrwen\, srcwd);
+
+/* GPU local memory controller */
+
+Gpu_mem		:= GPU_MEM (gpu_data big_instr big_io big_pix 
+			bliten ctrlwr ctrlwrgo datack dbgrd 
+			del_xld divwr external flagrd flagwr 
+			gateack gpu_addr gpu_memw hidrd hidwr lock 
+			mem_data 
+			mtxawr mtxcwr pcrd pcwr progack progserv 
+			ram_addr[2..11] ramen remrd 
+			statrd clk[10] cpuaddr cpudata dataddr 
+			dstd dstdgate datreq datwe gatereq 
+			go gpu_din ioreq iowr pabort progaddr 
+			progreq resetl[8] reset_lock);
+
+/* GPU execution control */
+
+Gpu_ctrl	:= GPU_CTRL ( gpu_dout[0..5], gpu_dout[11..15],
+			bus_hog, cpu_int, go, gpu_irq[0], 
+			single_go, single_step, clk[11], 
+			ctrlwr ctrlwrgo, gpu_din, resetl[9] 
+			single_stop, statrd);
+
+/* Graphics processor local RAM */
+
+Gpu_ram		:= GPU_RAM (gpu_data, clk[11], gpu_memw, 
+			ram_addr[2..11], ramen);
+
+/* CPU access to graphics processor bus */
+
+Gpu_cpu		:= GPU_CPU (dread cpuaddr cpudata ioreq at[1] 
+			a[15] ack big_io clk[11] tlw dwrite[0..31] 
+			io_addr iord iowr mem_data resetl[10]);
+
+/* Gateway to co-processor bus */
+
+Gateway		:= GATEWAY (address wdata[0..63] gpu_data justify 
+			mreq read width[0..3] gpu_dout[15] 
+			dma_breq gate_active gatereq gpu_breq 
+			load_data xld_ready ack bus_hog clk[15] tlw 
+			data[0..63] external flagrd flagwr 
+			gateack gpu_addr gpu_back gpu_din gpu_memw 
+			hidrd hidwr msize[0..1] progserv resetl[11]);
+
+/* Blitter */
+
+Blit		:= BLIT (address wdata[0..63] justify mreq read 
+			width[0..3] gpu_dout[0..31] 
+			blit_breq[0..1] gpu_irq[4] ack 
+			big_pix blit_back bliten clk tlw 
+			data[0..63] gpu_addr gpu_din gpu_memw 
+			resetl[12]);
+
+/* join the bit-wise tri-state signals to the GPU bus */
+
+Gpu_dout	:= JOIN_BUS (gpu_data, gpu_dout[0..31]);
+
+/* provide a separate bus for inputs */
+
+Gpu_din		:= NIVU (gpu_din, gpu_data);
+
+END;

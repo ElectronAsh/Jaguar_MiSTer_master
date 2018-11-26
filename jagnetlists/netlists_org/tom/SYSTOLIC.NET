@@ -1,0 +1,271 @@
+/******************************************************************
+systolic.net
+18/4/91
+
+Control logic for systolic matrix multiplies
+--------------------------------------------
+Matrix multiplies are performed by forcing instructions onto the
+instruction stream, while at the same time generating requests
+into local memory for coefficients.
+
+A systolic multiply group is an IMULTN instruction, followed by
+n-1 IMACN instructions, where n is the matrix width/height,
+followed by an RESMAC instruction.
+
+A systolic matrix multiply starts when the control logic 
+recognises a matrix multiply instruction being presented by the 
+pre-fetch unit.  When the signal romold is set
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF SYSTOLIC (
+	mtx_atomic	/* matrix operation term to atomic */
+	mtx_dover	/* matrix data path override */
+	mtx_wait	/* wait output if datack is lost */
+	mtxaddr[2..11]	/* matrix memory address in cache RAM */
+	mtx_mreq	/* matrix memory data request */
+	multsel		/* Multiplier low/high word select */
+INT16/	sysins		/* systolic multiply instructions */
+	sysser		/* systolic instruction override */
+	:OUT;
+	movei_data	/* Instruction is MOVEI, ignore data */
+	clk		/* Co-processor clock */
+	datack		/* program data memory cycle acknowledge */
+INT32/	gpu_din		/* Graphics processor data bus */
+INT16/	instruction	/* instruction being decoded */
+	mtxawr		/* write to matrix address register */
+	mtxcwr		/* write to matrix control register */
+	reset\		/* power-on reset */
+	romold		/* instruction being latched in ins_exec */
+	:IN);
+
+BEGIN
+
+Atomic\		:= IV (movei_data\, movei_data);
+Datack\		:= IV (datack\, datack);
+Romold\		:= IV (romold\, romold);
+
+Zero		:= TIE0 (zero);
+
+/* Decode matrix multiply instruction - 54 = 110110 */
+
+Mmultt		:= NR2 (mmultt, instruction{10}, instruction{13});
+Mmult\		:= ND7 (mmult\, mmultt, movei_data\, romold, 
+			instruction{11..12}, instruction{14..15});
+Mmult		:= IVH (mmult, mmult\);
+
+/* Matrix atomic tern - hide interrupts while matrix processing
+is going on, this must occur as soon as mmult is decoded. 
+(2/6) */
+
+Mtx_atomic	:= OR2 (mtx_atomic, mtx_active, mmult);
+
+/* Matrix multiply control */
+
+Mwidth[0-3]	:= FDSYNC (mwidth[0-3], gpu_din{0-3}, mtxcwr, 
+			clk);
+Maddw		:= FDSYNC (maddw, gpu_din{4}, mtxcwr, clk);
+
+/* Matrix multiply address - an area within cache RAM, so within
+the bottom 4K only, and long-word aligned.
+
+The coefficients can be either one long-word apart or one
+matrix width apart.  The address should therefore be loaded into
+a counter which can have either of these values added to it.
+There is little point in preserving the original value.
+
+It is enabled to count by mtx_dover . datack */
+
+Macnten		:= AN2H (macnten, mtx_dover, datack);
+Mtxaddr		:= MACOUNT (mtxaddr[2..11], clk, macnten, 
+			mtxawr, gpu_din{2..11}, maddw, 
+			mwidth[0..3]);
+
+/* Matrix multiply control state machine (1/154) */
+
+Idlet0		:= ND2 (idlet[0], idle, mmult\);
+Idlet1		:= ND2 (idlet[1], resmac, romold);
+Idlet2		:= ND2 (idlet[2], idlet[0..1]);
+Idle		:= FD4Q (idle, idlet[2], clk, reset\);
+
+Imultnt0	:= ND2 (imultnt[0], idle, mmult);
+Imultnt1	:= ND2 (imultnt[1], imultn, romold\);
+Imultnt2	:= ND2 (imultnt[2], imultnt[0..1]);
+Imultn		:= FD2Q (imultn, imultnt[2], clk, reset\);
+
+Imacnt0		:= ND2 (imacnt[0], imultn, romold);
+Imacnt1		:= ND2 (imacnt[1], imacn, count1\);
+Imacnt2		:= ND2 (imacnt[2], imacn, romold\);
+Imacnt3		:= ND3 (imacnt[3], imacnt[0..2]);
+Imacn		:= FD2Q (imacn, imacnt[3], clk, reset\);
+
+Resmact0	:= ND3 (resmact[0], imacn, count1, romold);
+Resmact1	:= ND2 (resmact[1], resmac, romold\);
+Resmact2	:= ND2 (resmact[2], resmact[0..1]);
+Resmac		:= FD2Q (resmac, resmact[2], clk, reset\);
+
+Mtx_active	:= IV (mtx_active, idle);
+
+/* Matrix multiply length counter - this is a down counter loaded
+with the multiply width at the start, and enabled for count by
+romold when active */
+
+Mcnten		:= AN2 (mcnten, romold, mtx_active);
+Mcount		:= MCOUNT (count1, clk, mcnten, mmult, 
+			mwidth[0..3]);
+Count1\		:= IV (count1\, count1);
+
+/* The register counter is a six bit up-counter, loaded from the
+reg1 field of the mmult instruction - the bottom bit selects
+register half, and always starts at zero. */
+
+R1count		:= R1COUNT (reghalf, sysr1[0..4], clk, romold, 
+			mmult, instruction{5..9});
+
+/* The reg2 field is latched */
+
+Sysr2[0-4]	:= FDSYNC (sysr2[0-4], instruction{0-4}, mmult, 
+			clk);
+
+/* The instruction to be forced into the instruction flow takes 
+its opcode field from the state machine above.  The reg1 field is
+taken from the counter, and the reg2 field is given by the value 
+in the mmult instruction 
+imultn	010010 r1count reg2
+imacn	010100 r1count reg2
+resmac	010011 x       reg2
+*/
+
+Bit11		:= OR2 (bit11, imultn, resmac);
+
+Oneb		:= IV (oneb, zero);
+Zerob		:= IV (zerob, oneb);
+Zeroc		:= IV (zeroc, oneb);
+Sysins		:= JOIN (sysins, sysr2[0..4], sysr1[0..4], resmac,
+			bit11, imacn, zerob, oneb, zeroc);
+
+/* Systolic instructions override while the state machine is 
+active */
+
+Sysser		:= IVU (sysser, idle);
+
+/* The memory request is raised in states imultn + imacn,
+and is held at the start of idle while the
+matrix unit does not have the bus, given by mtx_dover . /datack */
+
+Mtx_mreqt	:= OR2 (mtx_mreqt, imultn, imacn);
+Mtx_mreq	:= AOR1 (mtx_mreq, mtx_dover, datack\, mtx_mreqt);
+
+/* Matrix address and data override in the operand path, is one 
+pipe-line stage behind mreq */
+
+Mtx_dover	:= FD2QU (mtx_dover, mtx_mreq, clk, reset\);
+
+/* Matrix wait occurs if the matrix unit loses the bus */
+
+Mtx_wait	:= AN2 (mtx_wait, mtx_dover, datack\);
+
+/* Matrix source half select is given by reghalf, when the matrix 
+unit is active, and becomes multsel one pipe-line stge later,
+i.e. loaded into the pipe-lien latch when romold is active/ */
+
+Multselt	:= AN2 (multselt, reghalf, mtx_active);
+Multsel		:= FDSYNC (multsel, multselt, romold, clk);
+
+END;
+
+/* 4-bit loadable down counter */
+
+DEF MCOUNT (
+	count1		/* counter has reached 1 */
+	:OUT;
+	clk		/* system clock */
+	cnten		/* counter enable */
+	cntld		/* counter load */
+	mwidth[0..3]	/* matrix width */
+	:IN);
+
+BEGIN
+
+Cntt0		:= IV  (cntt[0], count[0]);
+Cntt1		:= EN  (cntt[1], count[0], count[1]);
+Cntc1		:= OR2 (cntc[1], count[0], count[1]);
+Cntt2		:= EN  (cntt[2], cntc[1], count[2]);
+Cntc2		:= OR2 (cntc[2], cntc[1], count[2]);
+Cntt3		:= EN  (cntt[3], cntc[2], count[3]);
+
+Cnti[0-3]	:= MX4 (cnti[0-3], count[0-3], cntt[0-3], 
+			mwidth[0-3], mwidth[0-3], cnten, cntld);
+
+Count[0-3]	:= FD1Q (count[0-3], cnti[0-3], clk);
+
+Count\[0]	:= IV (count\[0], count[0]);
+Count2		:= NR4 (count1, count\[0], count[1..3]);
+
+END;
+
+/* 6-bit loadable up counter, bottom bit loads zero */
+
+DEF R1COUNT (
+	count[0..5]	/* counter */
+	:OUT;
+	clk		/* system clock */
+	cnten		/* counter enable */
+	cntld		/* counter load */
+	mr1[0..4]	/* value to load */
+	:IN);
+
+BEGIN
+
+Cntt0		:= IV  (cntt[0], count[0]);
+Cntt1		:= HA1 (cntt[1], cntc[1], count[1], count[0]);
+Cntt2		:= HA1 (cntt[2], cntc[2], count[2], cntc[1]);
+Cntt3		:= HA1 (cntt[3], cntc[3], count[3], cntc[2]);
+Cntt4		:= HA1 (cntt[4], cntc[4], count[4], cntc[3]);
+Cntt5		:= EO  (cntt[5],          count[5], cntc[4]);
+
+Cnti[0]		:= MX2G (cnti[0], count[0], cntt[0], cnten, cntld);
+Cnti[1-5]	:= MX4 (cnti[1-5], count[1-5], cntt[1-5], 
+			mr1[0-4], mr1[0-4], cnten, cntld);
+
+Count[0-5]	:= FD1Q (count[0-5], cnti[0-5], clk);
+
+END;
+
+/* The address counter is a ten-bit up-counter, counting up either
+by one or by the matrix width */
+
+DEF MACOUNT (
+	maddr[0..9]	/* address */
+	:OUT;
+	clk		/* system clock */
+	cnten		/* counter enable */
+	cntld		/* counter load */
+	gpu_din[2..11]	/* data to load */
+	maddw		/* add width rather than 1 */
+	mwidth[0..3]	/* matrix width */
+	:IN);
+
+
+BEGIN
+
+Maddw\		:= IV (maddw\, maddw);
+Inc[0]		:= OR2 (inc[0], mwidth[0], maddw\);
+Inc[1-3]	:= AN2 (inc[1-3], mwidth[1-3], maddw);
+
+Sum[0]		:= HA1 (sum[0], carry[0], maddr[0], inc[0]);
+Sum[1-3]	:= FA1 (sum[1-3], carry[1-3], carry[0-2], 
+			maddr[1-3], inc[1-3]);
+Sum[4-8]	:= HA1 (sum[4-8], carry[4-8], carry[3-7], 
+			maddr[4-8]);
+Sum[9]		:= EO (sum[9], maddr[9], carry[8]);
+
+Cnti[0-9]	:= MX4 (cnti[0-9], maddr[0-9], sum[0-9],
+			gpu_din[2-11], gpu_din[2-11], cnten,
+			cntld);
+
+Maddr[0-9]	:= FD1Q (maddr[0-9], cnti[0-9], clk);
+
+END;

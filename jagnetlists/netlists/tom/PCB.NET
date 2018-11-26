@@ -1,0 +1,101 @@
+
+IMPORT 	jag, prim;
+
+DEF PCB	(
+
+xintal,	xbgl, xdbrl, xhlock, xvlock, xlp, xdmreql, xdint, xeint,
+xipl[0..2], xtest, xpclk[0..2], xvclk, xchrin, xresetl:IN;
+
+xd[0..63], xa[0..31], xma[0..10], xsiz[0..3], xrw, xdreql,
+xdtackl, xba, xpad[0..3], xtm[0..2], xbrl:TRI;
+
+xhs, xvs, xr[0..7],xg[0..7],xb[0..7],xinc,xwel[0..7],xoel[0..2],
+xmaska[0..2],xromcsl[0..1],xramcsl,xrasl[0..1],xcasl[0..1],
+xdspcsl, xgpiol[0..7],xiord,xiowr,xbgout,xdbgl,xintl,xdmackl,
+xchrout, xchrdiv, xclkdiv, xvclkdiv, xwid[0..1], xpadrstl:IO);
+
+INT12/	address
+INT8/	din0, din1, din2, din3, din4, din5, din6, din7
+INT8/	dout0, dout1, dout2, dout3, dout4, dout5, dout6, dout7
+BEGIN
+
+Jag	:= JAG (xintal,	xbgl, xdbrl, xhlock, xvlock, xlp, 
+	xdmreql, xdint, xeint, xipl[0..2], xtest, xpclk[0..2], 
+	xvclk, xchrin, xresetl, 
+	xd[0..63], xa[0..31], xma[0..10], xsiz[0..3], xrw, 
+	xdreql, xdtackl, xba, xpad[0..3], xtm[0..2], xbrl, 
+	xhs,xvs,xr[0..7],xg[0..7],xb[0..7],xinc,xwel[0..7],
+	xoel[0..2], xmaska[0..2],xromcsl[0..1],xramcsl,
+	xrasl[0..1],xcasl[0..1], xdspcsl,xgpiol[0..7],xiord,
+	xiowr,xbgout,xdbgl,xintl,xdmackl, xchrout, xchrdiv, 
+	xclkdiv, xvclkdiv, xwid[0..1], xpadrstl);
+
+Dout0[0-7]	:= JOIN_BUS (xd[0-7],   dout0{0-7});
+Dout1[0-7]	:= JOIN_BUS (xd[8-15],  dout1{0-7});
+Dout2[0-7]	:= JOIN_BUS (xd[16-23], dout2{0-7});
+Dout3[0-7]	:= JOIN_BUS (xd[24-31], dout3{0-7});
+Dout4[0-7]	:= JOIN_BUS (xd[32-39], dout4{0-7});
+Dout5[0-7]	:= JOIN_BUS (xd[40-47], dout5{0-7});
+Dout6[0-7]	:= JOIN_BUS (xd[48-55], dout6{0-7});
+Dout7[0-7]	:= JOIN_BUS (xd[56-63], dout7{0-7});
+Din0		:= JOIN (din0, xd[0..7]);
+Din1		:= JOIN (din1, xd[8..15]);
+Din2		:= JOIN (din2, xd[16..23]);
+Din3		:= JOIN (din3, xd[24..31]);
+Din4		:= JOIN (din4, xd[32..39]);
+Din5		:= JOIN (din5, xd[40..47]);
+Din6		:= JOIN (din6, xd[48..55]);
+Din7		:= JOIN (din7, xd[56..63]);
+Address		:= JOIN (address, xa[3..14]);
+
+Ramcs		:= IV (ramcs, xramcsl);
+Cs0t		:= ND2 (cs0t, xwel[0], xoel[0]);
+Cs1t		:= ND2 (cs1t, xwel[1], xoel[0]);
+Cs2t		:= ND2 (cs2t, xwel[2], xoel[1]);
+Cs3t		:= ND2 (cs3t, xwel[3], xoel[1]);
+Cs4t		:= ND2 (cs4t, xwel[4], xoel[2]);
+Cs5t		:= ND2 (cs5t, xwel[5], xoel[2]);
+Cs6t		:= ND2 (cs6t, xwel[6], xoel[2]);
+Cs7t		:= ND2 (cs7t, xwel[7], xoel[2]);
+Simcs0		:= ND2 (simcs\[0], ramcs, cs0t);
+Simcs1		:= ND2 (simcs\[1], ramcs, cs1t);
+Simcs2		:= ND2 (simcs\[2], ramcs, cs2t);
+Simcs3		:= ND2 (simcs\[3], ramcs, cs3t);
+Simcs4		:= ND2 (simcs\[4], ramcs, cs4t);
+Simcs5		:= ND2 (simcs\[5], ramcs, cs5t);
+Simcs6		:= ND2 (simcs\[6], ramcs, cs6t);
+Simcs7		:= ND2 (simcs\[7], ramcs, cs7t);
+
+ram0		:= SIM_RAM (dout0, din0, simcs\[0], xwel[0], 
+			address, xlp);
+ram1		:= SIM_RAM (dout1, din1, simcs\[1], xwel[1], 
+			address, xlp);
+ram2		:= SIM_RAM (dout2, din2, simcs\[2], xwel[2], 
+			address, xlp);
+ram3		:= SIM_RAM (dout3, din3, simcs\[3], xwel[3], 
+			address, xlp);
+ram4		:= SIM_RAM (dout4, din4, simcs\[4], xwel[4], 
+			address, xlp);
+ram5		:= SIM_RAM (dout5, din5, simcs\[5], xwel[5], 
+			address, xlp);
+ram6		:= SIM_RAM (dout6, din6, simcs\[6], xwel[6], 
+			address, xlp);
+ram7		:= SIM_RAM (dout7, din7, simcs\[7], xwel[7], 
+			address, xlp);
+
+END;
+
+
+DEF SIM_RAM (data_out :BUS; 
+	data_in, BIT/ce, BIT/rw, address, BIT/dump :IN);
+
+BEGIN
+#GATECOUNT	0
+#GRIDCOUNT	0
+#MEGACOUNT	0
+#TYPEWIDE	0
+
+Ram_prim	:= SIM_RAM_PRIM (data_out, data_in, ce, rw, address, 
+			dump);
+
+END;

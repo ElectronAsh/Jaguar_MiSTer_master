@@ -1,0 +1,194 @@
+/******************************************************************
+dsp.net
+12/11/92
+
+The top-level of the DSP Variant of the GPU
+-------------------------------------------
+
+******************************************************************/
+
+IMPORT dsp_gate, dsp_slave, dsp_ram, dsp_arith, divide, dsp_ctrl, 
+	dsp_mem, dsp_exec, registers, sboard;
+
+DEF DSP (
+	ima[0..15]	/* I/O address */
+	dout[0..31]	/* slave write / master read data */
+	ack		/* co-processor memory acknowledge */
+	gpu_back	/* GPU normal bus acknowledge */
+	reset\		/* system reset */
+	clk		/* system clock */
+	eint\[0..1]	/* external interrupts */
+	tint[0..1]	/* timer interrupts */
+	i2int		/* I2S interrupt */
+	iord		/* Look-ahead I/O read strobe for GPU */
+	iowr		/* Look-ahead I/O write strobe for GPU */
+	tlw		/* transparent latch write enable timing */
+	:IN;
+	gpu_breq	/* GPU normal bus request */
+	dma_breq	/* GPU high-priority bus request */
+	cpu_int		/* GPU interrupt to CPU */
+	wdata[0..31]	/* master write data bus */
+	a[0..23]	/* master cycle address bus */
+	width[0..2]	/* master cycle cycle width (in bytes) */
+	read		/* master cycle read request */
+	mreq		/* master cycle request */
+	dacw[0..1]	/* internal DAC write stobes */
+	gpu_din[0..15]	/* internal I/O write data */
+	i2sw[0..3]	/* internal I2S write strobes */
+	i2sr[0..2]	/* internal I2S read strobes */
+	:OUT;
+	dr[0..15]	/* I/O read data */
+	gpu_dout[0..15]	/* read data from internal peripherals */
+	:BUS);
+
+INT16/	dread,io_addr
+INT32/	gpu_din
+:LOCAL;
+BEGIN
+
+/* Locally buffer reset */
+
+Reset\[0]	:= NIVU3 (reset\[0], reset\);
+Reset\[1-7]	:= NIVU (reset\[1-7], reset\);
+
+/* Buffer clock - WARNING does this need improved? */
+Clk[1]		:= BU33IP7C (clk[1], clk);
+Clk[2]		:= BU36DA3M (clk[2], clk);
+Clk[3-5]	:= BU33IP7C (clk[3-5], clk);
+Clk[6]		:= BU36B52E (clk[6], clk);
+Clk[7-8]	:= BU36B531 (clk[7-8], clk);
+Tlw[0-2]	:= NIVU (tlw[0-2], tlw);
+
+Io_addr		:= JOIN (io_addr,ima[0..15]);
+Dr[0-15]	:= JOIN_BUS (dr[0-15],dread{0-15});
+
+A[0-23]		:= JOIN (a[0-23],address{0-23});
+Gpu_din[0-15]	:= JOIN (gpu_din[0-15], gpu_din{0-15});
+
+Wddrv[0-31]	:= JOIN (wdata[0-31], load_data{0-31});
+
+/* Re-synchronise and shape interrupts */
+
+/* external interrupts are asynchronous */
+Eints[0-1]	:= FD1 (eints\[0-1], eints[0-1], eint\[0-1], clk[2]);
+Eintd[0-1]	:= FD1Q (eintd\[0-1], eints\[0-1], clk[2]);
+Gpu_irq[4-5]	:= AN2 (gpu_irq[4-5], eints[0-1], eintd\[0-1]);
+
+/* timer interrupts are one-tick pulses */
+Gpu_irq[2-3]	:= JOIN (gpu_irq[2-3], tint[0-1]);
+
+/* i2s interrupt is synchronous but has variable pulse width */
+I2int\		:= IV (i2int\, i2int);
+I2intd\		:= FD1Q (i2intd\, i2int\, clk[2]);
+Gpu_irq[1]	:= AN2 (gpu_irq[1], i2int, i2intd\);
+
+/* Instruction execution control logic */
+
+Ins_exec	:= DSP_EXEC (gpu_data gpu_dout[3..14] 
+			gpu_dout[16..31] alufunc brlmux[0..1] 
+			dataddr datreq datwe datwe_raw div_instr 
+			div_start dstanwi dstat dstdgate dstrrd 
+			dstrrdi dstrwr dstrwri dstwen exe 
+			flag_depend flagld immdata immld immwri 
+			insexei locden locsrc macop memrw 
+			msize[0..1] mtx_dover multsel multsign 
+			pabort precomp progaddr progreq resld 
+			ressel[0..2] reswr rev_sub satsz 
+			srcrrd single_stop srcanwi 
+			big_instr carry_flag clk[1..2] 
+			tlw[0] datack dbgrd div_activei external 
+			flagrd flagwr gate_active go gpu_din 
+			gpu_irq[0..5] mtxawr mtxcwr nega_flag pcrd 
+			pcwr progack resaddrldi reset\[0] result 
+			sbwait sdatreq single_go single_step 
+			srcaddrldi srcd srcdp srcdpa statrd 
+			zero_flag);
+
+/* Score-boarding and register write control */
+
+Sboard		:= SBOARD (dsta sdatreq dstrwen\ dstwd,
+			resaddrldi sbwait srca srcaddrldi srcrwen\ 
+			srcwd clk[3] datack datwe datwe_raw 
+			del_xld div_activei div_instr 
+			div_start dstanwi dstat dstrrd dstrrdi 
+			dstrwr dstrwri dstwen exe flag_depend 
+			flagld gate_active immdata immld 
+			immwri insexei load_data mem_data 
+			memrw mtx_dover precomp quotient reset\[1] 
+			reswr result srcanwi srcdp srcrrd 
+			xld_ready);
+
+
+/* Arithmetic logic - ALU, multiplier, etc. */
+
+Arith		:= DSP_ARITH (gpu_data gpu_dout[0..2] carry_flag 
+			nega_flag result zero_flag accumrd 
+			dstdp srcdp srcd{31} alufunc brlmux[0..1] 
+			clk[4] flagld flagrd flagwr gpu_din macop 
+			modulowr multsel multsign reset\[2] resld 
+			ressel[0..2] rev_sub satsz);
+
+/* the serial divide unit */
+
+Divide		:= DIVIDE (gpu_data div_activei quotient clk[5] 
+			div_start divwr dstd gpu_din remrd reset\[3] 
+			srcd);
+
+/* processor registers */
+
+Registers	:= REGISTERS (srcd, srcdp, srcdpa, dstd, dstdp, 
+			clk[6], dsta, dstrwen\, dstwd, exe, 
+			locden, locsrc, mem_data, mtx_dover, srca, 
+			srcrwen\, srcwd);
+
+/* DSP local memory controller */
+
+Dsp_mem		:= DSP_MEM (gpu_data gpu_dout[0..31] accumrd 
+			big_instr big_io ctrlwr dacw[0..1] 
+			datack dbgrd del_xld divwr external flagrd 
+			flagwr gateack gpu_addr gpu_memw i2sr[0..2]
+			i2sw[0..3] mem_data modulowr mtxawr mtxcwr 
+			pcrd pcwr progack progserv ram_addr[2..11] 
+			ramen[0..1] remrd romen statrd clk[7] cpuaddr 
+			cpudata dataddr dstd dstdgate datreq datwe 
+			gatereq go gpu_din ioreq iowr pabort 
+			progaddr progreq reset\[4]);
+
+/* DSP execution control */
+
+Dsp_ctrl	:= DSP_CTRL (gpu_dout[0..5], gpu_dout[11..15], 
+			bus_hog, cpu_int, go, gpu_irq[0], 
+			single_go, single_step, clk[2], 
+			ctrlwr gpu_din, reset\[5] 
+			single_stop, statrd);
+
+/* Graphics processor local RAM */
+
+Dsp_ram		:= DSP_RAM (gpu_data, clk[2], gpu_memw, 
+			ram_addr[2..11], ramen[0..1] romen);
+
+/* CPU access to graphics processor bus */
+
+Dsp_slave	:= DSP_SLAVE (dread cpuaddr cpudata ioreq  
+			big_io clk[2] tlw[1] dout[0..15] 
+			io_addr iord iowr mem_data reset\[6]);
+
+/* Gateway to co-processor bus */
+
+Gateway		:= DSP_GATE (gpu_data gpu_dout[15] address 
+			mreq read width[0..2] 
+			dma_breq gate_active gatereq gpu_breq 
+			load_data xld_ready ack bus_hog clk[8] tlw[2] 
+			dout[0..31] external flagrd flagwr 
+			gateack gpu_addr gpu_back gpu_din gpu_memw 
+			msize[0..1] progserv reset\[7]);
+
+/* join the bit-wise tri-state signals to the GPU bus */
+
+Gpu_dout	:= JOIN_BUS (gpu_data, gpu_dout[0..31]);
+
+/* provide a separate bus for inputs */
+
+Gpu_din		:= NIVH (gpu_din, gpu_data);
+
+END;

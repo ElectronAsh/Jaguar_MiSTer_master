@@ -1,0 +1,123 @@
+(******************************************************************
+blit
+29/11/90
+
+Top level of the blitter
+------------------------
+
+******************************************************************)
+
+IMPORT address, blitgpu, data, state, moto;
+
+DEF BLIT (
+INT24/	blit_addr	/* blitter address */
+	wdata[0..63]	/* co-processor write data bus */
+	justify		/* data position on memory transfers */
+	mreq		/* co-processor cycle request */
+	read		/* co-processor read request */
+	width[0..3]	/* co-processor cycle width (in bytes) */
+	:BUS;
+	gpu_dout[0..31]	/* bitwise GPU read bus */
+	:TRI;
+	blit_breq[0..1]	/* blitter bus request */
+	blit_int	/* blitter interrupt to GPU */
+	:OUT;
+	ack		/* memory controller acknowledge */
+	big_pix		/* Pixel organisation is big-endian */
+	blit_back	/* blitter bus acknowledge */
+	bliten		/* Blitter chip select */
+	clk		/* co-processor clock */
+	tlw		/* co-processor clock for register load */
+	data[0..63]	/* co-processor read data bus */
+INT24/	gpu_addr	/* GPU address bus */
+INT32/	gpu_din		/* graphics processor data bus */
+	gpu_memw	/* GPU write enable */
+	xreset\		/* external system reset */
+	:IN);
+
+INT24/	address
+(* GE 19/06/2012 Added missing declarations *)
+INT15/	a1_win_x
+INT16/	a1_x, a2_x
+:LOCAL;
+BEGIN
+
+/* Delayed variant of tlw for loading data from this bus 
+(2/49) 
+WARNING - check this for TOM
+*/
+
+Loadstrt	:= NIV (loadstrt, tlw);
+Load_strobe	:= NIVU (load_strobe, loadstrt);
+
+Clk[16]		:= BUF128 (clk[16],clk);
+Clk[17]		:= BUF32  (clk[17],clk);
+Clk[18]		:= BUF64  (clk[18],clk);
+
+/* Data section */
+
+Data	:= DATA (wdata[0..63], dcomp[0..7], srcd[0..7], 
+		zcomp[0..3], big_pix, blit_back, blit_breq[0..1], 
+		clk[16], tlw, cmpdst, daddasel[0..2], 
+		daddbsel[0..2], daddmode[0..2], daddq_sel, 
+		data[0..63], data_ena, data_sel[0..1], 
+		dbinh\[0..7], dend[0..5], dpipe[0..1], 
+		dstart[0..5], dstdld[0..1], dstzld[0..1], 
+		gpu_din, iincld, intld[0..3], lfu_func[0..3], 
+		load_strobe, patdld[0..1], phrase_mode, reset\, 
+		srcd1ld[0..1], srcdread, srczread, srcshift[0..5], 
+		srcz1ld[0..1], srcz2add, srcz2ld[0..1], 
+		zedld[0..3], zincld, zmode[0..2], zpipe[0..1]);
+
+/* Address generation section */
+
+Address	:= ADDRESS (gpu_dout[0..31], a1_outside, a1_pixsize[0..2], 
+		a1_win_x, a1_x, a1addx[0..1], a1addy, a1xsign, 
+		a1ysign, a2_pixsize[0..2], 
+		a2_x, a2addx[0..1], a2addy, a2xsign, a2ysign, 
+		address, pixa[0..2], addasel[0..2], 
+		addbsel[0..1], addqsel, adda_xconst[0..2], 
+		adda_yconst, addareg, a1baseld, a1flagld, a1fracld,
+		a1incld, a1incfld, a1posrd, a1posfrd, a1ptrld, 
+		a1stepld, a1stepfld, a1winld, a2baseld, a2flagld, 
+		a2posrd, a2ptrld, a2stepld, a2winld, apipe, 
+		clk[17], gena2, gpu_din, load_strobe, 
+		modx[0..2], suba_x, suba_y, zaddr);
+
+/* Controlling state machine */
+
+State	:= STATE (blit_addr, justify, mreq, width[0..3], read, 
+		gpu_dout[0..31], a1fracldi, a1ptrldi, a2ptrldi, 
+		addasel[0..2], addbsel[0..1], addqsel, 
+		adda_xconst[0..2], adda_yconst, addareg, apipe, 
+		blit_breq[0..1], blit_int, cmpdst, daddasel[0..2], 
+		daddbsel[0..2], daddmode[0..2], data_ena, 
+		data_sel[0..1], dbinh\[0..7], dend[0..5], dpipe[0..1], 
+		dstart[0..5], dstdread, dstzread, 
+		gena2, lfu_func[0..3], daddq_sel, 
+		modx[0..2], patdadd, patfadd, phrase_mode, reset\, 
+		srcdread, srcshift[0..5], srcz1add, srcz2add, 
+		srczread, suba_x, suba_y, zaddr, zmode[0..2], 
+		zpipe[0..1], a1_outside, a1_pixsize[0..2], a1_win_x, 
+		a1_x, a1addx[0..1], a1addy, a1xsign, a1ysign, 
+		a2_pixsize[0..2], a2_x, a2addx[0..1], a2addy, 
+		a2xsign, a2ysign, ack, address, big_pix, 
+		blit_back, clk[18], cmdld, countld, 
+		dcomp[0..7], gpu_din, pixa[0..2], 
+		srcd[0..7], statrd, stopld, xreset\, zcomp[0..3]);
+
+/* Blitter interface to the GPU */
+
+Blitgpu	:= BLITGPU (a1baseld, a1flagld, a1fracld, a1incld, 
+		a1incfld, a1posrd, a1posfrd, a1ptrld, a1stepld, 
+		a1stepfld, a1winld, a2baseld, a2flagld, a2posrd, 
+		a2ptrld, a2stepld, a2winld, cmdld, countld, 
+		dstdld[0..1], dstzld[0..1], iincld, intld[0..3], 
+		patdld[0..1], srcd1ld[0..1], srcz1ld[0..1], 
+		srcz2ld[0..1], statrd, stopld, zedld[0..3], 
+		zincld, a1fracldi, a1ptrldi, a2ptrldi, blit_back, 
+		bliten, dstdread, dstzread, gpu_addr, gpu_memw, 
+		patdadd, patfadd, srcdread, srcz1add, 
+		srczread);
+
+END;

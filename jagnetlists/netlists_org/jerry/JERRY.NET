@@ -1,0 +1,358 @@
+(*****************************************************************
+
+	jerry.net
+
+This is the top level hdl description of the Jerry DSP chip.
+
+******************************************************************)
+
+
+IMPORT 	jmem,		(* memory controller	*)
+	jbus,		(* main data paths	*)
+	dsp,		(* processor	*)
+	jclk,		(* clock generator	*)
+	jiodec,		(* local address decode	*)
+	i2s,		(* i2s	 		*)
+	uart2,		(* comlynx & midi uart	*)
+	dac,		(* audio dacs		*)
+	jmisc,		(* timers & interrupts	*)
+
+	lego,
+	tosh;		(* Toshiba gate & pad definitions *)
+
+
+DEF JERRY	(
+
+(****************** INPUTS ***********************)
+
+	xdspcsl,	(* chip select *)
+	xpclkosc,	(* processor clock oscilator input for squaring and
+			dividing for frequency synthesis purposes *)
+	xpclkin,	(* processor clock input *)
+	xdbgl,		(* DSP bus grant *)
+	xoel[0],	(* memory output enable *)
+	xwel[0],	(* memory write strobe *)
+	xserin,		(* comlynx/midi receive data *)
+	xdtackl,	(* data transfer acknowledge *)
+	xi2srxd,	(* I2S input data *)
+	xeint[0..1],	(* DSP interrupt inputs (DMA requests) *)
+/*
+	xpadin[0..3],	(* paddle inputs *)
+*/
+	xtest,
+	xchrin,		(* chroma oscilator input *)
+	xresetil:IN;	(* clean reset input *)
+
+(*********************** BIDIRECTIONAL SIGNALS ***************)
+
+	xd[0..31],	(* 32 bit data bus *)
+	xa[0..23]	(* 23 bit address bus *)
+	xjoy[0..3],	(* joystick enables *)
+	xgpiol[0..3],	(* general purpose IO decodes *)
+	xsck,		(* serial clock *)
+	xws,		(* serial word select *)
+	xvclk		(* vclk *)
+
+	:TRI;
+
+(*************************** OUTPUTS ***************************)
+
+
+	xsiz[0..1],	(* indicates the number of bytes to be
+			transfered in the current memory cycle
+			when enabled as an output
+			1 -> byte
+			2 -> word
+			3 -> long *)
+
+	xrw,		(* indicates direction of current memory cycle *)
+	xdreql,		(* data transfer request *)
+
+	xdbrl[0..1],	(* dsp bus request *)
+	xint,		(* interrupt out *)
+	xserout,	(* comlynx/midi transmit data *)
+	xgpiol[4..5],	(* general purpose IO decodes *)
+/*
+	xpadout,	(* paddle output *)
+*/
+	xvclkdiv,	(* vclk/N for PLL *)
+	xchrdiv,	(* chroma/64 *)
+	xpclkout,	(* pclk/2 out *)
+	xpclkdiv,	(* pclk/N for PLL *)
+	xresetl,	(* reset out *)
+	xchrout,	(* chroma oscilator output *)
+	xrdac[0..1],	(* DAC outputs *)
+	xldac[0..1],
+	xiordl,xiowrl,	(* I/O read/write strobes *)
+	xi2stxd,	(* I2S TX data *)
+	xcpuclk
+	:IO);	
+
+	INT8/xd0_7,xd8_15,xd16_23,xd24_31,
+	INT24/xa:IO;
+
+BEGIN
+
+(* Byte lanes for display purposes *)
+
+D0 :=	JOIN_BUS (xd0_7,xd[0..7]);
+D1 :=	JOIN_BUS (xd8_15,xd[8..15]);
+D2 :=	JOIN_BUS (xd16_23,xd[16..23]);
+D3 :=	JOIN_BUS (xd24_31,xd[24..31]);
+D0u :=	DUMMY (xd0_7);
+D1u :=	DUMMY (xd8_15);
+D2u :=	DUMMY (xd16_23);
+D3u :=	DUMMY (xd24_31);
+
+Xa :=	JOIN_BUS (xa,gnd,xa[1..23]);
+Xau :=	DUMMY (xa);
+
+(* Pads (assumes Toshiba 24SC cell library) *)
+
+D[0] :=		BD8T (xd[0],din[0],nt[55],dout[0],gnd,den,nt[54]);
+D[1] :=		BD8T (xd[1],din[1],nt[54],dout[1],gnd,den,nt[53]);
+D[2] :=		BD8T (xd[2],din[2],nt[53],dout[2],gnd,den,nt[52]);
+D[3] :=		BD8T (xd[3],din[3],nt[52],dout[3],gnd,den,nt[51]);
+D[4] :=		BD8T (xd[4],din[4],nt[51],dout[4],gnd,den,nt[50]);
+D[5] :=		BD8T (xd[5],din[5],nt[50],dout[5],gnd,den,nt[49]);
+D[6] :=		BD8T (xd[6],din[6],nt[49],dout[6],gnd,den,nt[48]);
+D[7] :=		BD8T (xd[7],din[7],nt[48],dout[7],gnd,den,nt[47]);
+
+D[8] :=		BD8T (xd[8],din[8],nt[47],dout[8],gnd,den,nt[46]);
+D[9] :=		BD8T (xd[9],din[9],nt[46],dout[9],gnd,den,nt[45]);
+D[10] :=	BD8T (xd[10],din[10],nt[45],dout[10],gnd,den,nt[44]);
+D[11] :=	BD8T (xd[11],din[11],nt[44],dout[11],gnd,den,nt[43]);
+D[12] :=	BD8T (xd[12],din[12],nt[43],dout[12],gnd,den,nt[42]);
+D[13] :=	BD8T (xd[13],din[13],nt[42],dout[13],gnd,den,nt[41]);
+D[14] :=	BD8T (xd[14],din[14],nt[41],dout[14],gnd,den,nt[40]);
+D[15] :=	BD8T (xd[15],din[15],nt[40],dout[15],gnd,den,nt[39]);
+
+D[16] :=	BD8T (xd[16],din[16],nt[39],dout[16],gnd,den,nt[38]);
+D[17] :=	BD8T (xd[17],din[17],nt[38],dout[17],gnd,den,nt[37]);
+D[18] :=	BD8T (xd[18],din[18],nt[37],dout[18],gnd,den,nt[36]);
+D[19] :=	BD8T (xd[19],din[19],nt[36],dout[19],gnd,den,nt[35]);
+D[20] :=	BD8T (xd[20],din[20],nt[35],dout[20],gnd,den,nt[34]);
+D[21] :=	BD8T (xd[21],din[21],nt[34],dout[21],gnd,den,nt[33]);
+D[22] :=	BD8T (xd[22],din[22],nt[33],dout[22],gnd,den,nt[32]);
+D[23] :=	BD8T (xd[23],din[23],nt[32],dout[23],gnd,den,nt[31]);
+D[24] :=	BD8T (xd[24],din[24],nt[31],dout[24],gnd,den,nt[30]);
+D[25] :=	BD8T (xd[25],din[25],nt[30],dout[25],gnd,den,nt[29]);
+D[26] :=	BD8T (xd[26],din[26],nt[29],dout[26],gnd,den,nt[28]);
+D[27] :=	BD8T (xd[27],din[27],nt[28],dout[27],gnd,den,nt[27]);
+D[28] :=	BD8T (xd[28],din[28],nt[27],dout[28],gnd,den,nt[26]);
+D[29] :=	BD8T (xd[29],din[29],nt[26],dout[29],gnd,den,nt[25]);
+D[30] :=	BD8T (xd[30],din[30],nt[25],dout[30],gnd,den,nt[24]);
+D[31] :=	BD8T (xd[31],din[31],nt[24],dout[31],gnd,den,nt[23]);
+
+A[0] := 	BD8T (xa[0],ain[0],nt[79],aout[0],gnd,aen,nt[78]);
+A[1] := 	BD8T (xa[1],ain[1],nt[78],aout[1],gnd,aen,nt[77]);
+A[2] := 	BD8T (xa[2],ain[2],nt[77],aout[2],gnd,aen,nt[76]);
+A[3] := 	BD8T (xa[3],ain[3],nt[76],aout[3],gnd,aen,nt[75]);
+A[4] := 	BD8T (xa[4],ain[4],nt[75],aout[4],gnd,aen,nt[74]);
+A[5] := 	BD8T (xa[5],ain[5],nt[74],aout[5],gnd,aen,nt[73]);
+A[6] := 	BD8T (xa[6],ain[6],nt[73],aout[6],gnd,aen,nt[72]);
+A[7] := 	BD8T (xa[7],ain[7],nt[72],aout[7],gnd,aen,nt[71]);
+A[8] := 	BD8T (xa[8],ain[8],nt[71],aout[8],gnd,aen,nt[70]);
+A[9] := 	BD8T (xa[9],ain[9],nt[70],aout[9],gnd,aen,nt[69]);
+A[10] := 	BD8T (xa[10],ain[10],nt[69],aout[10],gnd,aen,nt[68]);
+A[11] := 	BD8T (xa[11],ain[11],nt[68],aout[11],gnd,aen,nt[67]);
+A[12] := 	BD8T (xa[12],ain[12],nt[67],aout[12],gnd,aen,nt[66]);
+A[13] := 	BD8T (xa[13],ain[13],nt[66],aout[13],gnd,aen,nt[65]);
+A[14] := 	BD8T (xa[14],ain[14],nt[65],aout[14],gnd,aen,nt[64]);
+A[15] := 	BD8T (xa[15],ain[15],nt[64],aout[15],gnd,aen,nt[63]);
+A[16] := 	BD8T (xa[16],ain[16],nt[63],aout[16],gnd,aen,nt[62]);
+A[17] := 	BD8T (xa[17],ain[17],nt[62],aout[17],gnd,aen,nt[61]);
+A[18] := 	BD8T (xa[18],ain[18],nt[61],aout[18],gnd,aen,nt[60]);
+A[19] := 	BD8T (xa[19],ain[19],nt[60],aout[19],gnd,aen,nt[59]);
+A[20] := 	BD8T (xa[20],ain[20],nt[59],aout[20],gnd,aen,nt[58]);
+A[21] := 	BD8T (xa[21],ain[21],nt[58],aout[21],gnd,aen,nt[57]);
+A[22] := 	BD8T (xa[22],ain[22],nt[57],aout[22],gnd,aen,nt[56]);
+A[23] := 	BD8T (xa[23],ain[23],nt[56],aout[23],gnd,aen,nt[55]);
+
+Oe[0] :=	IBUF (oel[0],nt[5],xoel[0],nt[4]);
+We[0] := 	IBUF (wel[0],nt[6],xwel[0],nt[5]);
+
+Pclkosc :=	IBUF (pclkosc,nt[1],xpclkosc,nt[0]);
+Pclkin :=	IBUF (pclkin,nt[2],xpclkin,nt[1]);
+Pclkout :=	B8H (xpclkout,pclkout);
+Cpuclk :=	B8H (xcpuclk,cpuclk);
+Vclk :=		BD8T (xvclk,vclkin,nt[0],chrclk,gnd,vclken,vcc);
+Pclkdiv :=	B8 (xpclkdiv,pclkdiv);
+Vclkdiv :=	B8 (xvclkdiv,vclkdiv);
+Chrdiv :=	B8 (xchrdiv,chrdiv);
+
+Reseti :=	IBUF (resetli,nt[8],xresetil,nt[7]);
+Resetl :=	B8 (xresetl,resetl);
+
+Siz[0-1] :=	BT8 (xsiz[0-1],siz[0-1],gnd,aen);
+Rw :=		BT8 (xrw,rws,gnd,aen);
+Dreq :=		BT8 (xdreql,dreql,gnd,aen);
+
+Dtack :=	IBUF (dtackl,nt[4],xdtackl,nt[3]);
+
+Dbrl[0-1] :=	B8 (xdbrl[0-1],dbrls[0-1]);
+Dbgl :=		IBUF (dbgl,nt[7],xdbgl,nt[6]);
+Dspcsl :=	IBUF (dspcsl,nt[3],xdspcsl,nt[2]);
+
+(* the output of the nand tree is output on xint if bit 0 of test1 is set *)
+
+Intlt :=	MX2P (intt,int,nt[79],ndtest);
+Xint :=		B8 (xint,intt);
+
+Test :=		IBUF (test,nt[9],xtest,nt[8]);
+
+Serin :=	IBUF (serin,nt[20],xserin,nt[19]);
+Serout :=	B8 (xserout,serout);
+
+Sck :=		BD8T (xsck,sck,nt[21],sckout,gnd,i2sen,nt[20]);
+Ws :=		BD8T (xws,ws,nt[22],wsout,gnd,i2sen,nt[21]);
+I2srxd :=	IBUF (i2srxd,nt[23],xi2srxd,nt[22]);
+I2stxd :=	B8 (xi2stxd,i2stxd);
+
+Eint[0-1] :=	IBUF (eint[0-1],nt[10-11],xeint[0-1],nt[9-10]);
+
+/*
+Padin[0-3] :=	IBUF (padin[0-3],nt[77-80],xpadin[0-3],nt[76-79]);
+Padout :=	B2 (xpadout,padout);
+*/
+
+Joy[0] :=	BD8T (xjoy[0],cfg[0],nt[16],joy1rl,gnd,cfgen,nt[15]);
+Joy[1] :=	BD8T (xjoy[1],cfg[1],nt[17],joy2rl,gnd,cfgen,nt[16]);
+Joy[2] :=	BD8T (xjoy[2],cfg[2],nt[18],joy1wl,gnd,cfgen,nt[17]);
+Joy[3] :=	BD8T (xjoy[3],cfg[3],nt[19],joyenl,gnd,cfgen,nt[18]);
+Gpiol[0-3] :=	BD8T (xgpiol[0-3],cfg[4-7],nt[12-15],gpiol[0-3],gnd,cfgen,nt[11-14]);
+Gpiol[4-5] :=	B8 (xgpiol[4-5],gpiol[4-5]);
+Cfgu[0-7] :=	DUMMY (cfg[0-7]);
+
+Iordl :=	B8 (xiordl,iordl);
+Iowrl :=	B8 (xiowrl,iowrl);
+
+Rdac[0-1] :=	B8 (xrdac[0-1],rdac[0-1]);
+Ldac[0-1] :=	B8 (xldac[0-1],ldac[0-1]);
+
+Chrclk :=       OSC4C (xchrout,chrclk,xchrin);
+
+Gnd :=		TIE0 (gnd);
+Vcc :=		TIE1 (vcc);
+
+(*
+ Testen is used to enable those signals which might conflict with the
+ tester because the tester changes from input to output on test cycle
+ boundaries whereas the chip typically changes on clock edges
+*)
+
+Nottest :=	IV (nottest,test);
+Testen :=	OR2 (testen,nottest,eint[0]);
+
+
+Dsp := DSP	(aout[0..15],dout[0..31],ack,dbgl,resetl[0],clk,
+		eint[0..1],tint[0..1],i2int,dspread,dspwrite,
+		tlw,
+
+		dbrl[0..1],dint,
+		wd[0..31],a[0..23],w[0..2],rw,mreq,
+		dac1w,dac2w,dspwd[0..15],i2s1w,i2s2w,i2s3w,i2s4w,
+                i2s1r,i2s2r,i2s3r,
+
+		dr[0..15],dsprd[0..15]);
+
+JIodec := JIODEC (aout[0..15],dspcsl,wel[0],oel[0],dspen,
+
+		pit1w, pit2w, pit3w, pit4w, clk1w, clk2w, clk3w, int1w, 
+		u2dwr, u2ctwr,u2psclw, 
+		test1w, joy1rl, joy2rl, joy1wl, gpiol[0..5],
+                int1r, u2drd, u2strd,u2psclr,
+		pit1r, pit2r, pit3r, pit4r,
+		internal,
+
+		dr[0..15]);
+
+/*** with paddles
+Iodec := IODEC	(aout[0..15],dspcsl,wel[0],oel[0],dspen,
+
+		pit1w, pit2w, pit3w, pit4w, clk1w, clk2w, clk3w, int1w, 
+		u2dwr, u2ctwr, 
+		test1w, joy1rl, joy2rl, joy1wl, gpiol[0..5],
+                int1r, u2drd, u2strd, 
+		pad1r, pad2r, pad3r, pad4r,
+		pit1r, pit2r, pit3r, pit4r,
+		internal,
+
+		dr[0..15]);
+***/
+
+JBus := JBUS	(ain[0..23],din[0..31],dr[0..15],dinlatch[0..1],
+                dmuxd[0..1],dmuxu[0..1],dren,xdsrc,ack,
+		wd[0..31],clk[2],cfg[0..1],cfgw,a[0..23],
+		ainen,seta1,masterdata,
+
+                dout[0..31],aout[0..23],dsp16,bigend);
+
+JMem :=	JMEM	( resetl[2],clk[2],dbgl,bigend,dsp16,
+                w[0..2],rw,mreq,dtackl,dspcsl,wel[0],oel[0],
+		testen,aout[15],internal,dbrl[0..1],aout[0..1],
+		ndtest,
+		ack,den,aen,siz[0..1],dreql,dmuxu[0..1],dmuxd[0..1],dren,xdsrc,
+		iordl,iowrl,dspread,dspwrite,dinlatch[0..1],
+		ainen,seta1,rws,dbrls[0..1],dspen,masterdata);
+
+JClk := JCLK	(resetli,pclkosc,pclkin,vclkin,chrclk,clk1w,clk2w,clk3w,
+		test,cfg[2..3],dout[0..9],dout[15],ndtest,
+
+		cfgw,cfgen,clk,pclkout,pclkdiv,vclkdiv,cpuclk,
+		chrdiv,vclken,resetl,tlw);
+
+/* Buffer reset */
+Resetl[0-5]	:= NIVU (resetl[0-5], resetl);
+
+/* Buffer clock */
+Clk[0]		:= BU36B531 (clk[0], clk);
+Clk[1]		:= BU33IP7C (clk[1], clk);
+Clk[2]		:= BU36B52E (clk[2], clk);
+Clk[3]		:= BU36B52E (clk[3], clk);
+
+JMisc := JMISC	(dout[0..15],clk[3],resetl[1],
+		pit1w,pit2w,pit3w,pit4w,int1w,pit1r,pit2r,
+		pit3r,pit4r,int1r,dint,eint[0],
+		test1w,joy1wl,uint,i2int,
+
+		tint[0..1],ts,int,ndtest,joyenl,
+
+		dr[0..15]);
+
+/*** with paddles
+Misc := MISC	(dout[0..15],clk[0],resetl[1],
+		pit1w,pit2w,pit3w,pit4w,int1w,pit1r,pit2r,
+		pit3r,pit4r,int1r,dint,eint[0],
+		test1w,joy1wl,
+		padin[0..3],pad1r,pad2r,pad3r,pad4r,test,
+		uint,i2int,
+
+		tint[0..1],ts,int,ndtest,joyenl,
+		padout,
+
+		dr[0..15]);
+****/
+
+Uart2:=	UART2	(resetl[3],clk[0],din[0..15],u2psclw,u2psclr,u2drd,u2dwr,u2strd,
+			u2ctwr,serin,
+			serout,uint,
+			dr[0..15]);
+
+
+I2s :=	I2S     (resetl[4],clk[1],dspwd[0..15],i2s1w,i2s2w,i2s3w,i2s4w,
+                i2s1r,i2s2r,i2s3r,i2srxd,sck,ws,  
+ 
+                i2stxd,sckout,wsout,i2int,i2sen,
+ 
+                dsprd[0..15]);
+
+Dac :=	DAC	(resetl[5],clk[1],dac1w,dac2w,tint[0],ts,
+		dspwd[0..15],
+
+                rdac[0..1],ldac[0..1]);
+
+
+END;
+
+

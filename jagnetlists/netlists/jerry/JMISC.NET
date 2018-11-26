@@ -1,0 +1,224 @@
+(*****************************************************************
+
+	jmisc.net
+
+ Miscelaneous functions in Jerry.
+ This includes interrupt management, timers & paddles
+
+******************************************************************)
+
+IMPORT	tosh,		(* Toshiba gate & pad definitions *)
+	lego;
+
+
+DEF JMISC	(din[0..15],clk,resetl,
+		pit1w,pit2w,pit3w,pit4w,int1w,
+		pit1r,pit2r,pit3r,pit4r,int1r,dint,eint,
+		test1w,joy1wl,
+/*
+		pad[0..3],pad1r,pad2r,pad3r,pad4r,test,
+*/
+		uint,i2int:IN;
+
+		tint[0..1],ts,int,ndtest,joyenl /*,padrstl*/ :IO;
+
+                dr[0..15]:BUS);
+
+/*
+		INT16/tp0,t0,tp1,t1,INT8/p,INT6/ps:IO;
+*/
+		INT16/tp0,t0,tp1,t1:IO;
+
+(********************* INTERRUPTS ************************
+
+There are three interrupt sources/signals
+
+tint[0..1] are synchronous pulses generated locally by timers
+eint is an edge triggered interrupt which is an input to the chip
+dint is an interrupt from the DSP
+*)
+
+BEGIN
+
+
+(************* the interrupt register **********
+
+Bits 0 & 8  ->	External
+Bits 1 & 9  ->	DSP
+Bits 2 & 10 ->	timer 0
+Bits 3 & 11 ->	timer 1
+Bits 4 & 12 ->	uart
+Bits 5 & 13 ->	I2S
+
+*)
+
+Ie[0-5] :=	LDP2Q (ie[0-5],din[0-5],int1w,resetl);
+Ack[0-5] :=	AN2 (ack[0-5],din[8-13],int1w);
+
+(* sample the asynchronous interrupt to produce a synchronous pulse *)
+
+Ei1 :=		FD2Q (ei1,eint,clk,resetl);
+Ei2 :=		FD2Q (ei2,ei1,clk,resetl);
+Ei2l :=		IV (ei2l,ei2);
+Eip :=		AN3 (eip,ei1,ei2l,ie[0]);
+
+Dip :=		AN2 (dip,dint,ie[1]);
+Tip[0-1] :=	AN2 (tip[0-1],tint[0-1],ie[2-3]);
+Uip :=		AN2 (uip,uint,ie[4]);
+Iip :=		AN2 (iip,i2int,ie[5]);
+
+(* latch all the synchronised interrupts *)
+
+I[0] :=		FJK2 (i[0],il[0],eip,ack[0],clk,resetl);
+I[1] :=		FJK2 (i[1],il[1],dip,ack[1],clk,resetl);
+I[2] :=		FJK2 (i[2],il[2],tip[0],ack[2],clk,resetl);
+I[3] :=		FJK2 (i[3],il[3],tip[1],ack[3],clk,resetl);
+I[4] :=		FJK2 (i[4],il[4],uip,ack[4],clk,resetl);
+I[5] :=		FJK2 (i[5],il[5],iip,ack[5],clk,resetl);
+
+Ilu[0-5] :=	DUMMY (i[0-5]);
+
+(* generate a CPU interrupt signal *)
+
+Int:=		ND6 (int,il[0..5]);
+
+(* tristate the interrupt sources onto the bus for identification *)
+
+Dii[0-5] :=	TS (dr[0-5],i[0-5],int1r);
+Dii[6-15] :=	TS (dr[6-15],gnd,int1r);
+Gnd :=		TIE0 (gnd);
+
+(*********************** TIMER 0 *******************)
+
+(*
+ this timer is the sample rate timer
+ the output of the prescaler generates the PWM pulses
+ the output of the timer interrupts the DSP
+*)
+
+Pd0[0-15] :=	LDP2Q (pd0[0-15],din[0-15],pit1w,resetl);
+Td0[0-15] :=	LDP1Q (td0[0-15],din[0-15],pit2w);
+
+(* enabled if pit1 is nz *)
+
+Ten00 :=	OR8 (ten00,pd0[0..7]);
+Ten01 :=	OR8 (ten01,pd0[8..15]);
+Ten0 :=		OR2 (ten0,ten00,ten01);
+Presl0 :=	AN2U (presl0,ten0,resetl);
+
+(* 16 stage prescaler *)
+
+Tp0[0] :=	DNCNT (tp0[0],tpco0[0],pd0[0],clk,ten0,tpld0,presl0);
+Tp0[1-7] :=	DNCNT (tp0[1-7],tpco0[1-7],pd0[1-7],clk,tpco0[0-6],tpld0,presl0);
+Tp0[8] :=	DNCNT (tp0[8],tpco0[8],pd0[8],clk,tpc08,tpld0,presl0);
+Tp0[9-15] :=	DNCNT (tp0[9-15],tpco0[9-15],pd0[9-15],clk,tpco0[8-14],tpld0,presl0);
+Tpu0[0-15] :=	DUMMY (tp0[0-15]);
+Tpco0[7] :=	DUMMY (tpco0[7]);
+Tpco0[15] :=	DUMMY (tpco0[15]);
+Tplac00 := 	NR8 (tplac00,tp0[0..7]);
+Tplac01 :=	NR8 (tplac01,tp0[8..15]);
+Tpc08 :=	AN2 (tpc08,tplac00,ten0);
+Tpc016 :=	AN3 (tpc016,tplac00,tplac01,ten0);
+Ts :=		NIVH (ts,tpc016);
+
+Tpld0i :=	NR2 (tpld0i,tpc016,pit1w);
+Tpld0 :=	IVH (tpld0,tpld0i);
+
+Dtp0[0-15] :=	TS (dr[0-15],tp0[0-15],pit1r);
+
+(* 16 stage counter *)
+
+T0[0] :=	DNCNT (t0[0],tco0[0],td0[0],clk,tpc016,tld0,presl0);
+T0[1-7] :=	DNCNT (t0[1-7],tco0[1-7],td0[1-7],clk,tco0[0-6],tld0,presl0);
+T0[8] :=	DNCNT (t0[8],tco0[8],td0[8],clk,tc08,tld0,presl0);
+T0[9-15] :=	DNCNT (t0[9-15],tco0[9-15],td0[9-15],clk,tco0[8-14],tld0,presl0);
+Tu0[0-15] :=	DUMMY (t0[0-15]);
+Tco0[7] :=	DUMMY (tco0[7]);
+Tco0[15] :=	DUMMY (tco0[15]);
+Tlac00 :=	NR8 (tlac00,t0[0..7]);
+Tlac01 :=	NR8 (tlac01,t0[8..15]);
+Tc08 :=		AN2 (tc08,tlac00,tpc016);
+Tc016 :=	AN3 (tc016,tlac00,tlac01,tpc016);
+Tld0i :=	NR2 (tld0i,tc016,pit2w);
+Tld0 :=		IVH (tld0,tld0i);
+
+Dt0[0-15] :=	TS (dr[0-15],t0[0-15],pit2r);
+
+Tint[0] :=	NIVU (tint[0],tc016);
+
+Tp0 :=		JOIN (tp0,tp0[0..15]);
+T0 :=		JOIN (t0,t0[0..15]);
+Tpu0 :=		DUMMY (tp0);
+Tu0 :=		DUMMY (t0);
+
+(*********************** TIMER 1 *******************)
+
+Pd1[0-15] :=	LDP1Q (pd1[0-15],din[0-15],pit3w);
+Td1[0-15] :=	LDP1Q (td1[0-15],din[0-15],pit4w);
+
+(* enabled if pit3 is nz *)
+
+Ten10 :=	OR8 (ten10,pd1[0..7]);
+Ten11 :=	OR8 (ten11,pd1[8..15]);
+Ten1 :=		OR2 (ten1,ten10,ten11);
+Presl1 :=	AN2U (presl1,ten1,resetl);
+
+(* 16 stage prescaler *)
+
+Tp1[0] :=	DNCNT (tp1[0],tpco1[0],pd1[0],clk,ten1,tpld1,presl1);
+Tp1[1-7] :=	DNCNT (tp1[1-7],tpco1[1-7],pd1[1-7],clk,tpco1[0-6],tpld1,presl1);
+Tp1[8] :=	DNCNT (tp1[8],tpco1[8],pd1[8],clk,tpc18,tpld1,presl1);
+Tp1[9-15] :=	DNCNT (tp1[9-15],tpco1[9-15],pd1[9-15],clk,tpco1[8-14],tpld1,presl1);
+Tpu1[0-15] :=	DUMMY (tp1[0-15]);
+Tpco1[7] :=	DUMMY (tpco1[7]);
+Tpco1[15] :=	DUMMY (tpco1[15]);
+Tplac10 := 	NR8 (tplac10,tp1[0..7]);
+Tplac11 :=	NR8 (tplac11,tp1[8..15]);
+Tpc18 :=	AN2 (tpc18,tplac10,ten1);
+Tpc116 :=	AN3 (tpc116,tplac10,tplac11,ten1);
+
+Tpld1i :=	NR2 (tpld1i,tpc116,pit3w);
+Tpld1 :=	IVH (tpld1,tpld1i);
+
+Dtp1[0-15] :=	TS (dr[0-15],tp1[0-15],pit3r);
+
+(* 16 stage counter *)
+
+T1[0] :=	DNCNT (t1[0],tco1[0],td1[0],clk,tpc116,tld1,presl1);
+T1[1-7] :=	DNCNT (t1[1-7],tco1[1-7],td1[1-7],clk,tco1[0-6],tld1,presl1);
+T1[8] :=	DNCNT (t1[8],tco1[8],td1[8],clk,tc18,tld1,presl1);
+T1[9-15] :=	DNCNT (t1[9-15],tco1[9-15],td1[9-15],clk,tco1[8-14],tld1,presl1);
+Tu1[0-15] :=	DUMMY (t1[0-15]);
+Tco1[7] :=	DUMMY (tco1[7]);
+Tco1[15] :=	DUMMY (tco1[15]);
+Tlac10 :=	NR8 (tlac10,t1[0..7]);
+Tlac11 :=	NR8 (tlac11,t1[8..15]);
+Tc18 :=		AN2 (tc18,tlac10,tpc116);
+Tc116 :=	AN3 (tc116,tlac10,tlac11,tpc116);
+Tld1i :=	NR2 (tld1i,tc116,pit4w);
+Tld1 :=		IVH (tld1,tld1i);
+
+Dt1[0-15] :=	TS (dr[0-15],t1[0-15],pit4r);
+
+Tint[1] :=	NIV (tint[1],tc116);
+
+Tp1 :=		JOIN (tp1,tp1[0..15]);
+T1 :=		JOIN (t1,t1[0..15]);
+Tpu1 :=		DUMMY (tp1);
+Tu1 :=		DUMMY (t1);
+
+/***************** test register ***************/
+
+Ndtest :=	LDP2Q (ndtest,din[0],test1w,resetl);
+
+/**************** joystick output enable **********/
+
+Joyen :=	LDP2Q (joyen,din[15],joy1w,resetl);
+Joy1w :=	IV (joy1w,joy1wl);
+Joyenl :=	IV (joyenl,joyen);
+
+(* GE - removed unused paddle logic *)
+
+END;
+
+

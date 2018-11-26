@@ -1,0 +1,750 @@
+/******************************************************************
+ins_exec.net
+7/2/91
+
+Instruction Execution Unit
+--------------------------
+
+******************************************************************/
+
+IMPORT execon, interrupt, prefetch, systolic, 
+	enumerates, duplo, tosh;
+
+DEF INS_EXEC (
+INT32/	gpu_data	/* Data from memory read */
+	gpu_dout[3..14]	/* GPU data bit-wise read bus */
+	gpu_dout[16..31]
+	:TRI;
+INT3/	alufunc		/* ALU mode control */
+	brlmux[0..1]	/* Barrel shifter mode control */
+INT24/	dataddr		/* data memory cycle address */
+	datreq		/* data memory cycle request */
+	datweb		/* data memory cycle write enable */
+	datwe_raw	/* raw version for wait generation */
+	div_instr	/* divide instruction decode */
+	div_start	/* divide starting */
+INT6/	dstanwi 	/* destination port address */
+INT6/	dstat		/* op-code derived destination address */
+	dstdgate	/* latch store instruction data */
+	dstrrd		/* dest register is read */
+	dstrrdi		/* look-ahead version */
+	dstrwr		/* dest register is directly written */
+	dstrwri		/* look-ahead version */
+	dstwen		/* dest register write enable */
+	exe		/* current instruction is being executed */
+	flag_depend	/* current instruction uses flags */
+	flagld		/* ALU flags load enable */
+INT32/	immdata		/* move immediate data */
+	immld		/* data load from immediate data */
+	immwri		/* write immediate data */
+	insexei		/* exe without sbwait term */
+	locden		/* instruction source data select */
+INT32/	locsrc		/* source data from instruction */
+	macop		/* multiply/accumulate operation in ALU */
+	memrw		/* current instruction uses memory */
+	msize[0..1]	/* width of external memory cycles */
+	mtx_dover	/* connect gpu_data onto dstd */
+	multsel		/* Multiplier low/high word select */
+	multsign	/* Multiplier signed/unsigned control */
+	pabort		/* aborting program fetch request */
+	precomp		/* pre-compute memory address */
+INT22/	progaddr	/* program fetch address */
+	progreq		/* program fetch request */
+	resld		/* ALU result load enable */
+	ressel[0..2]	/* ALU result register input select */
+	reswr		/* current instr. requires result write */
+	rev_sub		/* reverse normal subtract ordering */
+	satsz[0..1]	/* ALU saturate unit size control */
+	srcrrd		/* source register is read */
+	single_stop	/* single-step stop active */
+INT6/	srcanwi 	/* source port address */
+	:OUT;
+	big_instr	/* instruction stream is big-endian */
+	carry_flag	/* carry flag from ALU */
+	clk 		/* co-processor clocks */
+	tlw 		/* co-processor clocks */
+	datack		/* program data memory cycle acknowledge */
+	dbgrd		/* read debug information */
+	div_activei	/* divide active (look-ahead) */
+	external	/* load/store instruction is external */
+	flagrd		/* Flag register read */
+	flagwr		/* Flag register write */
+	gate_active	/* gateway active */
+	go		/* GPU execution enable */
+INT32/	gpu_din		/* GPU main data bus - read version */
+	gpu_irq[0..4]	/* Interrupt request lines */
+	mtxawr		/* write to matrix address register */
+	mtxcwr		/* write to matrix control register */
+	nega_flag	/* negative flag from ALU */
+	pcrd		/* read the program counter */
+	pcwr		/* write to program counter */
+	progack		/* program fetch acknowledge */
+	resaddrldi	/* load result data as data address */
+	reset\		/* master reset */
+INT32/	result		/* ALU result */
+	sbwait		/* wait from the score-board unit */
+	sdatreq		/* data request from score-board */
+	single_go	/* single step, one instruction advance */
+	single_step	/* single step, enable */
+	srcaddrldi	/* load source data as data address */
+INT32/	srcd 		/* source operand data bus */
+INT32/	srcdp 		/* pipe-lined version */
+INT32/	srcdpa		/* unbuffered version of above for addr */
+	statrd		/* GPU status port read */
+	zero_flag	/* zero flag from ALU */
+	:IN);
+
+INT5/	dstop, dstopb, srcopi, srcop, dstopi, srcopin, dstopin
+INT6/	opcode, opcodei, opcodein, dstati, impdai, dstatun, 
+INT16/	immlo, instruction, insval, preinstr, intins, 
+INT27/	microword, romword27, mwordi
+INT32/	mtx_addr, prog_count
+(* GE 17/06/2012 Added missing declarations *)
+INT27/	romword
+INT5/	srcopb
+INT24/	program_count
+INT16/	sysins
+:LOCAL;
+BEGIN
+
+#if FLARE
+
+/* Dis-assemble the current opcode */
+
+Op_code		:= DISASM (op_code, opcode);
+Dummy		:= DUMMY (op_code);
+
+#endif
+
+Zero		:= TIE0 (zero);
+One		:= TIE1 (one);
+
+Dbgrd[25]	:= TS (gpu_dout[25], sbwait, dbgrd);
+Dbgrd[26]	:= TS (gpu_dout[26], div_activei, dbgrd);
+Dbgrd[27]	:= TS (gpu_dout[27], external, dbgrd);
+Dbgrd[28]	:= TS (gpu_dout[28], gate_active, dbgrd);
+Dbgrd[29]	:= TS (gpu_dout[29], jump_ena, dbgrd);
+Dbgrd[30]	:= TS (gpu_dout[30], sysser, dbgrd);
+Dbgrd[31]	:= TS (gpu_dout[31], intser, dbgrd);
+
+/* The pre-fetch mechanism */
+
+Prefetch	:= PREFETCH (gpu_dout[22..24], insrdy, preinstr, 
+			jump_atomic, pabort progreq, progaddr, 
+			program_count, big_instr, clk, dbgrd, go, 
+			gpu_data gpu_din progack jumprel jumpabs 
+			pcwr, reset\, promold\, single_go, 
+			single_step, srcd, srcdp);
+
+Prog_cnt	:= JOIN (prog_count, program_count, zero, zero, 
+			zero, zero, zero, zero, zero, zero);
+
+/* Both the interrupt and systolic units can hijack the 
+instruction stream at an arbitrary point.  This action must be
+prevented from occurring during the data for a MOVEI instruction,
+otherwise all hell breaks loose.
+
+The immediate data load decodes below are of no use as they are 
+one stage down the pipe-line.  Therefore it is necessary to decode
+the instruction stream from the pre-fetch unit here, and to provide
+a lock to make the immediate data atomic with its instruction.  The
+signal atomic is therefore generated, which is set asynchronously
+on a valid MOVEI instruction, and is cleared when two further
+words of data have been used.
+(1/181)
+
+It is also necessary to prevent interrupts occurring during matrix
+multiplies, so the mtx_atomic term is also ORed with atomic.
+
+A jump atomic term is produced in the prefetch unit, but this
+must be combined with a direct jump decode.
+
+12/8/92 - bug fix
+It is also necessary to keep atomic active during thw wait phase
+of a jump instruction - this is given by 
+jump_ins	microword{23} + microword{24}
+
+*/
+
+Jumpins		:= OR2 (jump_ins, microword{23}, microword{24});
+
+/* JUMP and JR are instructions 52 and 53 = 11010X */
+
+Jumpinsp	:= AN5 (jump_insp, preinstr\[11], preinstr{12},
+			preinstr\[13], preinstr{14..15});
+
+/* MOVEI is instruction 38 = 100110 */
+
+Preinstr\[10-11] := IV (preinstr\[10-11], preinstr{10-11});
+Preinstr\[13-15] := IV (preinstr\[13-15], preinstr{13-15});
+Movei		:= AN6 (movei, preinstr\[10], preinstr{11..12}, 
+			preinstr\[13..14], preinstr{15});
+Moveild\	:= ND2 (moveild\, movei, romoldb[2]);
+Moveild		:= IV (moveild, moveild\);
+
+Romold\		:= IV (romold\, romoldb[2]);
+
+Idlet0		:= ND2 (idlet[0], await2, romoldb[2]);
+Idlet1		:= ND2 (idlet[1], idle, moveild\);
+Idlet2		:= ND2 (idlet[2], idlet[0..1]);
+Idle		:= FD4Q (idle, idlet[2], clk, reset\);
+
+Await1t0	:= ND2 (await1t[0], idle, moveild);
+Await1t1	:= ND2 (await1t[1], await1, romold\);
+Await1t2	:= ND2 (await1t[2], await1t[0..1]);
+Await1		:= FD2Q (await1, await1t[2], clk, reset\);
+
+Await2t0	:= ND2 (await2t[0], await1, romoldb[2]);
+Await2t1	:= ND2 (await2t[1], await2, romold\);
+Await2t2	:= ND2 (await2t[2], await2t[0..1]);
+Await2		:= FD2Q (await2, await2t[2], clk, reset\);
+
+Atomict[0]	:= AN2 (atomict[0], movei, insrdy);
+Atomict[1]	:= AN2 (atomict[1], await2, romold\);
+Movei_atomic	:= OR3 (movei_atomic, atomict[0..1], await1);
+Movei_data	:= OR2 (movei_data, await1, await2);
+Atomic		:= OR6 (atomic, movei_atomic, mtx_atomic, 
+			mult_atomic, jump_atomic, jump_ins, 
+			jump_insp);
+
+/* Make IMULTN and IMACN instructions atomic with the next
+instruction.  Instructions 18 and 20 = 010010 or 010100
+(2/12) */
+
+Multnt		:= EO (multnt, preinstr{11..12});
+Multn		:= AN5 (multn, preinstr\[10], multnt, 
+			preinstr\[13], preinstr{14}, 
+			preinstr\[15]);
+Multn\		:= IV (multn\, multn);
+Multaset	:= AN3 (multaset, romoldb[2], multn, idle);
+Multaclr	:= AN2 (multaclr, romoldb[2], multn\);
+Multa		:= CP_LATCH (multa, multaset, multaclr, clk,
+			reset\);
+Mult_atomic	:= OR2 (mult_atomic, multa, multaset);
+
+/* The interrupt control mechanism */
+
+Interrupt 	:= INTERRUPT (gpu_dout[3..13], imaski, intins, 
+			intser, atomic, clk, gpu_din flagrd, 
+			flagwr, gpu_irq[0..4], reset\, 
+			romoldb[2], statrd);
+
+/* The systolic matrix multiply control mechanism */
+
+Systolic	:= SYSTOLIC (mtx_atomic, mtx_dover, mtx_wait, 
+			mtxaddr[2..11], mtx_mreq, multsel, sysins, 
+			sysser, movei_data, clk, 
+			datack, gpu_din, preinstr, mtxawr, 
+			mtxcwr, reset\, sromold);
+Mtx_mreq\	:= IV (mtx_mreq\, mtx_mreq);
+Mtx_doveri	:= JOIN (mtx_doveri, mtx_mreq);
+
+/* Override the pre-fetch interface during the interrupt service
+routine or systolic matrix multiply automatic instructions, 
+the interrupt has priority. */
+
+Instruction	:= MX4P (instruction, preinstr, sysins, intins, 
+			intins, sysser, intser);
+
+/* Conceal romold from the pre-fetch mechanism while intser or
+sysser is active */
+
+Intser\		:= IV (intser\, intser);
+Sysser\		:= IV (sysser\, sysser);
+Promold		:= ND3P (promold\, romold, intser\, sysser\);
+
+/* Conceal romold from the systolic mechanism while intser is
+active */
+
+Sromold		:= AN2H (sromold, romoldb[2], intser\);
+
+/* Decode the instruction */
+
+Opcodei		:= JOIN (opcodei, instruction{10..15});
+Srcopi		:= JOIN (srcopi,  instruction{5..9});
+Dstopi		:= JOIN (dstopi,  instruction{0..4});
+
+/* The micro-word lookup ROM */
+/* The ROM is enabled all the time */
+
+Mcode		:= RA6032A (romword, clk, opcodei);
+Romword		:= JOIN (romword27, romword{0..26});
+
+/* Pipeline stage */
+
+Mwordi		:= MX2P (mwordi, microword, romword27, romoldb[0]);
+Mcodepipe	:= FD2QP (microword, mwordi, clk, reset\);
+Srcopin		:= MX2 (srcopin, srcopb, srcopi, romoldb[4]);
+Srcop		:= FD2QP (srcop, srcopin, clk, reset\);
+Srcopb		:= NIVM (srcopb, srcop);
+Dstopin		:= MX2P (dstopin, dstopb, dstopi, romoldb[3]);
+Dstop		:= FD2QP (dstop, dstopin, clk, reset\);
+Dstopb		:= NIVM (dstopb, dstop);
+Opcodein	:= MX2 (opcodein, opcode, opcodei, romoldb[0]);
+Opcode		:= FD2Q (opcode, opcodein, clk, reset\);
+Opcode\[1]	:= IV (opcode\[1], opcode{1});
+Opcode\[3]	:= IV (opcode\[3], opcode{3});
+Opcode\[5]	:= IV (opcode\[5], opcode{5});
+
+Dbgrd[16-21]	:= TS (gpu_dout[16-21], opcode{0-5}, dbgrd);
+
+Ressel[0]	:= OR2 (ressel[0], unpack, microword{0});
+Ressel[1-2]	:= JOIN (ressel[1-2],	microword{1-2});
+Brlmux[0-1]	:= JOIN (brlmux[0-1],	microword{3-4});
+Multsign	:= NIV (multsign,	microword{4});
+Msizet[0-1]	:= JOIN (msizet[0-1],	microword{3-4});
+Satsz[0]	:= JOIN (satsz[0],	microword{5});
+Mac		:= AN2 (macop, exe,	microword{6});
+Alufunc		:= JOIN (alufunc,	microword{7..9});
+/* Indsel	:= JOIN (indsel,	microword{10}); */
+Flagld		:= AN2 (flagld, exe, 	microword{11});
+Resld		:= AN2 (resld, exe, 	microword{12});
+Srcdat[0-3]	:= NIV (srcdat[0-3],	microword{13-16});
+Srcrrdt		:= NR4 (srcrrdt, 	microword{13..16});
+Srcrrd		:= NIV (srcrrd, srcrrdt);
+Reswr		:= AN2 (reswr, insexe,	microword{17});
+Dstrrd		:= JOIN (dstrrd,	microword{18});
+Dstrrdi		:= JOIN (dstrrdi,	mwordi{18});
+Memrw		:= AN2P (memrw, insexe,	microword{19});
+Memrw\		:= IV (memrw\, memrw);
+Datwet		:= AN2 (datwet, go,	microword{20});
+Datwe_raw	:= AN2 (datwe_raw, insexe, microword{20});
+Precomp		:= NIVU (precomp,	microword{21});
+Immld		:= JOIN (immld,		microword{22});
+Jumprel		:= AN3 (jumprel, exe, jump_ena, microword{23});
+Jumpabs		:= AN3 (jumpabs, exe, jump_ena, microword{24});
+Dstwen		:= AN2 (dstwen,	insexe,	microword{25});
+Dstrwr		:= NIV (dstrwr, 	microword{25});
+Dstrwri		:= JOIN (dstrwri, 	mwordi{25});
+Dsttinv		:= AN2 (dsttinv, microword{1}, dstwen);
+Satsz[1]	:= JOIN (satsz[1],	microword{26});
+
+/* srcrrd and dstrrd and dstrwr are signals for the 
+score-boarding mechanism that are pure instruction decode 
+(without the exe term) */
+
+/* Direct microcode decodes
+   ------------------------
+Due to the slow nature of the ROM, some control bits are directly
+decoded.  THESE MUST MATCH THE ROM CONTENTS IN mcodegen.c.
+*/
+
+Opcd[0-4]	:= NIV (opcd[0-4], opcodei{0-4});
+Opcd[5]		:= NIVM (opcd[5], opcodei{5});
+Opcd\[0-4]	:= IV (opcd\[0-4], opcd[0-4]);
+
+/*Idc\[34]	:= ND6 (idc\[34], opcd[5], opcd\[4], opcd\[3],
+**			opcd\[2], opcd[1], opcd\[0]);
+**Idc\[35]	:= ND6 (idc\[35], opcd[5], opcd\[4], opcd\[3],
+**			opcd\[2], opcd[1], opcd[0]); */
+Idc\[36]	:= ND6 (idc\[36], opcd[5], opcd\[4], opcd\[3],
+			opcd[2], opcd\[1], opcd\[0]);
+Idc\[37]	:= ND6 (idc\[37], opcd[5], opcd\[4], opcd\[3],
+			opcd[2], opcd\[1], opcd[0]);
+Idc\[43]	:= ND6 (idc\[43], opcd[5], opcd\[4], opcd[3],
+			opcd\[2], opcd[1], opcd[0]);
+Idc\[44]	:= ND6 (idc\[44], opcd[5], opcd\[4], opcd[3],
+			opcd[2], opcd\[1], opcd\[0]);
+Idc\[49]	:= ND6 (idc\[49], opcd[5], opcd[4], opcd\[3],
+			opcd\[2], opcd\[1], opcd[0]);
+Idc\[50]	:= ND6 (idc\[50], opcd[5], opcd[4], opcd\[3],
+			opcd\[2], opcd[1], opcd\[0]);
+Idc\[58]	:= ND6 (idc\[58], opcd[5], opcd[4], opcd[3],
+			opcd\[2], opcd[1], opcd\[0]);
+Idc\[59]	:= ND6 (idc\[59], opcd[5], opcd[4], opcd[3],
+			opcd\[2], opcd[1], opcd[0]);
+Idc\[60]	:= ND6 (idc\[60], opcd[5], opcd[4], opcd[3],
+			opcd[2], opcd\[1], opcd\[0]);
+Idc\[61]	:= ND6 (idc\[61], opcd[5], opcd[4], opcd[3],
+			opcd[2], opcd\[1], opcd[0]);
+
+/* precompi direct decode - instructions 43, 44, 49, 50, 58-61 */
+Precompit0	:= AN4 (precompit[0], idc\[43..44], idc\[49..50]);
+Precompit1	:= AN4 (precompit[1], idc\[58..61]);
+Precompit	:= ND2 (precompit, precompit[0..1]);
+Precompi	:= MX2 (precompi, precompil, precompit, 
+			romoldb[1]);
+Precompil	:= FD2Q (precompil, precompi, clk, reset\);
+
+
+
+/* dstweni direct decode - instructions 34, 35, 36, 37, 51 */
+/* Dstweni		:= AN2 (dstweni, insexei, mwordi{25}); */
+/* Actually - only used for the two terms below */
+
+/* dsttinvi direct decode - instruction 36 */
+/* Dsttinvi	:= AN2 (dsttinvi, mowrdi{1}, dstweni); */
+Dsttinvit	:= IV (dsttinvit, idc\[36]);
+Dsttinvi	:= MX2 (dsttinvi, dsttinvil, dsttinvit, 
+			romoldb[1]);
+Dsttinvil	:= FD2Q (dsttinvil, dsttinvi, clk, reset\);
+
+/* srctinvi direct decode - instruction 37 */
+/* Srctinvi	:= AN2 (srctinvi, mwordi{0}, dstweni); */
+Srctinvit	:= IV (srctinvit, idc\[37]);
+Srctinvi	:= MX2 (srctinvi, srctinvil, srctinvit, 
+			romoldb[1]);
+Srctinvil	:= FD2Q (srctinvil, srctinvi, clk, reset\);
+
+/* indseli direct decode - instructions 44, 50, 59 and 61 */
+/* Indseli	:= JOIN (indseli,	mwordi{10}); */
+Indselit	:= ND4 (indselit, idc\[44], idc\[50], idc\[59], 
+			idc\[61]);
+Indseli		:= MX2 (indseli, indselil, indselit, 
+			romoldb[1]);
+Indselil	:= FD2Q (indselil, indseli, clk, reset\);
+
+/* unpack direct decode, source field of 0 = pack, 1 = unpack */
+
+Unpack		:= AN7 (unpack, opcode{0..5}, srcopb{0});
+
+/* datwe is latched on the condition exe . memrw, and is held 
+until the next memrw instruction, similarly msize 
+datwe is disabled during mtx_mreq 
+datwe   =  /mtx_mreq . (  datwet . exe . memrw)
+		        + datwelat . /(exe . memrw))
+	=  /mtx_mreq . datwet . exe . memrw
+	 + /mtx_mreq . datwelat . (/exe + /memrw)
+	=  /mtx_mreq . datwet . exe . memrw
+	 + /mtx_mreq . datwelat . /exe 
+	 + /mtx_mreq . datwelat . /memrw
+datwelat := datwe
+*/
+
+Datwet[0]	:= ND4 (datwet[0], mtx_mreq\, datwet, exeb[1], 
+			memrw);
+Exe\		:= IV (exe\, exeb[1]);
+Datwet[1]	:= ND3 (datwet[1], mtx_mreq\, datwelat, exe\);
+Datwet[2]	:= ND3 (datwet[2], mtx_mreq\, datwelat, memrw\);
+Datwe		:= ND3P (datwe, datwet[0..2]);
+
+Datweb		:= NIV (datweb, datwe);
+Datwel		:= FD1Q (datwelat, datweb, clk);
+
+Datwec		:= AN2P (datwec, exe, memrw);
+Msize[0-1]	:= FDSYNC (msize[0-1], msizet[0-1], datwec, clk);
+
+/* subtract operation is reversed for ABS and NEG instructions.
+This is given by ALU function 2 or 7 and srcdat 4 */
+
+Microword\[8]	:= IV (microword\[8], microword{8});
+Microword\[15]	:= IV (microword\[15], microword{15});
+Alufunc2\	:= OR3 (alufunc2\, microword{7}, microword\[8], 
+			microword{9});
+Alufunc7\	:= ND3 (alufunc7\, microword{7..9});
+Rev_subt	:= ND2 (rev_subt, alufunc2\, alufunc7\);
+Srcdat4		:= NR4 (srcdat4, microword{13}, microword{14},
+			microword\[15], microword{16});
+Rev_sub		:= AN2 (rev_sub, rev_subt, srcdat4);
+
+/* divide start is given by a direct DIV instruction decode (21),
+together with exe */
+
+Div_instr	:= AN6 (div_instr, opcode{0}, opcode\[1],
+			opcode{2}, opcode\[3], opcode{4}, 
+			opcode\[5]);
+Div_start	:= AN2M (div_start, exe, div_instr);
+
+/* flags dependence is a JUMP or JR instruction decode,
+when the dstop field is non-zero, or when the ALU function is 
+1 or 3  */
+
+Conditional	:= OR5 (conditional, dstopb{0..4});
+Jump		:= OR2 (jump, microword{23..24});
+Fdt0		:= ND2 (fdt[0], conditional, jump);
+Alufunc\[2]	:= IV (alufunc\[2], alufunc{2});
+Fdt1		:= ND2 (fdt[1], alufunc{0}, alufunc\[2]);
+Flag_depend	:= ND2 (flag_depend, fdt[0..1]);
+
+/* immediate data */
+
+Insval		:= JOIN (insval, dstopb, srcopb, opcode);
+Immlo		:= FDSYNC16 (immlo, insval, loimmld, clk);
+Immdata		:= JOIN (immdata, immlo, insval);
+
+/* generate local source data as required */
+
+Srcdgen		:= SRCDGEN (locdent, locsrc, 
+			prog_count, srcdat[0..3], srcopb);
+
+
+/* locden must only be active during exe */
+
+Locden		:= AN2U (locden, locdent, exe);
+
+/* Register addressing 
+   -------------------
+The regpage bit determines which register bank is currently 
+enabled.  The imask bit will force this to zero.
+*/
+
+Regpagei	:= MX2 (regpagei, regpage, gpu_din{14}, flagwr);
+Regpage		:= FD2Q (regpage, regpagei, clk, reset\);
+Flagrd[14]	:= TS (gpu_dout[14], regpage, flagrd);
+Imaski\		:= IV (imaski\, imaski);
+Reghighi	:= AN2 (reghighi, regpagei, imaski\);
+Imask\		:= FD1Q (imask\, imaski\, clk);
+Reghigh		:= AN2 (reghigh, regpage, imask\);
+
+/* The destination address can come from:
+-	the opcode
+-	a delayed destination address for a write-back
+-	latched for immediate data write
+-	an implicit register value for indexed addressing modes
+-	the graphics processor address bus, when idle
+
+A destination address without the write-back term included is 
+necessary for the concealed write-back testing logic. 
+*/
+Dsttopi		:= EO (dsttopi, dsttinvi, reghighi);
+Dstati		:= JOIN (dstati, dstopin, dsttopi);
+Impdai		:= JOIN (impdai, indseli, one, one, one, zero, 
+			dsttopi);
+Dsttop		:= EO (dsttop, dsttinv, reghigh);
+Dstatun		:= JOIN (dstatun, dstop, dsttop);
+Dstat		:= NIVH (dstat, dstatun);
+
+/* the implicit destination address used to calculate the address
+for indexed instructions is selected during the first tick (exe
+active) of the instruction execution. */
+/*
+** Impasel	:= AN2 (impasel, insexe, precomp);
+** Dstasel1	:= OR2 (dstasel[1], impasel, go\);
+*/
+
+Danwsel1	:= AN2P (danwsel, insexei, precompi);
+Dstanwi		:= MX2P (dstanwi, dstati, impdai, danwsel);
+
+/* The source address comes from the opcode. 
+The top bit is always set for matrix multiplies.
+*/
+
+Srctopti	:= EO (srctopti, srctinvi, reghighi);
+Srctopi		:= OR2 (srctopi, srctopti, mtx_doveri);
+Srcanwi		:= JOIN (srcanwi, srcopin, srctopi);
+
+/* Execution control state machine */
+
+Execon	:= EXECON (dstdgate exe exeb[1] immwri insexe 
+		insexei loimmld romold romoldb[0..4] single_stop 
+		clk go immld insrdy memrw datwe mtx_wait 
+		precomp reset\ sbwait single_go single_step);
+
+/* Conditional jump decoding **************************************
+Conditional jumps may be dependent on a variety of conditions of
+the ALU flag bits.  The dstop field is decoded as follows:
+Bit	Condition
+0	Zero flag must be clear for jump to occur
+1	Zero flag must be set for jump to occur
+2	Other flag must be clear for jump to occur
+3	Other flag must be set for jump to occur
+4	0 = other flag is carry, 1 = other flag is negative
+*/
+
+Zero_flag\	:= IV (zero_flag\, zero_flag);
+Other_flag	:= MX2 (other_flag, carry_flag, nega_flag, 
+			dstopb{4});
+Other_flag\	:= IV (other_flag\, other_flag);
+Cond0		:= ND2 (cond[0], dstopb{0}, zero_flag);
+Cond1		:= ND2 (cond[1], dstopb{1}, zero_flag\);
+Cond2		:= ND2 (cond[2], dstopb{2}, other_flag);
+Cond3		:= ND2 (cond[3], dstopb{3}, other_flag\);
+Conddis		:= AN4 (jump_ena, cond[0..3]);
+
+/* Memory Interface Control **************************************/
+
+/* Source data is latched by exe . memrw to give the load/store 
+address - this has to be an edge-triggered latch as the data
+comes from RAM - srcdp is now used.
+
+A special unbuffered version of srcdp is used to help meet the
+RAM address setup time.
+*/
+
+/* matrix address is 00F03xxx and is long aligned */
+
+Mtx_addr	:= JOIN (mtx_addr, zero, zero, mtxaddr[2..11], 
+			one, one, zero, zero, zero, zero, zero, 
+			zero, one, one, one, one, zero, zero, 
+			zero, zero, zero, zero, zero, zero);
+
+Dataseli[0]	:= OR2 (dataseli[0], srcaddrldi, mtx_doveri);
+Dataseli[1]	:= OR2 (dataseli[1], resaddrldi, mtx_doveri);
+Datasel0[0-5]	:= FD1QP (datasel0[0-5], dataseli[0], clk);
+Datasel1[0-5]	:= FD1QP (datasel1[0-5], dataseli[1], clk);
+
+Dataddr[0-3]	:= MX4P (dataddr[0-3], srcaddrl[0-3], 
+			srcdpa{0-3}, result{0-3}, 
+			mtx_addr{0-3}, datasel0[0], datasel1[0]);
+Dataddr[4-7]	:= MX4P (dataddr[4-7], srcaddrl[4-7], 
+			srcdpa{4-7}, result{4-7}, 
+			mtx_addr{4-7}, datasel0[1], datasel1[1]);
+Dataddr[8-11]	:= MX4P (dataddr[8-11], srcaddrl[8-11], 
+			srcdpa{8-11}, result{8-11}, 
+			mtx_addr{8-11}, datasel0[2], datasel1[2]);
+Dataddr[12-15]	:= MX4P (dataddr[12-15], srcaddrl[12-15], 
+			srcdpa{12-15}, result{12-15}, 
+			mtx_addr{12-15}, datasel0[3], datasel1[3]);
+Dataddr[16-19]	:= MX4P (dataddr[16-19], srcaddrl[16-19], 
+			srcdpa{16-19}, result{16-19}, 
+			mtx_addr{16-19}, datasel0[4], datasel1[4]);
+Dataddr[20-23]	:= MX4P (dataddr[20-23], srcaddrl[20-23], 
+			srcdpa{20-23}, result{20-23}, 
+			mtx_addr{20-23}, datasel0[5], datasel1[5]);
+
+Dataddr		:= JOIN (dataddr, dataddr[0..23]);
+
+/* The address is latched */
+Addrlatt	:= OAN1 (addrlatt, datasel0[5], datasel1[5], 
+			tlw);
+Addrlat		:= NIVU (addrlat, addrlatt);
+Srcaddrl[0-23]	:= LDP1Q (srcaddrl[0-23], dataddr[0-23], addrlat);
+
+/* The data request from the score-board load control unit is 
+ORed with that from systolic data fetches */
+
+Datreq		:= OR2 (datreq, sdatreq, mtx_mreq);
+
+/* Make the program counter readable */
+
+Pcrd		:= TS (gpu_data, prog_count, pcrd);
+
+END;
+
+/******************************************************************
+**  SRCDGEN - Source data generation  *****************************
+*******************************************************************
+This block generates the source data for anything other than direct
+register read data.  This is encoded by the srcdat control bits:
+	 0 = register data
+	 1 = operand field 0-31
+	 2 = operand field 0-31 * 4
+	 3 = operand field negative
+	 4 = constant 0
+	 5 = operand field signed -16 - 15
+	 6 = constant -1
+	 7 = program count
+	 8 = operand field 1-32
+	 9 = operand field selects one bit set
+	10 = operand field selects one bit clear
+*/
+
+DEF SRCDGEN (
+	locdent		/* instruction source data select */
+INT32/	locsrc		/* source data from instruction */
+	:OUT;
+INT32/	program_count	/* corrected program count value */
+	srcdat[0..3]	/* source data control bits */
+INT5/	srcop		/* source operand field */
+	:IN);
+
+INT5/	botsrc, const, opshft
+INT32/	gensrc, mask
+:LOCAL;
+BEGIN
+
+Srcdat\[0-3]	:= IV (srcdat\[0-3], srcdat[0-3]);
+Srcop\[4]	:= IV (srcop\[4], srcop{4});
+Zero		:= TIE0 (zero);
+
+/* enable for locally generated data */
+
+Locdent		:= OR4U (locdent, srcdat[0..3]);
+
+/* Operand value derived source generation
+   ---------------------------------------
+Top 24 bits can be:
+0	types 1,2,4,8
+1	types 3,6
+sign 	types 5
+*/
+
+/* source operand sign in type 5 */
+
+Type5		:= AN4 (type5, srcdat[0], srcdat\[1], srcdat[2],
+			srcdat\[3]);
+
+/* all ones in type 3 or 6 */
+
+Oneselt		:= EO (oneselt, srcdat[0], srcdat[2]);
+Onesel		:= AN3 (onesel, oneselt, srcdat[1], srcdat\[3]);
+Topsrct		:= AOR1 (topsrct, srcop{4}, type5, onesel);
+Topsrc		:= NIVH (topsrc, topsrct);
+
+/* Bit 7 can follow the top, or be a one if the operand is all
+zero in type 2 */
+
+Srcb7		:= MX2 (srcb7, topsrc, opzero, type2);
+
+/* Bit 6 can follow the top or be the top bit of the operand in 
+type 2 */
+
+Type2		:= AN4M (type2, srcdat\[0], srcdat[1], srcdat\[2],
+			srcdat\[3]);
+Srcb6		:= MX2 (srcb6, topsrc, srcop{4}, type2);
+
+/* Bit 5 can follow the top, or be the second to top bit of the 
+operand in type 2, or be 1 if the operand is zero in type 8 */
+
+Type8		:= AN4 (type8, srcdat\[0..2], srcdat[3]);
+Opzero		:= NR5 (opzero, srcop{0..4});
+Srcb5		:= MX4 (srcb5, topsrc, opzero, srcop{3}, zero, 
+			type8, type2);
+
+/* Bottom 5 bits can be 0, -1, operand or operand times four */
+/* constant bits are set for type 6 (clear for type 4) */
+
+Type6		:= AN4 (type6, srcdat\[0], srcdat[1..2],
+			srcdat\[3]);
+
+/* constant is selected for types 4 and 6 */
+
+Constsel	:= AN3P (constsel, srcdat\[0], srcdat[2],
+			srcdat\[3]);
+
+Const		:= JOIN (const, type6, type6, type6, 
+			type6, type6);
+Opshft		:= JOIN (opshft, zero, zero, srcop{0..2});
+Botsrc		:= MX4 (botsrc, srcop, const, opshft, opshft, 
+			constsel, type2);
+
+/* therefore locally generated source data */
+
+Gensrc		:= JOIN (gensrc, botsrc, srcb5, srcb6, srcb7, 
+			topsrc, topsrc, topsrc, topsrc, topsrc, 
+			topsrc, topsrc, topsrc, topsrc, topsrc, 
+			topsrc, topsrc, topsrc, topsrc, topsrc, 
+			topsrc, topsrc, topsrc, topsrc, topsrc, 
+			topsrc, topsrc, topsrc, topsrc);
+
+/* Generate bit mask */
+
+Masklo		:= D416G2L (maskt\[0..15], srcop{0..3}, srcop{4},
+			zero);
+Maskhi		:= D416G2L (maskt\[16..31], srcop{0..3}, srcop\[4],
+			zero);
+Type9		:= AN4U (type9, srcdat[0], srcdat\[1..2], 
+			srcdat[3]);
+Mask[0-31]	:= EO (mask[0-31], maskt\[0-31], type9);
+Mask		:= JOIN (mask, mask[0..31]);
+
+/* Data enabled here can be:
+0	the operand/constant data  
+1	the bit mask
+2	the program counter
+
+sdsel0	= types 9 or 10
+sdsel1	= type 7
+ */
+
+Type7		:= AN4 (type7, srcdat[0..2], srcdat\[3]);
+Type10		:= AN4 (type10, srcdat\[0], srcdat[1], srcdat\[2],
+			srcdat[3]);
+Sdsel0		:= OR2U (sdsel[0], type9, type10);
+Sdsel1		:= NIVU (sdsel[1], type7);
+
+Locsrc		:= MX4 (locsrc, gensrc, mask, program_count, 
+			program_count, sdsel[0..1]);
+
+END;
+

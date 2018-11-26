@@ -1,0 +1,169 @@
+(*****************************************************************
+
+	iodec.net
+
+This is the address decode in the Jaguar video chip.
+
+******************************************************************)
+
+IMPORT  tosh,           (* Toshiba gate & pad definitions *)
+        lego;
+
+
+
+DEF IODEC	(a[0..15],intdev,wet,oet,
+		intswe,reads,intwe,lba,lbb,clut,
+		ourack,romcsl[0..1],dspcsl:IN;
+
+		memc1r, memc2r, hcr, vcr, 
+		lphr, lpvr, ob0r, ob1r, ob2r, ob3r,
+		lbrar, test2r, test3r, intr,
+		pit0r,pit1r,
+
+		memc1w, memc2w, olp1w, olp2w, 
+		obfw, vmodew, bord1w, bord2w,
+		hcw, hpw, hbbw, hbew, hsw, hvsw, hdb1w, hdb2w, hdew, vcw, vpw,
+		vbbw, vbew, vsw, vdbw, vdew, vebw, veew, viw,
+		pit0w, pit1w, heqw, test1w,
+		lbraw, int1w, int2w, bgwr, expl
+
+		:IO);
+
+(*
+
+a[0..15]	is the address of the current memory cycle (aout[0..15])
+intdev		indicates that the current memory cycle is to internal memory
+wet		is the write strobe for the current memory cycle
+
+*)
+		INT16/addr:IO;
+BEGIN
+
+Addr :=		JOIN (addr,a[0..15]);
+Addru :=	DUMMY (addr);
+
+Vcc :=		TIE1	(vcc);
+
+Al[1-15] :=	IV	(al[1-15],a[1-15]);
+Notintdev :=	IV	(notintdev,intdev);
+Writes :=	IV 	(writes,reads);
+
+Nota00xx_ :=	ND8	(nota00xx,al[8..15]);
+A00xx :=	IV	(a00xx,nota00xx);
+Nota02xx_ :=	ND8	(nota02xx,al[8],a[9],al[10..15]);
+I00xxi	:=	NR2	(i00xxi,nota00xx,notintdev);
+I00xx :=	NIVU	(i00xx,i00xxi);
+I02xx_	:=	NR2	(i02xx,nota02xx,notintdev);
+
+Axxx0i	:=	ND3	(axxx0i,al[3],al[2],al[1]);
+Axxx0	:=	IVM	(axxx0,axxx0i);
+Axxx2_	:=	AN3M	(axxx2,al[3],al[2],a[1]);
+Axxx4_	:=	AN3	(axxx4,al[3],a[2],al[1]);
+Axxx6_	:=	AN3	(axxx6,al[3],a[2],a[1]);
+Axxx8_	:=	AN3	(axxx8,a[3],al[2],al[1]);
+Axxxa_	:=	AN3	(axxxa,a[3],al[2],a[1]);
+Axxxc_	:=	AN3	(axxxc,a[3],a[2],al[1]);
+Axxxe_	:=	AN3	(axxxe,a[3],a[2],a[1]);
+
+Axx0xi	:=	ND4	(axx0xi,al[7],al[6],al[5],al[4]);
+Axx0x	:=	IVM	(axx0x,axx0xi);
+Axx1x_	:=	AN4	(axx1x,al[7],al[6],al[5],a[4]);
+Axx2x_	:=	AN4M	(axx2x,al[7],al[6],a[5],al[4]);
+Axx3x_	:=	AN4M	(axx3x,al[7],al[6],a[5],a[4]);
+Axx4x_	:=	AN4M	(axx4x,al[7],a[6],al[5],al[4]);
+Axx5x_	:=	AN4	(axx5x,al[7],a[6],al[5],a[4]);
+Axxex_	:=	AN4	(axxex,a[7],a[6],a[5],al[4]);
+
+/*	read strobes	*/
+
+Notmemc1:=	ND4	(notmemc1,i00xx,axx0x,axxx0,oet);
+Memc2r_	:=	AN4H	(memc2r,i00xx,axx0x,axxx2,oet);
+Hcr_	:=	AN4H	(hcr,i00xx,axx0x,axxx4,oet);
+Vcr_	:=	AN4H	(vcr,i00xx,axx0x,axxx6,oet);
+Lphr_	:=	AN4H	(lphr,i00xx,axx0x,axxx8,oet);
+Lpvr_	:=	AN4H	(lpvr,i00xx,axx0x,axxxa,oet);
+Ob0r_	:=	AN4H	(ob0r,i00xx,axx1x,axxx0,oet);
+Ob1r_	:=	AN4H	(ob1r,i00xx,axx1x,axxx2,oet);
+Ob2r_	:=	AN4H	(ob2r,i00xx,axx1x,axxx4,oet);
+Ob3r_	:=	AN4H	(ob3r,i00xx,axx1x,axxx6,oet);
+Test2r	:=	AN4H	(test2r,i00xx,axx2x,axxx0,oet);
+Test3r	:=	AN4H	(test3r,i00xx,axx2x,axxx2,oet);
+Pit0r_	:=	AN4H	(pit0r,i00xx,axx5x,axxx0,oet);
+Pit1r_	:=	AN4H	(pit1r,i00xx,axx5x,axxx2,oet);
+
+Intr	:=	AN4H	(intr,i00xx,axxex,axxx0,oet);
+
+Lbrar	:=	AN4H	(lbrar,i02xx,axx0x,axxx0,oet);
+
+(*
+ in order to stop dr[0-15] floating enable memcon1 when nothing else
+ is being read
+*)
+
+Float1 :=	OR8	(float1,lbbr,memc2r,hcr,vcr,lphr,lpvr,ob0r,ob1r);
+Float2 :=	OR4	(float2,ob2r,ob3r,lbrar,test2r);
+Float3 :=	OR8	(float3,test3r,intr,pit0r,pit1r,lbar,clutr,gb1r,gb2r);
+Float4 :=	NR3	(float4,float1,float2,float3);
+Floaten :=	ND2	(floaten,oet,intdev);
+Float5 :=	ND2	(float5,float4,floaten);
+Memc1r :=	ND2X3	(memc1r,notmemc1,float5);
+
+/*	write strobes	*/
+
+Memc1w_	:=	AN4H	(memc1w,i00xx,axx0x,axxx0,wet);
+Memc2w_	:=	AN4H	(memc2w,i00xx,axx0x,axxx2,intswe);
+Hcw_	:=	AN4H	(hcw,i00xx,axx0x,axxx4,writes);
+Vcw_	:=	AN4H	(vcw,i00xx,axx0x,axxx6,writes);
+Olp1w_	:=	AN4H	(olp1w,i00xx,axx2x,axxx0,wet);
+Olp2w_	:=	AN4H	(olp2w,i00xx,axx2x,axxx2,wet);
+Obfw_	:=	AN4	(obfw,i00xx,axx2x,axxx6,writes);
+Vmodew_	:=	AN4H	(vmodew,i00xx,axx2x,axxx8,intwe);
+Bord1w_	:=	AN4H	(bord1w,i00xx,axx2x,axxxa,wet);
+Bord2w_	:=	AN4H	(bord2w,i00xx,axx2x,axxxc,wet);
+Hpw_	:=	AN4H	(hpw,i00xx,axx2x,axxxe,wet);
+Hbbw_	:=	AN4H	(hbbw,i00xx,axx3x,axxx0,wet);
+Hbew_	:=	AN4H	(hbew,i00xx,axx3x,axxx2,wet);
+Hsw_	:=	AN4H	(hsw,i00xx,axx3x,axxx4,wet);
+Hvsw_	:=	AN4H	(hvsw,i00xx,axx3x,axxx6,wet);
+Hdb1w_	:=	AN4H	(hdb1w,i00xx,axx3x,axxx8,wet);
+Hdb2w_	:=	AN4H	(hdb2w,i00xx,axx3x,axxxa,wet);
+Hdew_	:=	AN4H	(hdew,i00xx,axx3x,axxxc,wet);
+Vpw_	:=	AN4H	(vpw,i00xx,axx3x,axxxe,wet);
+Vbbw_	:=	AN4H	(vbbw,i00xx,axx4x,axxx0,wet);
+Vbew_	:=	AN4H	(vbew,i00xx,axx4x,axxx2,wet);
+Vsw_	:=	AN4H	(vsw,i00xx,axx4x,axxx4,wet);
+Vdbw_	:=	AN4H	(vdbw,i00xx,axx4x,axxx6,wet);
+Vdew_	:=	AN4H	(vdew,i00xx,axx4x,axxx8,wet);
+Vebw_	:=	AN4H	(vebw,i00xx,axx4x,axxxa,wet);
+Veew_	:=	AN4H	(veew,i00xx,axx4x,axxxc,wet);
+Viw_	:=	AN4H	(viw,i00xx,axx4x,axxxe,wet);
+Pit0w_	:=	AN4	(pit0w,i00xx,axx5x,axxx0,intswe);
+Pit1w_	:=	AN4	(pit1w,i00xx,axx5x,axxx2,intswe);
+Heqw_	:=	AN4H	(heqw,i00xx,axx5x,axxx4,wet);
+Test1w_	:=	AN6	(test1w,a00xx,axx5x,axxx6,writes,intdev,vcc);
+Bgw_	:=	AN4H	(bgwr,i00xx,axx5x,axxx8,wet);
+
+Intw	:=	AN4	(int1w,i00xx,axxex,axxx0,writes);
+Int2w	:=	AN4	(int2w,i00xx,axxex,axxx2,writes);
+
+Lbraw	:=	AN4H	(lbraw,i02xx,axx0x,axxx0,writes);
+
+/* internal memory enables */
+
+Lbar	:=	AN2	(lbar,lba,reads);
+Lbbr	:=	AN2	(lbbr,lbb,reads);
+Clutr	:=	AN2	(clutr,clut,reads);
+Gb1r	:=	AN4	(gb1r,a[13],intdev,reads,notourack);
+Gb2r	:=	AN4	(gb2r,a[14],intdev,reads,notourack);
+Notourack :=	IV	(notourack,ourack);
+
+/* identify when the slow bus is in use
+ this is for ROMs, joysticks and other non DSP IO */
+
+Dspcs :=	IV (dspcs,dspcsl);
+Exiol :=	ND3 (exiol,dspcs,a[14],al[15]);
+Expl :=		AN3 (expl,exiol,romcsl[0..1]);
+
+END;
+
+

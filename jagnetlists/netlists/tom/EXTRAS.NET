@@ -1,0 +1,87 @@
+/*
+Extra modules for Toshiba version of the logic
+
+These are models are built from Toshiba primitives by putting gates
+in parallel and cannot be described as such in the FLARE simulator
+*/
+
+COMPILE;
+
+MODULE NIVU2/// ;
+INPUTS A;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = NIVU (A);
+Y_ (Z) = NIVU (A);
+END MODULE;
+
+MODULE NIVU3/// ;
+INPUTS A;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = NIVU (A);
+Y_ (Z) = NIVU (A);
+X_ (Z) = NIVU (A);
+END MODULE;
+
+MODULE NIVU4/// ;
+INPUTS A;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = NIVU (A);
+Y_ (Z) = NIVU (A);
+X_ (Z) = NIVU (A);
+W_ (Z) = NIVU (A);
+END MODULE;
+
+MODULE BNIV310/// ;
+INPUTS A;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = BNIV3 (A);
+Y_ (Z) = BNIV3 (A);
+X_ (Z) = BNIV3 (A);
+W_ (Z) = BNIV3 (A);
+V_ (Z) = BNIV3 (A);
+U_ (Z) = BNIV3 (A);
+T_ (Z) = BNIV3 (A);
+S_ (Z) = BNIV3 (A);
+R_ (Z) = BNIV3 (A);
+Q_ (Z) = BNIV3 (A);
+END MODULE;
+
+MODULE ND2X2/// ;
+INPUTS A,B;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = ND2 (A,B);
+Y_ (Z) = ND2 (A,B);
+END MODULE;
+
+MODULE ND2X3/// ;
+INPUTS A,B;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = ND2 (A,B);
+Y_ (Z) = ND2 (A,B);
+X_ (Z) = ND2 (A,B);
+END MODULE;
+
+MODULE OR2X3/// ;
+INPUTS A,B;
+OUTPUTS Z;
+LEVEL FUNCTION;
+DEFINE
+Z_ (Z) = OR2 (A,B);
+Y_ (Z) = OR2 (A,B);
+X_ (Z) = OR2 (A,B);
+END MODULE;
+
+END COMPILE;
+END TDL;

@@ -1,0 +1,673 @@
+(*****************************************************************
+
+	obdata.net
+
+This module is responsible for expanding image data into pixels
+in the line buffer in the jaguar object processor
+
+******************************************************************)
+
+IMPORT 	tosh,		(* Toshiba gate & pad definitions *)
+	lego;
+
+
+DEF 	OBDATA	(aout[9],din[0..15],reads,palen,clutt,d[0..63],
+		obdlatch,
+		mode1,mode2,mode4,mode8,
+		mode16,mode24,scaledtype,rmw,index[1..7],
+		xld,reflected,transen,xscale[0..7],
+		resetl,clk,obld[1..2],hilo,lbt,at[1..10]:IN;
+
+		obdone,obdready,lbwa[1..9],lbwe[0..1],lbwd[0..31],offscreen,
+		rmw1,lben:IO;
+
+		dr[0..15]:TRI);
+
+
+		INT16/di, INT8/aa, INT8/ab, INT16/pda, INT16/pdb, INT9/xrem,
+		INT16/d9h, INT16/d9l:IO;
+(*
+
+obdlatch	synchronously latches a phrase from the main data bus
+nextphrase	starts the conversion of a phrase into pixels
+mode1,mode2,	determines the number of bits/pixel
+mode4,mode8,
+mode16,mode24
+scaled		asserted when the object is scaled (write one pixel at
+		a time into the line buffer)
+pswap		asserted when writing objects to an odd address in the line
+		buffer
+index[1..7]	palette index
+phdone		asserted when all the bits in the input phrase have
+		been used
+aout[0..7]	address for external palette read/write
+din[0..15]	data for external palette writes
+palen		palette address decode
+xld		loads the line buffer address from the object
+nextx		increments(decrements) the line buffer address
+		decrements xrem by one
+nextbits	steps onto the next bits in the phrase
+		adds xscale to xrem
+		NB if nextx and nextbits are asserted xrem += xscale-1
+reflected	determines drawing direction
+offscreen	indicates that the line buffer address is outside the
+		range 0-719 so drawing is complete
+*)
+
+	INT6/pa:IO;
+
+BEGIN
+
+Pa :=		JOIN (pa,pa[0..5]);
+Pau :=		DUMMY (pa);
+Xrem :=		JOIN (xrem,xrem[0..8]);
+Xremu :=	DUMMY (xrem);
+
+(* Latch the data from the bus *)
+
+Obdclk :=	NIVU2 (obdclk,obdlatch);
+D1[0-63] :=	SLATCH (d1[0-63],d[0-63],clk,obdclk);
+D2[0-63] :=	SLATCH (d2[0-63],d1[0-63],clk,nextphrase);
+
+(* latch the type so it cannot change when the next header comes in *)
+
+Scaledi :=	LDP1Q (scaledi,scaledtype,obdclk);
+Scaled :=	NIVM (scaled,scaledi);
+Rmw1i :=	LDP2Q (rmw1i,rmw,obdclk,resetl);
+Rmw1 :=		NIVU (rmw1,rmw1i);
+
+Empty :=	OR2 (empty,offscreen,nextphrase);
+Full :=		FJK2 (full,notfull,obdlatch,empty,clk,resetl);
+
+(* obdready is asserted whenever more data can be accepted *)
+(* obdready = !full * !obdlatch + nextphrase + idle *)
+
+Notobdl :=	IV (notobdlatch,obdlatch);
+Empty0 :=	ND2 (empty0,notfull,notobdlatch);
+Empty1 :=	IV (empty1,nextphrase);
+Empty2 :=	IV (empty2,smq0);
+/* TOM as signed-off */
+Obdready :=	ND3 (obdready,empty0,empty1,empty2);
+/* TOM2
+Empty3 :=	ND3 (empty3,mode16,notscaled,notrmw);
+Obdready :=	ND4 (obdready,empty0,empty1,empty2,empty3);
+*/
+
+(* Multiplex into 2 x 32, 4 x 16, 8 x 8 etc bit fields *)
+
+D3[0-31] :=	MX2 (d3[0-31],d2[0-31],d2[32-63],pa[5]);
+D4[0-15] :=	MX2 (d4[0-15],d3[0-15],d3[16-31],pa[4]);
+D5[0-7] :=	MX2 (d5[0-7],d4[0-7],d4[8-15],pa[3]);
+D6[0-3] :=	MX2 (d6[0-3],d5[0-3],d5[4-7],pa[2]);
+D7[0-1] :=	MX2 (d7[0-1],d6[0-1],d6[2-3],pa[1]);
+
+(* mix 1,2 & 4 bit data with the index *)
+
+Pra00	:=	ND2 (pra00,d7[0],mode1);
+Pra01	:=	ND2 (pra01,d6[0],mode2);
+Pra02	:=	ND2 (pra02,d5[0],mode4);
+Pra03	:=	ND2 (pra03,d4[0],mode8);
+Pra[0]	:=	ND4 (pra[0],pra00,pra01,pra02,pra03);
+
+Pra10	:=	ND2 (pra10,index[1],mode1);
+Pra11	:=	ND2 (pra11,d6[1],mode2);
+Pra12	:=	ND2 (pra12,d5[1],mode4);
+Pra13	:=	ND2 (pra13,d4[1],mode8);
+Pra[1]	:=	ND4 (pra[1],pra10,pra11,pra12,pra13);
+
+Pra20	:=	ND2 (pra20,index[2],mode1);
+Pra21	:=	ND2 (pra21,index[2],mode2);
+Pra22	:=	ND2 (pra22,d5[2],mode4);
+Pra23	:=	ND2 (pra23,d4[2],mode8);
+Pra[2]	:=	ND4 (pra[2],pra20,pra21,pra22,pra23);
+
+Pra30	:=	ND2 (pra30,index[3],mode1);
+Pra31	:=	ND2 (pra31,index[3],mode2);
+Pra32	:=	ND2 (pra32,d5[3],mode4);
+Pra33	:=	ND2 (pra33,d4[3],mode8);
+Pra[3]	:=	ND4 (pra[3],pra30,pra31,pra32,pra33);
+
+Pra[4] :=	MX2 (pra[4],index[4],d4[4],mode8);
+Pra[5] :=	MX2 (pra[5],index[5],d4[5],mode8);
+Pra[6] :=	MX2 (pra[6],index[6],d4[6],mode8);
+Pra[7] :=	MX2 (pra[7],index[7],d4[7],mode8);
+
+Prb00	:=	ND2 (prb00,d7[1],mode1);
+Prb01	:=	ND2 (prb01,d6[2],mode2);
+Prb02	:=	ND2 (prb02,d5[4],mode4);
+Prb03	:=	ND2 (prb03,d4[8],mode8);
+Prb[0]	:=	ND4 (prb[0],prb00,prb01,prb02,prb03);
+
+Prb10	:=	ND2 (prb10,index[1],mode1);
+Prb11	:=	ND2 (prb11,d6[3],mode2);
+Prb12	:=	ND2 (prb12,d5[5],mode4);
+Prb13	:=	ND2 (prb13,d4[9],mode8);
+Prb[1]	:=	ND4 (prb[1],prb10,prb11,prb12,prb13);
+
+Prb20	:=	ND2 (prb20,index[2],mode1);
+Prb21	:=	ND2 (prb21,index[2],mode2);
+Prb22	:=	ND2 (prb22,d5[6],mode4);
+Prb23	:=	ND2 (prb23,d4[10],mode8);
+Prb[2]	:=	ND4 (prb[2],prb20,prb21,prb22,prb23);
+
+Prb30	:=	ND2 (prb30,index[3],mode1);
+Prb31	:=	ND2 (prb31,index[3],mode2);
+Prb32	:=	ND2 (prb32,d5[7],mode4);
+Prb33	:=	ND2 (prb33,d4[11],mode8);
+Prb[3]	:=	ND4 (prb[3],prb30,prb31,prb32,prb33);
+
+Prb[4] :=	MX2 (prb[4],index[4],d4[12],mode8);
+Prb[5] :=	MX2 (prb[5],index[5],d4[13],mode8);
+Prb[6] :=	MX2 (prb[6],index[6],d4[14],mode8);
+Prb[7] :=	MX2 (prb[7],index[7],d4[15],mode8);
+
+(* Multiplex these indices with external palette addresses *)
+
+Paad[0-7] :=	MX2P (paad[0-7],pra[0-7],at[1-8],clutt);
+Pabd[0-7] :=	MX2P (pabd[0-7],prb[0-7],at[1-8],clutt);
+
+(* latch these addresses to provide address setup *)
+
+Pral[0-7] :=	FD1Q (paaq[0-7],paad[0-7],clk);
+Prbl[0-7] :=	FD1Q (pabq[0-7],pabd[0-7],clk);
+
+Paa[0-7] :=   HDLY2B (paa[0-7],paaq[0-7]);
+Pab[0-7] :=   HDLY2B (pab[0-7],pabq[0-7]);
+ 
+Aa :=		JOIN (aa,paa[0..7]);
+Ab :=		JOIN (ab,pab[0..7]);
+
+(* The palette *)
+
+Ncst :=         IVH (ncst,clk);
+Busy :=		IV (busy,smq0);
+Busy1 :=	FD1Q (busy1,busy,clk);
+Cs :=		OR2 (cs,palen,busy1);
+Csl :=		ND2X3 (csl,ncst,cs);
+
+Clut1 :=	AB8016A (pda, csl,prw,aa);
+Clut2 :=	AB8016A (pdb, csl,prw,ab);
+
+(* select appropriate palette data for reading *)
+
+Pdi[0-15] :=	MX2 (pdi[0-15],pda{0-15},pdb{0-15},aout[9]);
+Pd[0-15] :=	FD1Q (pd[0-15],pdi[0-15],clk);
+Dr[0-15] :=	TS (dr[0-15],pd[0-15],pden);
+Pdeni :=	ND2 (pdeni,palen,reads);
+Pden :=		IVH (pden,pdeni);
+
+(* enable external data except when reading palette *)
+
+Pwdeni :=	NR2 (pwdeni,busy1,pden);
+Pwden :=	NIVU (pwden,pwdeni);
+Di :=		JOIN (di,din[0..15]);
+Pwda :=		TS (pda,di,pwden);
+Pwdb :=		TS (pdb,di,pwden);
+
+(* generate the palette write strobe *)
+
+Iw :=		IV (writes,reads);
+Prw :=		ND2 (prw,writes,palen);
+
+(* select either the output from the palette or 32 bits from the source data *)
+
+Physicali :=	OR2 (physicali,mode16,mode24);
+Physical :=	NIVU2 (phys,physicali);
+Hilob :=	NIVU (hilob,hilo);
+
+(* swap pixel pairs if hilo *)
+
+D8[0-15] := MX4(d8[0-15],pda{0-15},d3[0-15],pdb{0-15},d3[16-31],phys,hilob);
+D8[16-31] := MX4(d8[16-31],pdb{0-15},d3[16-31],pda{0-15},d3[0-15],phys,hilob);
+
+(* Latch this data for writing into line buffer *)
+
+D9[0-31] :=	FD1Q (d9[0-31],d8[0-31],clk);
+D9l :=		JOIN (d9l,d9[0..15]);
+D9lu :=		DUMMY (d9l);
+D9h :=		JOIN (d9h,d9[16..31]);
+D9hu :=		DUMMY (d9h);
+
+(*
+Timing for 8 bit RMW pixels
+
+		  __    __    __    __    __    __    __    __    __    __
+Clk		_/  \__/  \__/  \__/  \__/  \__/  \__/  \__/  \__/  \__/  \__/
+		  _____
+Obdlatch	_/     \______________________________________________________
+		        _____                                           ______
+Nextphrase	_______/     \_________________________________________/
+		        _____       _____       _____       _____       ______
+Nextbits	_______/     \_____/     \_____/     \_____/     \_____/
+		_____________                                      ___________
+Phdone		_____________\____________________________________/
+       		______________ ___________ ___________ ___________ ___________
+Pa[0..5]	______________X_____0_____X____10h____X____20h____X____30h____X
+		____________________ ___________ ___________ ___________ ______
+D9[0-31]	____________________X_____0_____X_____1_____X_____2_____X_____3
+		              _____       _____       _____       _____
+Nextbits1	_____________/     \_____/     \_____/     \_____/     \_____/
+		________________________________ ___________ ___________ ______
+DA[0-15]	________________________________X_____0_____X_____1_____X_____2
+		                            __          __          __
+Lbuf we		___________________________/  \________/  \________/  \_______
+
+*)
+
+(*
+the odd pixel must be saved for the next cycle if:-
+If we are writing a unreflected object to an odd address
+Or if we are writing a unscaled reflected object to any address
+
+If writing a scaled object we write one pixel at a time
+the signal pswap is then used to determine which pixel goes to which half
+of the line buffer
+*)
+
+Nextbits1 :=	FD1Q (nextbits1,nextbits,clk);
+Nextbits2 :=	FD1Q (nextbits2,nextbits1,clk);
+Delpixi :=	MX2 (delpixi,nextbits2,nextbits1,phys);
+Delpix :=	NIVH (delpix,delpixi);
+Da[0-15] :=	SLATCH (da[0-15],d9[16-31],clk,delpix);
+
+Del1 :=		EO (del1,lbwa[0],reflected);
+Delayed :=	AN2H (delayed,del1,notscaled);
+
+Db[0-15] :=	MX2 (db[0-15],d9[16-31],da[0-15],delayed);
+
+Lbwd[0-15] :=	MX2 (lbwd[0-15],d9[0-15],db[0-15],pswap);
+Lbwd[16-31] :=	MX2 (lbwd[16-31],db[0-15],d9[0-15],pswap);
+
+
+(*
+The logical pixels are selected by a six bit counter
+each stage of the counter has an independent enable
+which depends on the size of the pixels
+eg if mode4 is set the counter counts in steps of eight because eight
+bits are used at a time.
+If writing a scaled object the pixels are written one at a time
+bit pa[0] selects which pixel and it must be set to enable higher stages
+to count
+*)
+
+Pa[0] :=	UPCNTS (pa[0],co[0],ip[0],clk,ci[0],nextphrase,reset);
+Pad[1] :=	UPCNTS (pad[1],co[1],ip[1],clk,ci[1],nextphrase,reset);
+Pad[2] :=	UPCNTS (pad[2],co[2],ip[2],clk,ci[2],nextphrase,reset);
+Pad[3] :=	UPCNTS (pad[3],co[3],ip[3],clk,ci[3],nextphrase,reset);
+Pad[4] :=	UPCNTS (pad[4],co[4],ip[4],clk,ci[4],nextphrase,reset);
+Pad[5] :=	UPCNTS (pad[5],co[5],ip[5],clk,ci[5],nextphrase,reset);
+Gnd :=		TIE0(gnd);
+Pai[1-5] :=	EN (pai[1-5],pad[1-5],hilo);
+Pa[1-3] :=	IVM (pa[1-3],pai[1-3]);
+Pa[4] :=	IVH (pa[4],pai[4]);
+Pa[5] :=	IVU (pa[5],pai[5]);
+
+Reset :=	IV (reset,resetl);
+
+(* The first pixel is specified by d[49..54] in the second phrase *)
+
+Ipd[0-5] :=	AN2 (ipd[0-5],d[49-54],obld[1]);
+Ip[0-5] :=	SLATCH (ip[0-5],ipd[0-5],clk,nip);
+Nip :=		OR2 (nip,obld[1],nextphrase);
+
+Ci[0] :=	AN2 (ci[0],scaled,nextbits);
+
+Notscaled :=	IVM (notscaled,scaled);
+P2done :=	OR2X3 (p2done,pa[0],notscaled);
+
+Ci[1] :=	AN3 (ci[1],mode1,nextbits,p2done);
+Cil[2] :=	ND3 (cil[2],mode2,nextbits,p2done);
+Cil[3] :=	ND3 (cil[3],mode4,nextbits,p2done);
+Cil[4] :=	ND3 (cil[4],mode8,nextbits,p2done);
+Cil[5] :=	ND3 (cil[5],modew,nextbits,p2done);
+
+Ci[2-5] :=	ND2 (ci[2-5],cil[2-5],col[1-4]);
+
+Col[1-4] :=	IV (col[1-4],co[1-4]);
+Modew :=	OR2 (modew,mode16,mode24);	(* asserted for 16 & 24 bits *)
+
+(* phdone is asserted when the last of the source data is selected *)
+
+Vcc :=		TIE1 (vcc);
+Phd[1] :=	ND8 (phd[1],p2done,pad[1..5],mode1,vcc);
+Phd[2] :=	ND6 (phd[2],p2done,pad[2..5],mode2);
+Phd[3] :=	ND6 (phd[3],p2done,pad[3..5],mode4,vcc);
+Phd[4] :=	ND4 (phd[4],p2done,pad[4..5],mode8);
+Phd[5] :=	ND3 (phd[5],p2done,pad[5],modew);
+Phdone :=	ND6 (phdone,phd[1..5],vcc);
+Notphdone :=	IV (notphdone,phdone);
+
+(*
+generate a line buffer address
+the address is incremented by two unless scaled
+the lowest bit is used to generate write strobes
+nextx is delayed by one cycle so the address is in time with the pixels
+
+*)
+
+Nextx1 :=	FD1Q (nextx1,nextx,clk);
+Nextxx :=	MX2 (nextxx,nextx1,nextx,phys);
+
+Lbwad[0] :=	UDCNT (lbwad[0],lco[0],d[0],clk,lci[0],xld,up);
+Lbwad[1] :=	UDCNT (lbwad[1],lco[1],d[1],clk,lci[1],xld,up);
+Lbwad[2-11] :=	UDCNT (lbwad[2-11],lco[2-11],d[2-11],clk,lco[1-10],xld,up);
+
+Lbwadd[0-9] :=	MX2 (lbwadd[0-9],lbwad[0-9],at[1-10],lbt);
+Lbwa[0-9] :=	FD1Q (lbwa[0-9],lbwadd[0-9],clk);
+
+Up :=		IVH (up,reflected);
+Lci[0] :=	AN2 (lci[0],nextxx,scaled);
+
+Lcil[1] :=	ND2 (lcil[1],nextxx,notscaled);
+Lci[1] :=	ND2 (lci[1],lcil[1],lcol[0]);
+Lcol[0] :=	IV (lcol[0],lco[0]);
+
+(*
+onscreen is asserted if the address is in the range 0-719
+offscreen is asserted if the address is outside this range AND will not
+increment(decrement) into range
+*)
+
+(*
+In order to test the address subtract 720 from it
+this is done by adding the complement of 720 plus 1 to the address
+If there is a carry then the address >= 720
+
+The truth table of a full adder is
+
+	A B C | S C
+	-----------
+	0 0 0 | 0 0
+	0 0 1 | 1 0
+	0 1 0 | 1 0
+	0 1 1 | 0 1
+	------|-----
+	1 0 0 | 1 0
+	1 0 1 | 0 1
+	1 1 0 | 0 1
+	1 1 1 | 1 1
+
+If the complement of 720 is fed into the 'A' input of the adder and
+as the sum output is not needed it can be seen that where the A input
+is a zero the carry can be produced by an AND gate and where the A input
+is a one the carry can be produced by an OR gate.
+
+The complement of 720 is 1101 0010 1111B
+
+So the equation for carry out becomes
+
+(((((1+a[0]+a[1]+a[2]+a[3])*a[4])+a[5])*a[6]*a[7])+a[8])*a[9])+a[10]+a[11]
+
+((((a[4]+a[5])*a[6]*a[7])+a[8])*a[9])+a[10]+a[11]
+
+Which can be converted into nand gates
+
+*)
+
+Nota[4] :=	IV (nota[4],lbwad[4]);
+Nota[5] :=	IV (nota[5],lbwad[5]);
+Nota[8] :=	IV (nota[8],lbwad[8]);
+Nota[10] :=	IV (nota[10],lbwad[10]);
+Nota[11] :=	IV (nota[11],lbwad[11]);
+
+c[5] :=		ND2 (c[5],nota[4..5]);
+c[7] := 	ND3 (c[7],c[5],lbwad[6..7]);
+c[8] :=		ND2 (c[8],c[7],nota[8]);
+c[9] :=		ND2 (c[9],c[8],lbwad[9]);
+c[11] :=	ND3 (c[11],c[9],nota[10..11]);
+
+Left :=		NIV (left,lbwad[11]);
+Right :=	AN2 (right,c[11],nota[11]);
+
+Onscreen :=	NR2 (onscreen,left,right);
+Offscreeni :=	MX2 (offscreeni,right,left,reflected);
+Offscreen :=	NIVM (offscreen,offscreeni);
+Notoffscreen :=	IVM (notoffscreen,offscreen);
+
+(*
+test for transparent pixels
+for mode1 to mode8 a pixel is transparent if the logical colour
+(without index) is zero
+for mode16 physical colour 0 is transparent (8800h is black!)
+*)
+
+Zero1a :=	IV (zero1a,d7[0]);
+Zero2a :=	NR2 (zero2a,d6[0..1]);
+Zero4a :=	NR4 (zero4a,d5[0..3]);
+Zero8a :=	NR8 (zero8a,d4[0..7]);
+Zero16a0 :=	NR8 (zero16a0,d3[0..7]);
+Zero16a1 :=	NR8 (zero16a1,d3[8..15]);
+
+Trans1a :=	ND2 (trans1a,mode1,zero1a);
+Trans2a :=	ND2 (trans2a,mode2,zero2a);
+Trans4a :=	ND2 (trans4a,mode4,zero4a);
+Trans8a :=	ND2 (trans8a,mode8,zero8a);
+Trans16a :=	ND3 (trans16a,mode16,zero16a0,zero16a1);
+Transa :=	ND6 (transa,trans1a,trans2a,trans4a,trans8a,trans16a,vcc);
+
+Nottransa :=	ND2 (nottransa,transa,transen);
+
+Zero1b :=	IV (zero1b,d7[1]);
+Zero2b :=	NR2 (zero2b,d6[2..3]);
+Zero4b :=	NR4 (zero4b,d5[4..7]);
+Zero8b :=	NR8 (zero8b,d4[8..15]);
+Zero16b0 :=	NR8 (zero16b0,d3[16..23]);
+Zero16b1 :=	NR8 (zero16b1,d3[24..31]);
+
+Trans1b :=	ND2 (trans1b,mode1,zero1b);
+Trans2b :=	ND2 (trans2b,mode2,zero2b);
+Trans4b :=	ND2 (trans4b,mode4,zero4b);
+Trans8b :=	ND2 (trans8b,mode8,zero8b);
+Trans16b :=	ND3 (trans16b,mode16,zero16b0,zero16b1);
+Transb :=	ND6 (transb,trans1b,trans2b,trans4b,trans8b,trans16b,vcc);
+
+Nottransb :=	ND2 (nottransb,transb,transen);
+
+(* The pixel generator state machine
+
+
+0	idle	if (full) {
+			assert nextphrase
+			if (rmw) goto 1
+			else goto 2
+		}
+		else goto 0
+
+1	read	if (offscreen) goto 0
+		else goto 2
+
+2	write	if (offscreen) goto 0
+		else {
+			assert lbwe
+			if (scaled) {
+				if (xrem >= 2) {
+					assert nextx
+					if (rmw) goto 1
+					else goto 2
+				}
+				else if (2 > xrem >= 1) {
+					assert nextx,nextbits
+					if (phdone & full) assert nextphrase
+					if (phdone & not full) goto 0
+                       	        	else if (rmw) goto 1
+					else goto 2
+				}
+				else if (xrem < 1) {
+					assert nextbits
+					if (phdone & full) assert nextphrase
+					if (phdone & not full) goto 0
+                       	        	else if (rmw) goto 1
+					else goto 2
+				}
+			}
+			else {
+				assert nextx,nextbits
+				if (phdone & full) assert nextphrase
+				if (phdone & not full) goto 0
+                       		else if (rmw) goto 1
+				else goto 2
+			}
+		}
+	}
+*)
+
+Idle :=		FD4Q (smq0,smd0,clk,resetl);
+Read :=		FD2Q (smq1,smd1,clk,resetl);
+Write :=	FD2Q (smq2i,smd2,clk,resetl);
+Smq2 :=		NIVM (smq2,smq2i);
+
+D00 :=		ND2 (d00,smq0,notfull);
+D01 :=		ND6 (d01,smq2,scaled,notremgte2,phdone,notfull,vcc);
+D02 :=		ND4 (d02,smq2,notscaled,phdone,notfull);
+D0 :=		ND4 (smd0,d00,d01,d02,notoffscreen);
+
+D10 :=		ND4 (d10,smq0,full,rmw,notoffscreen);
+D11 :=		ND4 (d11,smq2,full,rmw,notoffscreen);
+D12 :=		ND4 (d12,smq2,notphdone,rmw,notoffscreen);
+D13 :=		ND6 (d13,smq2,scaled,remgte2,rmw,notoffscreen,vcc);
+D1 :=		ND4 (smd1,d10,d11,d12,d13);
+
+D20 :=		ND4 (d20,smq0,full,notrmw,notoffscreen);
+D21 :=		ND4 (d21,smq2,full,notrmw,notoffscreen);
+D22 :=		ND4 (d22,smq2,notphdone,notrmw,notoffscreen);
+D23 :=		ND2 (d23,smq1,notoffscreen);
+D24 :=		ND6 (d24,smq2,scaled,remgte2,notrmw,notoffscreen,vcc);
+D2 :=		ND6 (smd2,d20,d21,d22,d23,d24,vcc);
+
+Np0 :=		ND2 (np0,smq0,full);
+Np1 :=		ND6 (np1,smq2,scaled,notremgte2,phdone,full,vcc);
+Np2 :=		ND4 (np2,smq2,notscaled,phdone,full);
+Nextphrasei :=	ND3 (nextphrasei,np0,np1,np2);
+Nextphrase :=	NIVU2 (nextphrase,nextphrasei);
+
+Nx0 :=		ND3 (nx0,smq2,scaled,remgte1);
+Nx1 :=		ND2 (nx1,smq2,notscaled);
+Nextx :=	ND2X2 (nextx,nx0,nx1);
+
+Nb0 :=		ND3 (nb0,smq2,scaled,notremgte2);
+Nb1 :=		ND2 (nb1,smq2,notscaled);
+Nextbitsi :=	ND2 (nextbitsi,nb0,nb1);
+Nextbits :=	NIVH (nextbits,nextbitsi);
+
+Lbwrite :=	NIV (lbwrite,smq2);
+Obdone :=	IV (obdone,d00);
+
+Notrmw :=	IV (notrmw,rmw);
+
+(*
+generate write enables
+the write signals then follow a similar path to their corresponding
+pixels.. sample them to be in time with the d9[0..31]
+*)
+
+/* TOM 1 
+Lbwea1 :=	AN2 (lbwea1,lbwrite,nottransa);
+Lbweb1 :=	AN2 (lbweb1,lbwrite,nottransb);
+*/
+/* TOM 2 Option 1 (hand edit)
+
+Lbwea1 :=	AN2 (lbwea1,lbwrite,nottransb);
+Lbweb1 :=	AN2 (lbweb1,lbwrite,nottransa);
+
+*/
+/* Motorola TOM */
+
+Nntransa :=	MX2 (nntransa,nottransa,nottransb,hilob);
+Nntransb :=	MX2 (nntransb,nottransb,nottransa,hilob);
+Lbwea1 :=	AN2 (lbwea1,lbwrite,nntransa);
+Lbweb1 :=	AN2 (lbweb1,lbwrite,nntransb);
+
+Lbwea2 :=	FD1Q (lbwea2,lbwea1,clk);	/* delay for logical/physical */
+Lbweb2 :=	FD1Q (lbweb2,lbweb1,clk);
+
+Lbwea4 :=	MX2 (lbwea4,lbwea2,lbwea1,phys);
+Lbweb4 :=	MX2 (lbweb4,lbweb2,lbweb1,phys);
+
+(* hold lbweb4 until next cycle if writing object to odd pixel address *)
+(* in RMW mode this is two clock cycles later *)
+
+Lbweb51 :=	FD1Q (lbweb51,lbweb4,clk);
+Lbweb52 :=	FD1Q (lbweb52,lbweb51,clk);
+Lbweb5 :=	MX2 (lbweb5,lbweb51,lbweb52,rmw1);
+
+Lbweb6 :=	MX2 (lbweb6,lbweb4,lbweb5,delayed);
+
+Lbwea7 :=	MX2 (lbwea7,lbwea4,lbweb6,pswapd);
+Lbweb7 :=	MX2 (lbweb7,lbweb6,lbwea4,pswapd);
+
+Lbwea80 :=      ND3 (lbwea80,lbwea7,notscaled,onscreen);
+Lbwea81 :=      ND6 (lbwea81,lbwea7,scaled,onscreen,notlbwad[0],nextxx,vcc);
+Lbwea8 	:=      ND2 (lbwea8,lbwea80,lbwea81);
+
+Lbweb80 :=      ND3 (lbweb80,lbweb7,notscaled,onscreen);
+Lbweb81 :=      ND6 (lbweb81,lbweb7,scaled,onscreen,lbwad[0],nextxx,vcc);
+Lbweb8 	:=      ND2 (lbweb8,lbweb80,lbweb81);
+
+Lbwe[0] :=	FD1Q (lbwe[0],lbwea8,clk);
+Lbwe[1] :=	FD1Q (lbwe[1],lbweb8,clk);
+
+Notlbwad[0] :=	IV (notlbwad[0],lbwad[0]);
+
+(* line buffer enabled during write cycles and one cycle prior *)
+(* allow two more cycles for delayed rmw pixels *)
+(* allow one more cycle for logical pixels *)
+(* generate syncronously *)
+
+Lbw1 :=		FD1Q (lbw1,lbwrite,clk);
+Lbw2 :=		FD1Q (lbw2,lbw1,clk);
+Lbw3 :=		FD1Q (lbw3,lbw2,clk);
+Lbend :=	OR6 (lbend,smd2,lbwrite,lbw1,lbw2,lbw3,gnd);
+Lbeni :=	FD2Q (lbeni,lbend,clk,resetl);
+Lben :=		NIVH (lben,lbeni);
+
+(*
+pswap is asserted
+
+if writing oddly aligned non scaled objects
+if writing an even pixel to an odd address (& vice versa) in scaled objects
+
+pa[0] must be delayed by one or two clocks to keep it in time with the pixels
+
+*)
+
+Pa1[0] :=	FD1Q (pa1[0],pa[0],clk);
+Pa2[0] :=	MX2 (pa2[0],pa1[0],pa[0],phys);
+Oddeven :=	EO (oddeven,lbwad[0],pa2[0]);
+Pswapd :=	MX2 (pswapd,lbwad[0],oddeven,scaled);
+Pswapi :=	FD1Q (pswapi,pswapd,clk);
+Pswap :=	NIVU (pswap,pswapi);
+
+(*
+The remainder register stores the number of pixels yet to be written from
+the currently selected image bits
+*)
+
+Xrem[0-8] :=	FD1Q (xrem[0-8],xrd[0-8],clk);
+
+Sum[0] :=	HA1 (sum[0],sc[0],xrem[0],xscale[0]);
+Sum[1-6] :=	FA1 (sum[1-6],sc[1-6],xrem[1-6],xscale[1-6],sc[0-5]);
+Sum[7] :=	FA1 (sum[7],sum[8],xrem[7],xscale[7],sc[6]);
+
+Xs[0-8] :=	MX2 (xs[0-8],xrem[0-8],sum[0-8],nextbits);
+
+Diff[5] :=	HA1 (diff[5],dc[5],xs[5],nextx);
+Diff[6-8] :=	FA1 (diff[6-8],dc[6-8],xs[6-8],nextx,dc[5-7]);
+
+(* xrem is initialised with hscale which comes directly off the bus *)
+
+Xrd[0-4] :=	MX2 (xrd[0-4],xs[0-4],d[0-4],obld[2]);
+Xrd[5-7] :=	MX2 (xrd[5-7],diff[5-7],d[5-7],obld[2]);
+Xrd[8] :=	MX2 (xrd[8],diff[8],gnd,obld[2]);
+
+Notremgte2i :=	NR3 (notremgte2i,xrem[6..8]);
+Notremgte2 :=	NIV (notremgte2,notremgte2i);
+Remgte2 :=	IV (remgte2,notremgte2);
+Remgte1 :=	OR4 (remgte1,xrem[5..8]);
+
+Co[0] :=	DUMMY (co[0]);
+Co[5] :=        DUMMY (co[5]);
+Lco[11] :=      DUMMY (lco[11]);
+Dc[7] :=        DUMMY (dc[8]); 
+
+END;
+

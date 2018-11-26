@@ -1,0 +1,113 @@
+/******************************************************************
+srcshift
+27/11/90
+
+Source data shifter
+-------------------
+This module contains the shift register for aligning source data 
+with the destination data.  It operates across the full sixty-four
+bits down to byte alignment, the bottom 4 bits are aligned as
+necessary for 1, 2 and 4 bit per pixel modes.
+
+Either the top or bottom three bits of the shift value are always
+zero.
+
+******************************************************************/
+
+IMPORT tosh, duplo;
+
+DEF SRCSHIFT (
+INT32/	srcd[0..1]
+	:OUT;
+	big_pix		/* Pixel organisation is big-endian */
+INT32/	srcd1lo
+INT32/	srcd1hi
+INT32/	srcd2lo
+INT32/	srcd2hi
+	srcshift[0..5]	/* source alignment shift */
+	:IN);
+
+BEGIN
+
+Unshsrc[0-31]	:= JOIN (shsrc[0-31], srcd2lo{0-31});
+Unshsrc[32-63]	:= JOIN (shsrc[32-63], srcd2hi{0-31});
+Unshsrc[64-95]	:= JOIN (shsrc[64-95], srcd1lo{0-31});
+Unshsrc[96-127]	:= JOIN (shsrc[96-127], srcd1hi{0-31});
+
+Srcshift\[0-5]	:= IV (srcshift\[0-5], srcshift[0-5]);
+
+/* When in big-endian mode, the bit shift is negated */
+
+Besh[1]		:= HA1 (besh[1], bec[1], srcshift\[0], 
+			srcshift\[1]);
+Besh[2]		:= EO  (besh[2], bec[1], srcshift\[2]);
+
+/* When in big-endian mode, the byte shift distance is given by 
+128 - the shift amount */
+
+Besh[4]		:= HA1 (besh[4], bec[4], srcshift\[3], 
+			srcshift\[4]);
+Besh[5]		:= HA1 (besh[5], bec[5], bec[4], srcshift\[5]);
+Besh[6]		:= IV (besh[6], bec[5]);
+
+Shift[0]	:= NIVM (shift[0], srcshift[0]);
+Shift[1]	:= MX2M (shift[1], srcshift[1], besh[1], big_pix);
+Shift[2]	:= MX2M (shift[2], srcshift[2], besh[2], big_pix);
+Shiftt[3]	:= NIV (shiftt[3], srcshift[3]);
+Shiftt[4]	:= MX2 (shiftt[4], srcshift[4], besh[4], big_pix);
+Shiftt[5]	:= MX2 (shiftt[5], srcshift[5], besh[5], big_pix);
+Shiftt[6]	:= AN2 (shiftt[6], besh[6], big_pix);
+
+Shift[3]	:= NIVU2 (shift[3], shiftt[3]);
+Shift[4]	:= NIVU2 (shift[4], shiftt[4]);
+Shift[5]	:= NIVU3 (shift[5], shiftt[5]);
+Shift[6]	:= NIVU3 (shift[6], shiftt[6]);
+
+/* Shift one phrase */
+
+Onep[8-63]	:= MX2 (onep[8-63], shsrc[8-63], shsrc[72-127],
+			shift[6]);
+Onep[64-127]	:= MX2 (onep[64-127], shsrc[64-127], shsrc[0-63],
+			shift[6]);
+
+/* Shift one long */
+
+Onel[40-127]	:= MX2 (onel[40-127], onep[40-127], onep[8-95],
+			shift[5]);
+
+/* Shift one word */
+
+Onew[56-127]	:= MX2 (onew[56-127], onel[56-127], onel[40-111], 
+			shift[4]);
+
+/* Shift one byte */
+
+Oneb[64-127]	:= MX2 (oneb[64-127], onew[64-127], onew[56-119], 
+			shift[3]);
+
+/* Shift one nybble */
+
+Onen[64-67]	:= MX2 (onen[64-67], oneb[64-67], oneb[68-71]
+			shift[2]);
+Onen[68-71]	:= MX2 (onen[68-71], oneb[68-71], oneb[64-67]
+			shift[2]);
+
+/* Shift two bits */
+
+Onet[64-65]	:= MX2 (onet[64-65], onen[64-65], onen[70-71], 
+			shift[1]);
+Onet[66-71]	:= MX2 (onet[66-71], onen[66-71], onen[64-69], 
+			shift[1]);
+
+/* Shift one bit */
+
+Oneo[64]	:= MX2 (oneo[64], onet[64], onet[71], 
+			shift[0]);
+Oneo[65-71]	:= MX2 (oneo[65-71], onet[65-71], onet[64-70], 
+			shift[0]);
+
+
+Srcd[0]		:= JOIN (srcd[0], oneo[64..71], oneb[72..95]);
+Srcd[1]		:= JOIN (srcd[1], oneb[96..127]);
+
+END;

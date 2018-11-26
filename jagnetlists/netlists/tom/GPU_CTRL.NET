@@ -1,0 +1,77 @@
+/******************************************************************
+gpu_ctrl.net
+21/2/91
+
+GPU Control Logic and Registers
+-------------------------------
+
+******************************************************************/
+
+IMPORT tosh;
+
+DEF GPU_CTRL (
+	gpu_dout[0..5]	/* GPU bit-wise read bus */
+	gpu_dout[11..15]
+	:TRI;
+	bus_hog		/* GPU bus behaviour on external fetch */
+	cpu_int		/* GPU interrupt to CPU */
+	go		/* GPU execution enable */
+	gpu_irq[0]	/* CPU interrupt to GPU */
+	single_go	/* single step, one instruction advance */
+	single_step	/* single step, enable */
+	:OUT;
+	clk		/* system clock */
+	ctrlwr		/* control register write */
+	ctrlwrgo	/* GPU control register write, GO bit */
+INT32/	gpu_din		/* Graphics processor data bus */
+	reset\		/* System reset */
+	single_stop	/* single-step stop active */
+	statrd		/* GPU status read port */
+	:IN);
+
+BEGIN
+
+One		:= TIE1 (one);
+Zero		:= TIE0 (zero);
+
+/* GPU control register */
+
+Goi		:= MX2 (goi, go, gpu_din{0}, ctrlwrgo);
+Got		:= FD2Q (got, goi, clk, reset\);
+Go		:= NIVH (go, got);
+
+Cpu_intt	:= AN2 (cpu_intt, ctrlwr, gpu_din{1});
+Cpu_int		:= FD1Q (cpu_int, cpu_intt, clk);
+
+Gpu_intt	:= AN2 (gpu_intt, ctrlwr, gpu_din{2});
+Gpu_int		:= FD1Q (gpu_irq[0], gpu_intt, clk);
+
+Single_step	:= FDSYNCR (single_step, gpu_din{3}, ctrlwr, 
+			clk, reset\);
+
+Single_got	:= AN2 (single_got, ctrlwr, gpu_din{4});
+Single_go	:= FD1Q (single_go, single_got, clk);
+
+Bus_hog		:= FDSYNCR (bus_hog, gpu_din{11}, ctrlwr, clk,
+			reset\);
+
+/* read status */
+
+Stat[0]		:= TS (gpu_dout[0], go, statrd);
+Stat[1-2]	:= TS (gpu_dout[1-2], zero, statrd);
+Stat[3]		:= TS (gpu_dout[3], single_stop, statrd);
+Stat[4]		:= TS (gpu_dout[4], zero, statrd);
+Stat[5]		:= TS (gpu_dout[5], zero, statrd);
+Stat[11]	:= TS (gpu_dout[11], bus_hog, statrd);
+
+/* read version number 
+0001 - Toshiba Jaguar 299-pin PGA prototype
+0010 - Toshiba Tom    208-pin QFP first release
+*/
+
+Stat[12]	:= TS (gpu_dout[12], zero, statrd);
+Stat[13]	:= TS (gpu_dout[13], one, statrd);
+Stat[14]	:= TS (gpu_dout[14], zero, statrd);
+Stat[15]	:= TS (gpu_dout[15], zero, statrd);
+
+END;

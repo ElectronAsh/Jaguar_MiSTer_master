@@ -1,0 +1,99 @@
+(*****************************************************************
+
+	jbus.net
+
+This is data path in Jerry.
+
+The function of this section is to allow the
+DSP to work with an external 16 bit data bus
+
+
+******************************************************************)
+
+
+IMPORT	lego,tosh;	(* Toshiba gate & pad definitions *)
+
+DEF	JBUS	(ain[0..23],din[0..31],dr[0..15],dinlatch[0..1],
+		dmuxd[0..1],dmuxu[0..1],dren,xdsrc,ack,
+		wd[0..31],clk,cfg[0..1],cfgw,a[0..23],
+		ainen,seta1,masterdata:IN;
+
+
+        	dout[0..31],aout[0..23],
+		dsp16,bigend:IO);
+
+
+(*
+din[0..31]	input data from pins
+dr[0..15]	16 bit peripheral read data
+wd[0..31]	32 bit dsp write data
+dout[0..31]	output data dsp read data / peripheral write data
+dmuxd,		moves high order word down for writes to narrow IO
+dmuxu,		moves low order word up for reads from narrow IO
+dren,		selects internal memory data onto up logic instead of 
+		main data bus 
+xdsrc,		external data source
+dinlatch[0..1],	enables two word wide read latches
+
+*)
+
+BEGIN
+
+(* Select internal or incoming data for slave cycle*)
+
+D5[0-15] :=  MX2 (d5[0-15],din[0-15],dr[0-15],dren);
+
+(* Select internal or incoming data for master cycle *)
+
+D1[0-31] := MX2 (d1[0-31],wd[0-31],din[0-31],xdsrc);
+
+(* and feed into the "up" network *)
+
+D1a[8-15] :=	MX2 (d1a[8-15],d1[8-15],d1[0-7],dmuxu[0]);
+D2[16-23] :=	MX2 (d2[16-23],d1[16-23],d1[0-7],dmuxu[1]);
+D2[24-31] :=	MX2 (d2[24-31],d1[24-31],d1a[8-15],dmuxu[1]);
+
+(* latch this data for building wide read cycles from narrow memory *)
+
+D3[0-7] :=	STLATCH (d3[0-7],d1[0-7],clk,dinlatch[0]);
+D3[8-15] :=	STLATCH (d3[8-15],d1a[8-15],clk,dinlatch[0]);
+D3[16-31] :=	STLATCH (d3[16-31],d2[16-31],clk,dinlatch[1]);
+
+(* feed this data into the "down" network *)
+
+D4[0-15] :=	MX2 (d4[0-15],d3[0-15],d3[16-31],dmuxd[1]);
+D4a[0-7] :=	MX2 (d4a[0-7],d4[0-7],d4[8-15],dmuxd[0]);
+
+(* select master or slave data *)
+
+D6[0-7] :=	MX2 (d6[0-7],d5[0-7],d4a[0-7],masterdata);
+D6[8-15] :=	MX2 (d6[8-15],d5[8-15],d4[8-15],masterdata);
+
+(* buffer this data onto internal bus *)
+
+Dout[0-15] :=	NIVH (dout[0-15],d6[0-15]);
+Dout[16-31] :=	NIVM (dout[16-31],d3[16-31]);
+
+/* latch the configuration */
+
+Dsp16 :=	LDP1Q (dsp16,cfg[0],cfgw);
+Bigend :=	LDP1Q (bigend,cfg[1],cfgw);
+
+(* latch the dsp address at the start of memory cycles *)
+(* A[1] may be set by MEM when a long transfer is split into
+ two word transfers *)
+
+Ad[0-23] :=	SLATCH (ad[0-23],a[0-23],clk,ack);
+
+As[1] :=	OR2 (as[1],ad[1],seta1);
+
+Aout[0] :=	MX2 (aout[0],ad[0],ain[0],ainen);
+Aouti[1] :=	MX2 (aouti[1],as[1],ain[1],ainen);
+Aout[1] :=	NIVU (aout[1],aouti[1]);
+Aout[2-13] :=	MX2 (aout[2-13],ad[2-13],ain[2-13],ainen);
+Aouti[14] :=	MX2 (aouti[14],ad[14],ain[14],ainen);
+Aout[14] :=	NIVH (aout[14],aouti[14]);
+Aout[15-23] :=	MX2 (aout[15-23],ad[15-23],ain[15-23],ainen);
+
+END;
+

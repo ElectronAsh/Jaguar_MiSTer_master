@@ -1,0 +1,853 @@
+/******************************************************************
+inner.net
+26/3/91
+
+Inner Loop Control Logic
+------------------------
+
+******************************************************************/
+
+IMPORT enumerates, duplo, tosh;
+
+DEF INNER (
+	gpu_dout[2..10]	/* readable port bus */
+	gpu_dout[16..31]
+	:TRI;
+	apipe		/* load address pipe-line latch */
+	atick[0..1]	/* address and data update timing */
+	aticki[0]	/* look-ahead of bit 0 (0 is l.a. of 1) */
+	data_ena	/* enable write data */
+	dest_cycle[1]	/* destination cycle at pipeline stage 1 */
+	dpipe[0..1]	/* load computed data pipe-line latch */
+	dsta_addi	/* inner loop update of dest address */
+	dstdread	/* destination data read load enable */
+	dstzread	/* destination zed read load enable */
+	dwrite		/* inner loop dest write state */
+	/* GE dwrite[1] */ dwrite1	/* ... one pipe-line stage on */
+	dzwrite		/* inner loop zed write state */
+	/* GE dzwrite[1] */ dzwrite1	/* ... one pipe-line stage on */
+	gena2		/* generate A2 as opposed to A1 */
+	icount[0..2]	/* low part of inner counter */
+	indone		/* inner loop complete */
+	inner0		/* last cycle of inner loop */
+	readreq		/* memory cycle read request */
+	srca_addi	/* inner loop update of source address */
+	srcdread	/* source data read load enable */
+	srcdreadd	/* timing of extra load for srcshade */
+	srcen		/* enables repeated source reads in inner*/
+	srczread	/* source zed read load enable */
+	sread[1]	/* source data read at pipe-line stage 1 */
+	sreadx[1]	/* extra source data read at p-l stage 1 */
+	step		/* inner loop step */
+	writereq	/* memory cycle write request */
+	zaddr		/* generate Z address */
+	zpipe[0..1]	/* load computed zed pipe-line latch */
+	:OUT;
+	a1_outside	/* A1 pointer is outside window bounds */
+	blitack		/* memory acknowledge to the blitter */
+	clk		/* co-processor clock */
+	cmdld		/* command register load */
+	countld		/* load inner count register */
+	dsta2		/* reverse normal roles of A1 and A2 */
+INT16/	dstxp		/* destination X address */
+	gourd		/* enable gouraud data computation */
+	gourz		/* enable gouraud zed computation */
+INT32/	gpu_din		/* GPU data bus */
+	inhiben		/* comparators are enable, pixel mode */
+	instart		/* start inner loop operation, load icnt */
+	memidle		/* memory interface is idle */
+	memready	/* memory interface is idle at next tick */
+	nowrite		/* suppress inner loop write operation */
+	phrase_mode	/* phrase write mode */
+	pixsize[0..2]	/* destination pixel size */
+	read_ack	/* latch in data ack is active */
+	reset\		/* system reset */
+	srcshade	/* modify source intensity with iinc */
+	statrd		/* blitter status read port */
+	wactive		/* write mreq active (for data_ena) */
+	:IN);
+
+BEGIN
+
+#if FLARE
+
+Show_in		:= SHOW_INNER (inner_state, 
+	idle, sreadx, szreadx, sread, szread, dread, dzread, 
+	dwrite, dzwrite);
+Dummy0		:= DUMMY (inner_state);
+
+#endif
+
+/* Make the state readable */
+
+Stat[2]		:= TS (gpu_dout[2], idle, statrd);
+Stat[3]		:= TS (gpu_dout[3], sreadx, statrd);
+Stat[4]		:= TS (gpu_dout[4], szreadx, statrd);
+Stat[5]		:= TS (gpu_dout[5], sread, statrd);
+Stat[6]		:= TS (gpu_dout[6], szread, statrd);
+Stat[7]		:= TS (gpu_dout[7], dread, statrd);
+Stat[8]		:= TS (gpu_dout[8], dzread, statrd);
+Stat[9]		:= TS (gpu_dout[9], dwrite, statrd);
+Stat[10]	:= TS (gpu_dout[10], dzwrite, statrd);
+
+Gourd\		:= IV (gourd\, gourd);
+Gourz\		:= IV (gourz\, gourz);
+Nowrite\	:= IV (nowrite\, nowrite);
+Read_ack\	:= IV (read_ack\, read_ack);
+Instart\	:= IV (instart\, instart);
+
+/* Inner loop control bits */
+
+Srcen		:= FDSYNC (srcen,   gpu_din{0}, cmdld, clk);
+Srcenz		:= FDSYNC (srcenz,  gpu_din{1}, cmdld, clk);
+Srcenx		:= FDSYNC (srcenx,  gpu_din{2}, cmdld, clk);
+Dsten		:= FDSYNC (dsten,   gpu_din{3}, cmdld, clk);
+Dstenzt		:= FDSYNC (dstenzt,  gpu_din{4}, cmdld, clk);
+Dstenz		:= NIVM (dstenz, dstenzt);
+Dstwrz		:= FDSYNC (dstwrz,  gpu_din{5}, cmdld, clk);
+Diso_a1		:= FDSYNC (diso_a1, gpu_din{6}, cmdld, clk);
+
+/* The external instart signal has to be latched and held until
+the state machine actally starts, as it may still be completing
+the previous operation */
+
+Stupt		:= ND2 (stupt, idle, stupl);
+Stupi		:= ND2 (stupi, instart\, stupt);
+Stupl		:= FD2Q (stupl, stupi, clk, reset\);
+Startup		:= OR2 (startup, instart, stupl);
+
+/* Step inner loop is given by address computation and memory
+interface both being ready
+
+Address computation complete is given by aready
+
+Memory interface ready is given by memready + memidle
+
+Data ready must also be satisfied if the next operation is a write
+and the current one is a read.  The data is ready when read ack is
+active for the current read.  As reads can stack up in the pipe 
+line, it is therefore necessary to match the ack with the decode,
+using the acks decoded from the pending terms.  Data not ready is 
+therefore given by the dwrite decode, at pipe-line stage 1, 
+without the step term, and with the appropriate acks.
+
+Step is also given by coming out of idle, but if attempting to pass
+through idle in one tick, the previous memory cycle must have 
+completed
+
+step = /idle . aready . mready . /data_not_ready
+     +  idle . startup . /((dwrite1 + dzwrite1) . /mready)
+*/
+
+/* 
+28/7/92 - bug fix
+Data not ready has to extend one further tick when using a 
+comparator and not operating in phrase mode, because the source
+data is otherwise not ready in time.
+
+(dnrt[5] is old dnready)
+(inhiben is the OR of comparator enables AND not phrase mode)
+dnready = dnrt[5]  . inhiben\
+	+ dnrt[5]<pipe-lined> . inhiben 
+
+2/9/92 - enhancement
+To allow read data to be added to using srcshade, but also using
+a computed Z, an extra tick must be added on srcshade . gourz
+*/
+
+Dnrt0		:= ND2 (dnrt[0], dzread[1], dstzack\);
+Dnrt1		:= ND3 (dnrt[1], dread[1], dstenz\, dstdack\);
+Dnrt2		:= ND4 (dnrt[2], szread[1],  dsten\, dstenz\, 
+			srczack\);
+Dnrt3		:= ND5 (dnrt[3], sread[1], srcenz\, dsten\, 
+			dstenz\, srcdack\);
+Dnrt4		:= ND6 (dnrt[4], sreadx[1], srcenz\, srcen\, 
+			dsten\, dstenz\, srcdxack\);
+Dnrt5		:= ND5 (dnrt[5], dnrt[0..4]);
+Dnrt6		:= FD1Q (dnrt[6], dnrt[5], clk);
+Dnreadyd	:= AOR1 (dnreadyd, srcshade, gourz, inhiben);
+Dnready		:= MXI2 (dnready\, dnrt[5], dnrt[6], dnreadyd);
+
+Mready\		:= NR2 (mready\, memready, memidle);
+Mready		:= IV (mready, mready\);
+Istept0		:= OR2 (istept[0], dwrite1, dzwrite1);
+Istept1		:= ND2 (istept[1], istept[0], mready\);
+Istep		:= ND3 (istep\, idle, startup, istept[1]);
+Stept		:= ND4 (stept\, aready, mready, dnready\, idle\);
+Step		:= ND2U (step, stept\, istep\);
+
+/* modified version for pipe-line stage 1, so that it is not left
+hanging in write state at the end.  It can receive spurious step
+commands in the idle state with no risk. */
+
+Stepp1t		:= ND3 (stepp1t\, aready, mready, dnready\);
+Step_p1		:= ND2M (step_p1, stepp1t\, istep\);
+
+
+/** Inner loop state machine  *************************************
+This is encoded with one latch per state to make the decodes more
+readable, and to save gates in the decode.
+*/
+
+Dsten\		:= IVM (dsten\, dsten);
+Dstenz\		:= IVM (dstenz\, dstenz);
+Dstwrz\		:= IV (dstwrz\, dstwrz);
+Inner0\		:= IVM (inner0\, inner0);
+Srcen\		:= IVM (srcen\, srcen);
+Srcenx\		:= IV (srcenx\, srcenx);
+Srcenz\		:= IVM (srcenz\, srcenz);
+Step\		:= IVM (step\, step);
+
+/* idle state */
+
+Idlet0		:= ND2 (idlet[0], idle, step\);
+Idlet1		:= ND3 (idlet[1], dzwrite, step, inner0);
+Idlet2		:= ND4 (idlet[2], dwrite, step, dstwrz\, inner0);
+Idlet3		:= ND3 (idlei, idlet[0..2]);
+Idlet		:= FD4Q (idlet, idlei, clk, reset\);
+Idle\		:= IV (idle\, idlet);
+Idle		:= IVM (idle, idle\);
+
+/* extra source data read state */
+
+Sreadxt0	:= ND3 (sreadxt[0], idle, step, srcenx);
+Sreadxt1	:= ND2 (sreadxt[1], sreadx, step\);
+Sreadxt2	:= ND2 (sreadxi, sreadxt[0..1]);
+Sreadx		:= FD2QM (sreadx, sreadxi, clk, reset\);
+
+/* extra source zed read state */
+
+Szreadxt0	:= ND3 (szreadxt[0], sreadx, step, srcenz);
+Szreadxt1	:= ND2 (szreadxt[1], szreadx, step\);
+Szreadxt2	:= ND2 (szreadxi, szreadxt[0..1]);
+Szreadx		:= FD2Q (szreadx, szreadxi, clk, reset\);
+
+/* source data read state */
+
+Sreadt0		:= ND2 (sreadt[0], szreadx, step);
+Sreadt1		:= ND4 (sreadt[1], sreadx, step, srcenz\, srcen);
+Sreadt2		:= ND4 (sreadt[2], idle, step, srcenx\, srcen);
+Sreadt3		:= ND4 (sreadt[3], dzwrite, step, inner0\, srcen);
+Sreadt4		:= ND5 (sreadt[4], dwrite, step, dstwrz\, inner0\, 
+			srcen);
+Sreadt5		:= ND2 (sreadt[5], sread, step\);
+Sreadt6		:= ND6 (sreadi, sreadt[0..5]);
+Sread		:= FD2QM (sread, sreadi, clk, reset\);
+
+/* source zed read state */
+
+Szreadt0	:= ND3 (szreadt[0], sread, step, srcenz);
+Szreadt1	:= ND2 (szreadt[1], szread, step\);
+Szreadt2	:= ND2 (szreadi, szreadt[0..1]);
+Szread		:= FD2QM (szread, szreadi, clk, reset\);
+
+/* destination data read state */
+
+Dreadt0		:= ND3 (dreadt[0], szread, step, dsten);
+Dreadt1		:= ND4 (dreadt[1], sread, step, srcenz\, dsten);
+Dreadt2		:= ND5 (dreadt[2], sreadx, step, srcenz\, srcen\, 
+			dsten);
+Dreadt3		:= ND5 (dreadt[3], idle, step, srcenx\, srcen\, 
+			dsten);
+Dreadt4		:= ND5 (dreadt[4], dzwrite, step, inner0\, srcen\, 
+			dsten);
+Dreadt5		:= ND6 (dreadt[5], dwrite, step, dstwrz\, inner0\,
+			srcen\, dsten);
+Dreadt6		:= ND2 (dreadt[6], dread, step\);
+Dreadt7		:= ND7 (dreadi, dreadt[0..6]);
+Dread		:= FD2Q (dread, dreadi, clk, reset\);
+
+/* destination zed read state */
+
+Dzreadt0	:= ND3 (dzreadt[0], dread, step, dstenz);
+Dzreadt1	:= ND4 (dzreadt[1], szread, step, dsten\, dstenz);
+Dzreadt2	:= ND5 (dzreadt[2], sread, step, srcenz\, dsten\, 
+			dstenz);
+Dzreadt3	:= ND6 (dzreadt[3], sreadx, step, srcenz\, srcen\,
+			dsten\, dstenz);
+Dzreadt4	:= ND6 (dzreadt[4], idle, step, srcenx\, srcen\,
+			dsten\, dstenz);
+Dzreadt5	:= ND6 (dzreadt[5], dzwrite, step, inner0\, srcen\,
+			dsten\, dstenz);
+Dzreadt6	:= ND7 (dzreadt[6], dwrite, step, dstwrz\, inner0\,
+			srcen\, dsten\, dstenz);
+Dzreadt7	:= ND2 (dzreadt[7], dzread, step\);
+Dzreadt8	:= ND8 (dzreadi, dzreadt[0..7]);
+Dzread		:= FD2Q (dzread, dzreadi, clk, reset\);
+
+/* destination data write state */
+
+Dwritet0	:= ND2 (dwritet[0], dzread, step);
+Dwritet1	:= ND3 (dwritet[1], dread, step, dstenz\);
+Dwritet2	:= ND4 (dwritet[2], szread, step, dsten\, dstenz\);
+Dwritet3	:= ND5 (dwritet[3], sread, step, srcenz\, dsten\, 
+			dstenz\);
+Dwritet4	:= ND6 (dwritet[4], sreadx, step, srcenz\, srcen\,
+			dsten\, dstenz\);
+Dwritet5	:= ND6 (dwritet[5], idle, step, srcenx\, srcen\,
+			dsten\, dstenz\);
+Dwritet6	:= ND6 (dwritet[6], dzwrite, step, inner0\, srcen\,
+			dsten\, dstenz\);
+Dwritet7	:= ND7 (dwritet[7], dwrite, step, dstwrz\, inner0\,
+			srcen\, dsten\, dstenz\);
+Dwritet8	:= ND2 (dwritet[8], dwrite, step\);
+Dwritet9	:= ND9 (dwritei, dwritet[0..8]);
+Dwrite		:= FD2QH (dwrite, dwritei, clk, reset\);
+
+/* destination zed write state */
+
+Dzwritet0	:= ND2 (dzwritet[0], dzwrite, step\);
+Dzwritet1	:= ND3 (dzwritet[1], dwrite, step, dstwrz);
+Dzwritet2	:= ND2 (dzwritei, dzwritet[0..1]);
+Dzwrite		:= FD2QU (dzwrite, dzwritei, clk, reset\);
+
+/**  address computation timing state machine  ********************
+This state machine flags when an address will be ready, and is 
+used to generate the step signal, in conjunction with the other
+conditions which must be met before the inner loop can advance. */
+
+Atick0t0	:= ND4 (atick0t[0], atick\[0..1], step, indone\);
+Atick0t1	:= ND3 (atick0t[1], atick[1], step, indone\);
+Atick0t2	:= ND2 (aticki[0], atick0t[0..1]);
+Atick0		:= FD2H (atick[0], atick\[0], aticki[0], clk,
+			reset\);
+Atick1		:= FD2QP (atickt[1], atick[0], clk, reset\);
+Atick\[1]	:= IV (atick\[1], atickt[1]);
+Atick[1]	:= NIVU (atick[1], atickt[1]);
+
+/* The address may be considered to be read in state 0 or 2 */
+
+Aready		:= JOIN (aready, atick\[0]);
+
+/* Address pipe-line load */
+
+Apipe		:= NIV (apipe, atick[1]);
+
+/* The computed data and zed pipe-lines are loaded on atick[1] in
+their corresponding inner loop states, when the corresponding 
+gouraud flags are set, otherwise they are enabled all the time.
+Dpipe = /gourd + gourd . atick[1] . dwrite
+(1/167)
+
+27/7/92 - bug fix
+A second data pipe-line stage is necessary as pipe-lined data is
+getting lost. (2/170) bug (6)
+*/
+
+Dpipe0t		:= ND2 (dpipe0t, atick[1], dwrite);
+Dpipe[0]	:= ND2 (dpipe[0], dpipe0t, gourd);
+Dpipe1t0	:= AN2 (dpipe1t0, writereq, dwrite);
+Dpipe1t1	:= FD1Q (dpipe1t1, dpipe1t0, clk);
+Dpipe[1]	:= OR2 (dpipe[1], dpipe1t1, gourd\);
+
+/* 15/10/92
+Move zpipe[0] up a tick (3/13)
+Zpipe0t		:= ND2 (zpipe0t, atick[1], dzwrite);
+Zpipe		:= ND2P (zpipe[0], zpipe0t, gourz);
+gourz is static, dzwrite is laos valid one tick earlier
+*/
+Zpipe0t0	:= ND2 (zpipe0t, atick[0], dzwrite);
+Zpipe0t1	:= ND2 (zpipe[0], zpipe0t, gourz);
+
+Zpipe1t0	:= AN2 (zpipe1t0, writereq, dzwrite);
+Zpipe1t1	:= FD1Q (zpipe1t1, zpipe1t0, clk);
+Zpipe[1]	:= OR2P (zpipe[1], zpipe1t1, gourz\);
+
+/* Inner loop complete flag is given when the idle state is about
+to go active */
+
+Indot0		:= ND3 (indot[0], dzwrite, step, inner0);
+Indot1		:= ND4 (indot[1], dwrite, step, dstwrz\, inner0);
+Indone		:= ND2P (indone, indot[0..1]);
+Indone\		:= IV (indone\, indone);
+
+/* inner counter control
+   the count is enabled in the first tick of dwrite */
+
+Icntena		:= AN2U (icntena, atick[0], dwrite);
+
+Inner_count	:= INNER_CNT (gpu_dout[16..31], icount[0..2], 
+			inner0, clk, countld, dstxp, gpu_din, 
+			icntena, instart, phrase_mode, 
+			pixsize[0..2], statrd);
+
+/* Flag to disable writes on window boundary clipping
+When A1 is being used as the source address, given by dsta2, then
+the 'old' value of a1_outside must be preserved.  Normally the 
+value changes at the end if dsta_add.  Therefore an old version
+is latched on srca_add, and this is used when dsta2 is selected.
+
+Bug fix - 3 Sept 92
+Latch on atick[1] otherwise the address can change and the new 
+version gets latched.
+*/
+
+Oldoutld	:= AN2 (oldoutld, srca_add, atick[1]);
+Oldoutside	:= MX2 (oldoutside, oldoutsidel, a1_outside, 
+			oldoutld);
+Oldoutsidel	:= FD1Q (oldoutsidel, oldoutside, clk);
+Outside		:= MX2 (outside, a1_outside, oldoutside, dsta2);
+Clip\		:= ND2 (clip\, diso_a1, outside);
+
+/* readreq and writereq are issued at step of the corresponding 
+cycles.  Note that these are look-ahead type signals, and that
+the cycle should not be requested externally until the next tick.
+*/
+
+Rreqt		:= OR6 (rreqt, sreadx, szreadx, sread, szread, 
+			dread, dzread);
+Readreq		:= AN2P (readreq, rreqt, step);
+Wreqt		:= OR2 (wreqt, dwrite, dzwrite);
+Writereq	:= AN4 (writereq, wreqt, step, nowrite\, 
+			clip\);
+
+/* source and destination address update conditions */
+
+Sraat0		:= AN2 (sraat[0], sreadxi, srcenz\);
+Sraat1		:= AN2 (sraat[1], sreadi, srcenz\);
+Srca_addi	:= OR4 (srca_addi, szreadxi, szreadi, sraat[0..1]);
+Srca_add	:= FD1Q (srca_add, srca_addi, clk);
+
+Dstaat		:= AN2 (dstaat, dwritei, dstwrz\);
+Dsta_addi	:= OR2 (dsta_addi, dzwritei, dstaat);
+
+/* source and destination address generate conditions */
+
+Gensrc		:= OR4 (gensrc, sreadxi, szreadxi, sreadi, 
+			szreadi);
+Gendst		:= OR4 (gendst, dreadi, dzreadi, dwritei, 
+			dzwritei);
+Dsta2\		:= IV (dsta2\, dsta2);
+Gena2t0		:= ND2 (gena2t[0], gensrc, dsta2\);
+Gena2t1		:= ND2 (gena2t[1], gendst, dsta2);
+Gena2i		:= ND2 (gena2i, gena2t[0..1]);
+Gena2		:= FD1QU (gena2, gena2i, clk);
+
+Zaddr		:= OR4 (zaddr, szreadx, szread, dzread, dzwrite);
+
+/**  Further pipe-line control stages  ***************************/
+
+Sreadx1		:= FDSYNCR (sreadx[1],  sreadx,  step_p1, clk, 
+			reset\);
+Sread1		:= FDSYNCR (sread[1],   sread,   step_p1, clk, 
+			reset\);
+Szread1		:= FDSYNCR (szread[1],  szread,  step_p1, clk, 
+			reset\);
+Dread1		:= FDSYNCR (dread[1],   dread,   step_p1, clk, 
+			reset\);
+Dzread1		:= FDSYNCR (dzread[1],  dzread,  step_p1, clk, 
+			reset\);
+Dwrite1		:= FDSYNC (dwrite1,  dwrite,  step_p1, clk);
+Dzwrite1	:= FDSYNC (dzwrite1, dzwrite, step_p1, clk);
+
+/* from this, indicate a general destination cycle at stage 1 */
+
+Dest_cycle[1]	:= OR4 (dest_cycle[1], dread[1], dzread[1], 
+			dwrite1, dzwrite1);
+
+/* Generate the blitter read load enables */
+
+/* the read acknowledge has to be arbitrated to the appropriate
+pending flag */
+
+Srcdxack	:= JOIN (srcdxack\, read_ack\);
+Srczxack	:= OR2  (srczxack\, read_ack\, srcdxpend);
+Srcdack		:= OR3  (srcdack\,  read_ack\, srcdxpend, 
+			srczxpend);
+Srczack		:= OR4  (srczack\,  read_ack\, srcdpend, 
+			srcdxpend, srczxpend);
+Dstdack		:= OR5  (dstdack\,  read_ack\, srcdpend, srczpend,
+			srcdxpend, srczxpend);
+Dstzack		:= OR6  (dstzack\,  read_ack\, dstdpend, srcdpend, 
+			srczpend, srcdxpend, srczxpend);
+
+/* source data reads */
+
+Srcdpset\	:= ND2 (srcdpset\, readreq, sread);
+Srcdpt1 	:= ND2 (srcdpt[1], srcdpend, srcdack\);
+Srcdpt2		:= ND2 (srcdpt[2], srcdpset\, srcdpt[1]);
+Srcdpend	:= FD2Q (srcdpend, srcdpt[2], clk, reset\);
+
+Srcdxpset\	:= ND2 (srcdxpset\, readreq, sreadx);
+Srcdxpt1 	:= ND2 (srcdxpt[1], srcdxpend, srcdxack\);
+Srcdxpt2	:= ND2 (srcdxpt[2], srcdxpset\, srcdxpt[1]);
+Srcdxpend	:= FD2Q (srcdxpend, srcdxpt[2], clk, reset\);
+
+Sdpend		:= OR2 (sdpend, srcdxpend, srcdpend);
+Srcdreadt	:= AN2 (srcdreadt, sdpend, read_ack);
+
+/*
+2/9/92 - enhancement?
+Load srcdread on the next tick as well to modify it in srcshade
+*/
+
+Srcdreadd	:= FD1Q (srcdreadd, srcdreadt, clk);
+Srcdread	:= AOR1 (srcdread, srcshade, srcdreadd, srcdreadt);
+
+/* source zed reads */
+
+Srczpset\	:= ND2 (srczpset\, readreq, szread);
+Srczpt1 	:= ND2 (srczpt[1], srczpend, srczack\);
+Srczpt2		:= ND2 (srczpt[2], srczpset\, srczpt[1]);
+Srczpend	:= FD2Q (srczpend, srczpt[2], clk, reset\);
+
+Srczxpset\	:= ND2 (srczxpset\, readreq, szreadx);
+Srczxpt1 	:= ND2 (srczxpt[1], srczxpend, srczxack\);
+Srczxpt2	:= ND2 (srczxpt[2], srczxpset\, srczxpt[1]);
+Srczxpend	:= FD2Q (srczxpend, srczxpt[2], clk, reset\);
+
+Szpend		:= OR2 (szpend, srczpend, srczxpend);
+Srczread	:= AN2 (srczread, szpend, read_ack);
+
+/* destination data reads */
+
+Dstdpset\	:= ND2 (dstdpset\, readreq, dread);
+Dstdpt0 	:= ND2 (dstdpt[0], dstdpend, dstdack\);
+Dstdpt1		:= ND2 (dstdpt[1], dstdpset\, dstdpt[0]);
+Dstdpend	:= FD2Q (dstdpend, dstdpt[1], clk, reset\);
+Dstdread	:= AN2 (dstdread, dstdpend, read_ack);
+
+/* destination zed reads */
+
+Dstzpset\	:= ND2 (dstzpset\, readreq, dzread);
+Dstzpt0 	:= ND2 (dstzpt[0], dstzpend, dstzack\);
+Dstzpt1		:= ND2 (dstzpt[1], dstzpset\, dstzpt[0]);
+Dstzpend	:= FD2Q (dstzpend, dstzpt[1], clk, reset\);
+Dstzread	:= AN2 (dstzread, dstzpend, read_ack);
+
+/* Generate the blitter write data enable, this is given by
+(dwrite + dzwrite) . /nowrite . /clip
+This is delayed one pipe-line stage, and is then active in the
+tick after an mreq and ack at this stage. */
+
+Denat0		:= OR2 (denat[0], dwrite, dzwrite);
+Denat1		:= AN3 (denat[1], denat[0], nowrite\, clip\);
+Denat2		:= FDSYNCR (denat[2], denat[1],  step_p1, clk, 
+			reset\);
+Dstdwt		:= AN3 (denat[3], blitack, wactive, denat[2]);
+Data_ena	:= FD1QP (data_ena, denat[3], clk);
+
+END;
+
+/**  INNER_CNT - The inner loop counter  **************************
+
+This block contains the counter that is used to give the number of
+cycles to be performed by the inner loop.  It is a sixteen bit
+counter, and also contains a sixteen bit register which allows it
+to be reloaded to its starting value.
+
+When the blitter is in phrase mode, the counter decrements by the 
+number of pixels being written in a phrase.  This is normally 
+two, four or eight, but may be some other value on the first write.
+The value in the destination pointer is used to determine how many
+actual
+*/
+
+DEF INNER_CNT (
+	gpu_dout[16..31] /* readable port bus */
+	:TRI;
+	icount[0..2]	/* part of the counter value */
+	inner0		/* counter has reached zero */
+	:OUT;
+	clk		/* co-processor clock */
+	countld		/* inner counter load */
+INT16/	dstxp		/* destination X address */
+INT32/	gpu_din		/* GPU data bus */
+	icntena		/* inner count enable */
+	ireload		/* inner counter reload */
+	phrase_mode	/* phrase write mode */
+	pixsize[0..2]	/* destination pixel size */
+	statrd		/* read status port */
+	:IN);
+
+INT16/	cntval, cntvall, gpu_d_lo16, icount
+:LOCAL;
+BEGIN
+
+/* bussed count for debug */
+
+Icount		:= JOIN (icount, icount[0..15]);
+Icountd		:= DUMMY (icount);
+
+One		:= TIE1 (one);
+Pixsize\[0-2]	:= IV (pixsize\[0-2], pixsize[0-2]);
+Pixel8\		:= ND3 (pixel8\, pixsize[0..1], pixsize\[2]);
+Pixel8		:= IV (pixel8, pixel8\);
+Pixel16\	:= ND3 (pixel16\, pixsize\[0..1], pixsize[2]);
+Pixel16		:= IV (pixel16, pixel16\);
+Pixel32\	:= ND3 (pixel32\, pixsize[0], pixsize\[1], 
+			pixsize[2]);
+Pixel32		:= IV (pixel32, pixel32\);
+
+Gpu_d_lo16	:= JOIN (gpu_d_lo16, gpu_din{0..15});
+
+/* counter value register */
+
+Cntldb		:= NIVH (countldb, countld);
+Cntval		:= MX2 (cntval, cntvall, gpu_d_lo16, countldb);
+Cntvall		:= FD1Q (cntvall, cntval, clk);
+
+
+/**  Compute the next value
+This is 1 when not in phrase mode, or the number of pixels
+actually being written in a phrase on phrase mode.  This is
+given by taking the destination X pointer, modulo the number of
+pixels in a phrase, and subtracting it from the number of pixels
+in a phrase.
+*/
+
+/* negate the bottom three bits of the dest X */
+
+Dstxp\[0-2]	:= IV (dstxp\[0-2], dstxp{0-2});
+Inct0		:= IV (inct[0], dstxp\[0]);
+Inct1		:= HA1 (inct[1], incc[1], dstxp\[1], dstxp\[0]);
+Inct2		:= EO (inct[2], dstxp\[2], incc[1]);
+Inct\[0-2]	:= IV (inct\[0-2], inct[0-2]);
+
+/* inc0 = /phrase_mode + phrase_mode . inct[0] */
+
+Inc0t		:= ND2 (inc0t, phrase_mode, inct[0]);
+Inc\[0]		:= AN2 (inc\[0], inc0t, phrase_mode);
+
+/* inc1 = phrase_mode . ( pixsize 8 or 16 . inct[1] 
+			+ pixsize 32 . inct = xx0) */
+
+Inc1t1		:= ND2 (inc1t[1], pixel8\, pixel16\);
+Inc1t2		:= ND2 (inc1t[2], inc1t[1], inct[1]);
+Inc1t3		:= ND2 (inc1t[3], pixel32, inct\[0]);
+Inc1t4		:= ND2 (inc1t[4], inc1t[2..3]);
+Inc\[1]		:= ND2 (inc\[1], phrase_mode, inc1t[4]);
+
+/* inc2 = phrase_mode . ( pixsize 8 . inct[2] 
+			+ pixsize 16 . inct = x00) */
+
+Inc2t0		:= ND2 (inc2t[0], pixel8, inct[2]);
+Inc2t1		:= ND3 (inc2t[1], pixel16, inct\[0..1]);
+Inc2t2		:= ND2 (inc2t[2], inc2t[0..1]);
+Inc\[2]		:= ND2 (inc\[2], phrase_mode, inc2t[2]);
+
+/* inc3 = phrase_mode . pixsize 8 . inct = 000*/
+
+Inc\[3]		:= ND5 (inc\[3], phrase_mode, pixel8, inct\[0..2]);
+
+Count0t4	:= ADD4 (count[0..3], carry[3], inc\[0..3], 
+			icount[0..3], one);
+Count[4-9]	:= HS1 (count[4-9], carry[4-9], carry[3-8],
+			icount[4-9]);
+Count[10]	:= EN (count[10], carry[9], icount[10]);
+Cla10		:= OR8 (cla10, carry[3], icount[4..10]);
+Count[11]	:= HS1 (count[11], carry[11], cla10, icount[11]);
+Count[12-14]	:= HS1 (count[12-14], carry[12-14], carry[11-13],
+			icount[12-14]);
+Count[15]	:= EN (count[15], carry[14], icount[15]);
+
+/* Select load value, count, or existing contents
+- the counter is loaded the tick after a new value is loaded */
+
+Cntlden		:= FD1Q (cntlden, countld, clk);
+Cntisel[1]	:= OR2U (cntisel[1], ireload, cntlden);
+Cnti[0-15]	:= MX4 (cnti[0-15], icount[0-15], count[0-15], 
+			cntval{0-15}, cntval{0-15}, icntena, 
+			cntisel[1]);
+
+Icountt[0]	:= FD1Q (icountt[0], cnti[0], clk);
+Icount[0]	:= NIVM (icount[0], icountt[0]);
+Icount[1-15]	:= FD1QP (icount[1-15], cnti[1-15], clk);
+
+/* Detect count value of zero.
+In pixel mode this is when the count has actaully reached zero.
+In phrase mode this means when the count has reached zero or
+underflowed.  Underflow is given by the top bit of the counter
+going from 0 to 1 when count is enabled.
+*/
+
+Icount\[15]	:= IV (icount\[15], icount[15]);
+Uflowt		:= AN2 (uflowt, count[15], icount\[15]);
+Uflow		:= FDSYNC (underflow, uflowt, icntena, clk);
+
+Inner0t		:= NR16 (inner0t, icount[0..15]);
+Inner0		:= OR2P (inner0, inner0t, underflow);
+
+/* make the counter readable */
+
+Stat[16-31]	:= TS (gpu_dout[16-31], icount[0-15], statrd);
+
+END;
+
+/**  COMP_CTRL - Comparator output control logic  *****************
+
+This block is responsible for taking the comparator outputs and
+using them as appropriate to inhibit writes.  Two methods are 
+supported for inhibiting write data:
+
+-	suppression of the inner loop controlled write operation
+-	a set of eight byte inhibit lines to write back dest data
+
+The first technique is used in pixel oriented modes, the second in
+phrase mode, but the phrase mode form is only applicable to eight
+and sixteen bit pixel modes.
+
+Writes can be suppressed by data being equal, by the Z comparator
+conditions being met, or by the bit to pixel expansion scheme.
+
+Pipe-lining issues: the data derived comparator outputs are stable 
+until the next data read, well after the affected write from this
+operation.  However, the inner counter bits can count immediately
+before the ack for the last write.  Therefore, it is necessary to 
+delay bcompbit select terms by one inner loop pipe-line stage,
+when generating the select for the data control - the output is
+delayed one further tick to give it write data timing (2/34). 
+
+There is also a problem with computed data - the new values are
+calculated before the write associated with the old value has been
+performed.  The is taken care of within the zed comparator by
+pipe-lining the comparator inputs where appropriate.
+*/
+
+
+DEF COMP_CTRL (
+	dbinh\[0..7]	/* destination byte inhibit lines */
+	nowrite		/* suppress inner loop write operation */
+	:OUT;
+	bcompen		/* bit selector inhibit enable */
+	big_pix		/* pixels are big-endian */
+	bkgwren		/* enable dest data write in pix inhibit*/
+	clk		/* co-processor clock */
+	dcomp[0..7]	/* output of data byte comparators */
+	dcompen		/* data comparator inhibit enable */
+	icount[0..2]	/* low bits of inner count */
+	pixsize[0..2]	/* destination pixel size */
+	phrase_mode	/* phrase write mode */
+	srcd[0..7]	/* bits to use for bit to byte expansion */
+	step_inner	/* inner loop advance */
+	zcomp[0..3]	/* output of word zed comparators */
+	:IN);
+
+BEGIN
+
+Bkgwren\	:= IV (bkgwren\, bkgwren);
+Phrase_mode\	:= IV (phrase_mode\, phrase_mode);
+Pixsize\[0-2]	:= IVM (pixsize\[0-2], pixsize[0-2]);
+
+/* The bit comparator bits are derived from the source data, which
+will have been suitably aligned for phrase mode.  The contents of
+the inner counter are used to select which bit to use.
+
+When not in phrase mode the inner count value is used to select
+one bit.  It is assumed that the count has already occurred, so,
+7 selects bit 0, etc.  In big-endian pixel mode, this turns round,
+so that a count of 7 selects bit 7.
+
+In phrase mode, the eight bits are used directly, and this mode is
+only applicable to 8-bit pixel mode (2/34) */
+
+Bcompselt[0-2]	:= EO (bcompselt[0-2], icount[0-2], big_pix);
+Bcompbit	:= MX8 (bcompbit, srcd[7], srcd[6], srcd[5], 
+			srcd[4], srcd[3], srcd[2], srcd[1], 
+			srcd[0], bcompselt[0..2]);
+Bcompbit\	:= IV (bcompbit\, bcompbit);
+
+/* pipe-line the count */
+Bcompsel[0-2]	:= FDSYNC (bcompsel[0-2], bcompselt[0-2], 
+			step_inner, clk);
+Bcompbt		:= MX8 (bcompbitpt, srcd[7], srcd[6], srcd[5], 
+			srcd[4], srcd[3], srcd[2], srcd[1], 
+			srcd[0], bcompsel[0..2]);
+Bcompbitp	:= FD1Q (bcompbitp, bcompbitpt, clk);
+Bcompbitp\	:= IV (bcompbitp\, bcompbitp);
+
+/* For pixel mode, generate the write inhibit signal for all modes
+on bit inhibit, for 8 and 16 bit modes on comparator inhibit, and
+for 16 bit mode on Z inhibit 
+
+Nowrite = bcompen . /bcompbit . /phrase_mode
+	+ dcompen . dcomp[0] . /phrase_mode . pixsize = 011
+	+ dcompen . dcomp[0..1] . /phrase_mode . pixsize = 100
+	+ zcomp[0] . /phrase_mode . pixsize = 100
+*/
+
+Nowt0		:= ND3 (nowt[0], bcompen, bcompbit\, phrase_mode\);
+Nowt1		:= ND6 (nowt[1], dcompen, dcomp[0], phrase_mode\,
+			pixsize\[2], pixsize[0..1]);
+Nowt2		:= ND7 (nowt[2], dcompen, dcomp[0..1], 
+			phrase_mode\, pixsize[2], pixsize\[0..1]);
+Nowt3		:= ND5 (nowt[3], zcomp[0], phrase_mode\,
+			pixsize[2], pixsize\[0..1]);
+Nowt4		:= ND4 (nowt[4], nowt[0..3]);
+Nowrite		:= AN2 (nowrite, nowt[4], bkgwren\);
+
+Winht		:= ND3 (winht, bcompen, bcompbitp\, phrase_mode\);
+Winhibit	:= ND4 (winhibit, winht, nowt[1..3]);
+
+/* For phrase mode, generate the byte inhibit signals for eight bit
+mode 011, or sixteen bit mode 100 
+dbinh\[0] =  pixsize[2] . zcomp[0]
+	 +  pixsize[2] . dcomp[0] . dcomp[1] . dcompen
+	 + /pixsize[2] . dcomp[0] . dcompen
+	 + /srcd[0] . bcompen
+
+Inhibits 0-3 are also used when not in phrase mode to write back
+destination data.
+*/
+
+
+Srcd\[0-7]	:= IV (srcd\[0-7], srcd[0-7]);
+
+
+Di0t0		:= ND2P (di0t[0], pixsize[2], zcomp[0]);
+Di0t1		:= ND4P (di0t[1], pixsize[2], dcomp[0..1], 
+			dcompen);
+Di0t2		:= ND2 (di0t[2], srcd\[0], bcompen);
+Di0t3		:= ND3 (di0t[3], pixsize\[2], dcomp[0], dcompen);
+Di0t4		:= ND4 (di0t[4], di0t[0..3]);
+Dbinh[0]	:= ANR1P (dbinh\[0], di0t[4], phrase_mode, 
+			winhibit);
+
+Di1t0		:= ND3 (di1t[0], pixsize\[2], dcomp[1], dcompen);
+Di1t1		:= ND2 (di1t[1], srcd\[1], bcompen);
+Di1t2		:= ND4 (di1t[2], di0t[0..1], di1t[0..1]);
+Dbinh[1]	:= ANR1 (dbinh\[1], di1t[2], phrase_mode, 
+			winhibit);
+
+Di2t0		:= ND2P (di2t[0], pixsize[2], zcomp[1]);
+Di2t1		:= ND4P (di2t[1], pixsize[2], dcomp[2..3], 
+			dcompen);
+Di2t2		:= ND2 (di2t[2], srcd\[2], bcompen);
+Di2t3		:= ND3 (di2t[3], pixsize\[2], dcomp[2], dcompen);
+Di2t4		:= ND4 (di2t[4], di2t[0..3]);
+Dbinh[2]	:= ANR1 (dbinh\[2], di2t[4], phrase_mode, 
+			winhibit);
+
+Di3t0		:= ND3 (di3t[0], pixsize\[2], dcomp[3], dcompen);
+Di3t1		:= ND2 (di3t[1], srcd\[3], bcompen);
+Di3t2		:= ND4 (di3t[2], di2t[0..1], di3t[0..1]);
+Dbinh[3]	:= ANR1 (dbinh\[3], di3t[2], phrase_mode, 
+			winhibit);
+
+Di4t0		:= ND2P (di4t[0], pixsize[2], zcomp[2]);
+Di4t1		:= ND4P (di4t[1], pixsize[2], dcomp[4..5], 
+			dcompen);
+Di4t2		:= ND2 (di4t[2], srcd\[4], bcompen);
+Di4t3		:= ND3 (di4t[3], pixsize\[2], dcomp[4], dcompen);
+Di4t4		:= ND4 (di4t[4], di4t[0..3]);
+Dbinh[4]	:= ND2 (dbinh\[4], di4t[4], phrase_mode);
+
+Di5t0		:= ND3 (di5t[0], pixsize\[2], dcomp[5], dcompen);
+Di5t1		:= ND2 (di5t[1], srcd\[5], bcompen);
+Di5t2		:= ND4 (di5t[2], di4t[0..1], di5t[0..1]);
+Dbinh[5]	:= ND2 (dbinh\[5], di5t[2], phrase_mode);
+
+Di6t0		:= ND2P (di6t[0], pixsize[2], zcomp[3]);
+Di6t1		:= ND4P (di6t[1], pixsize[2], dcomp[6..7], 
+			dcompen);
+Di6t2		:= ND2 (di6t[2], srcd\[6], bcompen);
+Di6t3		:= ND3 (di6t[3], pixsize\[2], dcomp[6], dcompen);
+Di6t4		:= ND4 (di6t[4], di6t[0..3]);
+Dbinh[6]	:= ND2 (dbinh\[6], di6t[4], phrase_mode);
+
+Di7t0		:= ND3 (di7t[0], pixsize\[2], dcomp[7], dcompen);
+Di7t1		:= ND2 (di7t[1], srcd\[7], bcompen);
+Di7t2		:= ND4 (di7t[2], di6t[0..1], di7t[0..1]);
+Dbinh[7]	:= ND2 (dbinh\[7], di7t[2], phrase_mode);
+
+END;

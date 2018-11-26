@@ -1,0 +1,566 @@
+/**  High-power versions of Toshiba gates **/
+
+DEF AN2H (z:OUT; a,b:IN);
+BEGIN
+An2h	:= ND2P (zt, a, b);
+Z	:= IVH (z, zt);
+END;
+
+DEF AN2M (z:OUT; a,b:IN);
+BEGIN
+An2m	:= ND2 (zt, a, b);
+Z	:= IVM (z, zt);
+END;
+
+DEF AN2U (z:OUT; a,b:IN);
+BEGIN
+An2u	:= ND2P (zt, a, b);
+Z	:= IVU (z, zt);
+END;
+
+DEF AN3H (z:OUT; a,b,c:IN);
+BEGIN
+An3h	:= ND3 (zt, a, b, c);
+Z	:= IVH (z, zt);
+END;
+
+DEF AN3M (z:OUT; a,b,c:IN);
+BEGIN
+An3m	:= ND3 (zt, a, b, c);
+Z	:= IVM (z, zt);
+END;
+
+DEF AN3U (z:OUT; a,b,c:IN);
+BEGIN
+An3u	:= ND3 (zt, a, b, c);
+Z	:= IVU (z, zt);
+END;
+
+DEF AN4H (z:OUT; a,b,c,d:IN);
+BEGIN
+An4h	:= ND4 (zt, a, b, c, d);
+Z	:= IVH (z, zt);
+END;
+
+DEF AN4M (z:OUT; a,b,c,d:IN);
+BEGIN
+An4m	:= ND4 (zt, a, b, c, d);
+Z	:= IVM (z, zt);
+END;
+
+DEF AN4U (z:OUT; a,b,c,d:IN);
+BEGIN
+An4u	:= ND4 (zt, a, b, c, d);
+Z	:= IVU (z, zt);
+END;
+
+DEF AN6P (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+An6pa	:= AN3 (zt, d, e, f);
+An6pb	:= AN4P (z, a, b, c, zt);
+END;
+
+DEF AN6M (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+An6m	:= ND6 (zt, a, b, c, d, e, f);
+Z	:= IVM (z, zt);
+END;
+
+DEF AN6H (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+An6h	:= ND6 (zt, a, b, c, d, e, f);
+Z	:= IVH (z, zt);
+END;
+
+DEF AN6U (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+An6u	:= ND6 (zt, a, b, c, d, e, f);
+Z	:= IVU (z, zt);
+END;
+
+DEF AN7H (z:OUT; a,b,c,d,e,f,g:IN);
+BEGIN
+One	:= TIE1 (one);
+An7h	:= ND8 (zt, a, b, c, d, e, f, g, one);
+Z	:= IVH (z, zt);
+END;
+
+DEF AN7M (z:OUT; a,b,c,d,e,f,g:IN);
+BEGIN
+One	:= TIE1 (one);
+An7m	:= ND8 (zt, a, b, c, d, e, f, g, one);
+Z	:= IVM (z, zt);
+END;
+
+DEF AN7U (z:OUT; a,b,c,d,e,f,g:IN);
+BEGIN
+One	:= TIE1 (one);
+An7u	:= ND8 (zt, a, b, c, d, e, f, g, one);
+Z	:= IVU (z, zt);
+END;
+
+DEF EOH (z:OUT; a,b:IN);
+BEGIN
+Eoh	:= EO (zt, a, b);
+Z	:= NIVH (z, zt);
+END;
+
+DEF EOM (z:OUT; a,b:IN);
+BEGIN
+Eom	:= EO (zt, a, b);
+Z	:= NIVM (z, zt);
+END;
+
+DEF FD1QV (q:OUT; d,BIT/clk:IN);
+BEGIN
+Fd1qv	:= FD1Q (qt, d, clk);
+Q	:= NIV (q, qt);
+END;
+
+DEF FD1QH (q:OUT; d,BIT/clk:IN);
+BEGIN
+Fd1qh	:= FD1Q (qt, d, clk);
+Q	:= NIVH (q, qt);
+END;
+
+DEF FD1QM (q:OUT; d,BIT/clk:IN);
+BEGIN
+Fd1qm	:= FD1Q (qt, d, clk);
+Q	:= NIVM (q, qt);
+END;
+
+DEF FD1QU (q:OUT; d,BIT/clk:IN);
+BEGIN
+Fd1qu	:= FD1Q (qt, d, clk);
+Q	:= NIVU (q, qt);
+END;
+
+DEF FD2H (q, qb:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+Fd2qh	:= FD2P (qt, qb, d, clk, r);
+Q	:= NIVH (q, qt);
+END;
+
+DEF FD2QM (q:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+Fd2qm	:= FD2Q (qt, d, clk, r);
+Q	:= NIVM (q, qt);
+END;
+
+DEF FD2QH (q:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+Fd2qh	:= FD2QP (qt, d, clk, r);
+Q	:= NIVH (q, qt);
+END;
+
+DEF FD2QU (q:OUT; d,BIT/clk,BIT/r:IN);
+BEGIN
+Fd2qu	:= FD2QP (qt, d, clk, r);
+Q	:= NIVU (q, qt);
+END;
+
+DEF HA1M (s,BIT/co:OUT; a,b:IN);
+BEGIN
+Ha1m	:= HA1 (st, co, a, b);
+S	:= NIVM (s, st);
+END;
+
+DEF LDN2QM (q:OUT; d,BIT/gn,BIT/cd:IN);
+BEGIN
+Ldn2qm	:= LDN2Q (qt, d, gn, cd);
+Q	:= NIVM (q, qt);
+END;
+
+DEF LDN2QH (q:OUT; d,BIT/gn,BIT/cd:IN);
+BEGIN
+Ldn2qh	:= LDN2Q (qt, d, gn, cd);
+Q	:= NIVH (q, qt);
+END;
+
+DEF MX2H (z:OUT; a[0..1], BIT/s :IN);
+BEGIN
+Mx2h	:= MX2 (zt, a[0..1], s);
+Z	:= NIVH (z, zt);
+END;
+
+DEF MX2M (z:OUT; a[0..1], BIT/s :IN);
+BEGIN
+Mx2m	:= MX2 (zt, a[0..1], s);
+Z	:= NIVM (z, zt);
+END;
+
+DEF MX2U (z:OUT; a[0..1], BIT/s :IN);
+BEGIN
+Mx2u	:= MX2P (zt, a[0..1], s);
+Z	:= NIVU (z, zt);
+END;
+
+DEF MX4M (z:OUT; a[0..3], BIT/s[0..1] :IN);
+BEGIN
+Mx4m	:= MX4 (zt, a[0..3], s[0..1]);
+Z	:= NIVM (z, zt);
+END;
+
+DEF ND2H (z:OUT; a,b:IN);
+BEGIN
+Nd2h	:= ND2 (zt, a, b);
+Z	:= NIVH (z, zt);
+END;
+
+DEF ND2M (z:OUT; a,b:IN);
+BEGIN
+Nd2m	:= ND2 (zt, a, b);
+Z	:= NIVM (z, zt);
+END;
+
+DEF ND2U (z:OUT; a,b:IN);
+BEGIN
+Nd2u	:= ND2 (zt, a, b);
+Z	:= NIVU (z, zt);
+END;
+
+DEF ND3M (z:OUT; a, b, c:IN);
+BEGIN
+Nd3m	:= ND3 (zt, a, b, c);
+Z	:= NIVM (z, zt);
+END;
+
+DEF ND3H (z:OUT; a, b, c:IN);
+BEGIN
+Nd3h	:= ND3 (zt, a, b, c);
+Z	:= NIVH (z, zt);
+END;
+
+DEF ND3U (z:OUT; a, b, c:IN);
+BEGIN
+Nd3u	:= ND3 (zt, a, b, c);
+Z	:= NIVU (z, zt);
+END;
+
+DEF ND4H (z:OUT; a, b, c, d:IN);
+BEGIN
+Nd4h	:= ND4 (zt, a, b, c, d);
+Z	:= NIVH (z, zt);
+END;
+
+DEF ND4U (z:OUT; a, b, c, d:IN);
+BEGIN
+Nd4u	:= ND4P (zt, a, b, c, d);
+Z	:= NIVU (z, zt);
+END;
+
+DEF ND6M (z:OUT; a, b, c, d, e, f:IN);
+BEGIN
+Nd6m	:= ND6 (zt, a, b, c, d, e, f);
+Z	:= NIVM (z, zt);
+END;
+
+DEF ND6U (z:OUT; a, b, c, d, e, f:IN);
+BEGIN
+Nd6u	:= ND6 (zt, a, b, c, d, e, f);
+Z	:= NIVU (z, zt);
+END;
+
+DEF ND7U (z:OUT; a, b, c, d, e, f, g:IN);
+BEGIN
+One	:= TIE1 (one);
+Nd7u	:= ND8 (zt, a, b, c, d, e, f, g, one);
+Z	:= NIVU (z, zt);
+END;
+
+DEF NR2M (z:OUT; a,b:IN);
+BEGIN
+Nr2m	:= NR2 (zt, a, b);
+Z	:= NIVM (z, zt);
+END;
+
+DEF NR2H (z:OUT; a,b:IN);
+BEGIN
+Nr2h	:= NR2 (zt, a, b);
+Z	:= NIVH (z, zt);
+END;
+
+DEF NR2U (z:OUT; a,b:IN);
+BEGIN
+Nr2u	:= NR2 (zt, a, b);
+Z	:= NIVU (z, zt);
+END;
+
+DEF NR3M (z:OUT; a,b,c:IN);
+BEGIN
+Nr3m	:= NR3 (zt, a, b, c);
+Z	:= NIVM (z, zt);
+END;
+
+DEF NR3H (z:OUT; a,b,c:IN);
+BEGIN
+Nr3h	:= NR3 (zt, a, b, c);
+Z	:= NIVH (z, zt);
+END;
+
+DEF NR3U (z:OUT; a,b,c:IN);
+BEGIN
+Nr3u	:= NR3 (zt, a, b, c);
+Z	:= NIVU (z, zt);
+END;
+
+DEF NR4M (z:OUT; a,b,c,d:IN);
+BEGIN
+Nr4m	:= NR4 (zt, a, b, c, d);
+Z	:= NIVM (z, zt);
+END;
+
+DEF NR4H (z:OUT; a,b,c,d:IN);
+BEGIN
+Nr4h	:= NR4 (zt, a, b, c, d);
+Z	:= NIVH (z, zt);
+END;
+
+DEF NR5U (z :IO; a,b,c,d,e :IN);
+BEGIN
+Zero	:= TIE0 (zero);
+Gate	:= NR6 (zt, a, b, c, d, e, zero);
+Z	:= NIVU (z, zt);
+END;
+
+DEF NR6M (z:OUT; a,b,c,d,e,f:IN);
+BEGIN
+Nr6m	:= NR6 (zt, a, b, c, d, e, f);
+Z	:= NIVM (z, zt);
+END;
+
+DEF NR8H (z:OUT; a,b,c,d,e,f,g,h:IN);
+BEGIN
+Nr8h	:= NR8 (zt, a, b, c, d, e, f, g, h);
+Z	:= NIVH (z, zt);
+END;
+
+DEF OR2M (z:OUT; a,b:IN);
+BEGIN
+Or2m	:= NR2 (zt, a, b);
+Z	:= IVM (z, zt);
+END;
+
+#if TOSHIBA
+DEF OR2H (z:OUT; a,b:IN);
+BEGIN
+Or2h	:= NR2 (zt, a, b);
+Z	:= IVH (z, zt);
+END;
+#endif
+DEF OR2_H (z:OUT; a,b:IN);
+BEGIN
+Or2h	:= NR2 (zt, a, b);
+Z	:= IVH (z, zt);
+END;
+
+DEF OR2U (z:OUT; a,b:IN);
+BEGIN
+Or2u	:= NR2P (zt, a, b);
+Z	:= IVU (z, zt);
+END;
+
+DEF OR3M (z:OUT; a, b, c:IN);
+BEGIN
+Or3m	:= NR3 (zt, a, b, c);
+Z	:= IVM (z, zt);
+END;
+
+#if TOSHIBA
+DEF OR3H (z:OUT; a, b, c:IN);
+BEGIN
+Or3h	:= NR3 (zt, a, b, c);
+Z	:= IVH (z, zt);
+END;
+#endif
+DEF OR3_H (z:OUT; a, b, c:IN);
+BEGIN
+Or3h	:= NR3 (zt, a, b, c);
+Z	:= IVH (z, zt);
+END;
+
+DEF OR3U (z:OUT; a, b, c:IN);
+BEGIN
+Or3u	:= OR3 (zt, a, b, c);
+Z	:= NIVU (z, zt);
+END;
+
+DEF OR4_H (z:OUT; a, b, c, d:IN);
+BEGIN
+Or4u	:= OR4 (zt, a, b, c, d);
+Z	:= NIVH (z, zt);
+END;
+
+DEF OR4U (z:OUT; a, b, c, d:IN);
+BEGIN
+Or4u	:= OR4 (zt, a, b, c, d);
+Z	:= NIVU (z, zt);
+END;
+
+DEF OR5U (z:OUT; a, b, c, d, e:IN);
+BEGIN
+Zero	:= TIE0 (zero);
+Or5u	:= NR6 (zt, a, b, c, d, e, zero);
+Z	:= IVU (z, zt);
+END;
+
+DEF OR7M (z:OUT; a, b, c, d, e, f, g:IN);
+BEGIN
+Zero	:= TIE0 (zero);
+Or5u	:= NR8 (zt, a, b, c, d, e, f, g, zero);
+Z	:= IVM (z, zt);
+END;
+
+/** These blocks require Toshiba versions in a separate library, as
+    they have parallel outputs. **/
+
+DEF NIVU2 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	22
+#GATECOUNT	8
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU2	:= BUF_PRIM (z,a);
+END;
+
+DEF NIVU3 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	33
+#GATECOUNT	12
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU3	:= BUF_PRIM (z,a);
+END;
+
+DEF NIVU4 (z:OUT; a:IN);
+BEGIN
+#GRIDCOUNT	33
+#GATECOUNT	12
+#MEGACOUNT	0
+#TYPEWIDE	1
+NIVU4	:= BUF_PRIM (z,a);
+END;
+
+DEF ND2X2 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	6
+#GATECOUNT	2
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND2X2	:= ND2 (z,a,b);
+END;
+
+DEF ND2X3 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	9
+#GATECOUNT	3
+#MEGACOUNT	0
+#TYPEWIDE	1
+ND2X3	:= ND2 (z,a,b);
+END;
+
+DEF OR2X3 (z:OUT; a,b:IN);
+BEGIN
+#GRIDCOUNT	12
+#GATECOUNT	6
+#MEGACOUNT	0
+#TYPEWIDE	1
+OR2X3	:= OR2 (z,a,b);
+END;
+
+DEF ANR23 (z:OUT; a,b,c,d:IN);
+BEGIN
+#GRIDCOUNT      15
+#GATECOUNT      6
+#MEGACOUNT      0
+#TYPEWIDE       1
+An2h    := ANR2 (z, a, b, c, d);
+END;
+
+DEF     BNIV32  (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+#if FLARE
+DEF     BNIV310 (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+
+DEF     BNIV34  (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+#endif
+#if TOSHIBA
+DEF     BNIV310 (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+
+DEF     BNIV34  (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+#endif
+#if VERILOG
+DEF     BNIV310 (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+
+DEF     BNIV34  (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+#endif
+#if TEGAS
+DEF     BNIV310 (z:IO;a:IN);
+BEGIN
+Z       :=      NIVU (z,a);
+END;
+
+DEF     BNIV34  (z:IO;a:IN);
+BEGIN
+Z       :=      NIVU (z,a);
+END;
+#endif
+DEF     BNIV312 (z:IO;a:IN);
+BEGIN
+#GRIDCOUNT 0
+#GATECOUNT 0
+#MEGACOUNT 0
+#TYPEWIDE 0
+Z       :=      NIV (z,a);
+END;
+ 
+
+

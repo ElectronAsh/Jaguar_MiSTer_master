@@ -1,0 +1,240 @@
+(*****************************************************************
+
+	bus.net
+
+This module controls the various busses in the Jaguar video chip.
+
+******************************************************************)
+
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego;
+
+
+DEF	BUS	(reads,ack,intdev,cpu32,ba[0..2],
+		mws64,mws16,mws8,
+		notdbg,ourack,w[0..3],
+		erd,justify,intbm,intbms,cpubm,clk,
+		testen,intbmw,resetl,idle:IN;
+
+		den[0..2],aen,
+		dmuxu[0..2],dmuxd[0..2],dren,
+		xdsrc,
+		ainen:IO);
+
+(*
+Justify indicates that the data is at the least significant end of the
+processors data bus as opposed to the position specified by the address bits
+*)
+
+BEGIN
+
+(*************** data bus IO control *********************)
+
+(*
+den[0] enables d0-d15 and is asserted
+
+1) internal bus master writing
+2) during interrupt acknowledge
+3) at the end of a CPU read cycle
+
+den[1] enables d16-d31 and is asserted
+
+1) 16 bit host, writing
+2) dsp, writing
+3) internal bus master writing
+4) at the end of a CPU read cycle
+
+den[2] enables d32-d63 and is asserted
+
+1) writing
+2) at the end of a CPU read cycle
+
+*)
+
+Den03 :=	ND6 (den03,intbms,busy,notreads,testen,resetl,vcc);
+Den04 :=	ND2 (den04,ourack,resetl);
+Den05 :=	ND3 (den05,erd,testen,resetl);
+Deni[0] :=	ND3P (deni[0],den03,den04,den05);
+
+Den10 :=	ND6 (den10,ext16,busy,notreads,testen,resetl,vcc);
+Deni[1] :=	ND3P (deni[1],den10,den03,den05);
+
+Den20 :=	ND6 (den20,extbms,busy,notreads,testen,resetl,vcc);
+Deni[2] :=	ND3P (deni[2],den03,den20,den05);
+
+Den[0-2] :=	NIVU2 (den[0-2],deni[0-2]);
+
+(*
+host16 is asserted if a 16 bit host owns the bus
+ext16 is asserted if the dsp or a 16 bit host is bus master
+intbms is asserted if there is an internal bus master
+*)
+
+Host16 :=	AN2 (host16,cpubm,cpu16);
+Ext16 :=	OR2 (ext16,dbg,host16);
+Xp :=		IV (xp,intbm);
+Extbms :=	IV (extbms,intbms);
+Notjustify :=	IV (notjustify,justify);
+
+(* Compute the processor width *)
+(* NB where an internal processor justifies its data it must be treated
+as a narrower processor..the cycle width determines the processor width *)
+
+(* 
+
+pw64	=	justify * w[3]
+	+	/justify * intbm
+
+pw32	=	justify * /w[3] * w[2] * /w[1] * /w[0] 
+	+	justify * /w[3] * /w[2] * w[1] * w[0] 
+	+	/justify * cpubm * cpu32 
+
+pw16	=	justify * /w[3] * /w[2] * w[1] * /w[0] 
+	+	/justify * cpubm * cpu16 
+	+	/justify * dsp
+
+pw8	=	justify * /w[3] * /w[2] * /w[1]  
+*)
+
+Pw640 :=	ND2 (pw640,justify,w[3]);
+Pw641 :=	ND2 (pw641,notjustify,intbm);
+Pw64 :=		ND2 (pw64,pw640,pw641);
+
+Pw160	:=	ND6 (pw160,justify,wl[3],wl[2],w[1],wl[0],vcc); 
+Pw161 :=	ND3 (pw161,notjustify,cpubm,cpu16);
+Pw162 :=	ND2 (pw162,notjustify,dbg);
+Pw16 :=		ND3 (pw16,pw160,pw161,pw162);
+
+Pw8	:=	AN4 (pw8,justify,wl[3],wl[2],wl[1]); 
+
+Pws8	:=	SLATCH (pws8,pw8,clk,ack);
+Pws16	:=	SLATCH (pws16,pw16,clk,ack);
+Pws64	:=	SLATCH (pws64,pw64,clk,ack);
+
+Notpws64 :=	IV (notpws64,pws64);
+Pws816 :=	OR2 (pws816,pws8,pws16);
+Wsl[0-3] :=	IV (wl[0-3],w[0-3]);
+
+(************** address bus control ******************)
+
+(*
+aen enables the address output and is asserted when an internal
+bus master is in control
+*)
+
+Aen :=		NIVU (aen,intbms);
+
+(* ainen enables the external address bus onto the internal *)
+
+Ainen :=	NIVU2 (ainen,xp);
+
+Busy :=		IVH (busy,idle);
+Notreads :=	IVH (notreads,reads);
+Dbg :=		IV (dbg,notdbg);
+Cpu16 :=	IV (cpu16,cpu32);
+Mws816 :=	OR2 (mws816,mws8,mws16);
+Notmws64 :=	IV (notmws64,mws64);
+
+
+(************ data bus control *************************)
+
+(*
+
+dmuxd[0..2] copy high order data bits onto low order bits in order to write
+them into narrow RAM or for narrow CPU reads of wide ram
+
+dmuxu[0..2] copy low order data bits onto higher order bits in order
+to read from narrow memory, or for CPU writes to wide memory
+
+dmuxu[2] is asserted when
+/mws64 * ba[2] * reads			read narrow memory
+/pws64 * writes				narrow write, wide memory
+
+*)
+
+Dmuxu20 :=	ND4 (dmuxu20,notmws64,ba[2],reads,ourackl);
+Dmuxu21 :=	ND2 (dmuxu21,notpws64,notreads);
+Dmuxui[2] :=	ND2 (dmuxui[2],dmuxu20,dmuxu21);
+Dmuxu[2] :=	NIVU2 (dmuxu[2],dmuxui[2]);
+
+(*
+dmuxu[1] is asserted when
+mws816 * ba[1] * reads			read narrow memory
+pws816 * writes				narrow write, wide memory
+*)
+
+Vcc :=		TIE1 (vcc);
+Dmuxu10 :=	ND4 (dmuxu10,mws816,ba[1],reads,ourackl);
+Dmuxu11 :=	ND2 (dmuxu11,pws816,notreads);
+Dmuxui[1] :=	ND2 (dmuxui[1],dmuxu10,dmuxu11);
+Dmuxu[1] :=	NIVU2 (dmuxu[1],dmuxui[1]);
+
+(*
+dmuxu[0] is asserted when
+mws8 * ba[0] * reads			read narrow memory
+pws8 * /mws8 * ba[0] * writes		narrow write, wide memory
+
+*)
+Dmuxu00 :=	ND4 (dmuxu00,mws8,ba[0],reads,ourackl);
+Dmuxu01 :=	ND2 (dmuxu01,pws8,notreads);
+Dmuxui[0] :=	ND2 (dmuxui[0],dmuxu00,dmuxu01);
+Dmuxu[0] :=	NIVU2 (dmuxu[0],dmuxui[0]);
+
+(*
+dumxd[2] is asserted when 
+/pws64 * ba[2] * reads		narrow read, wide memory
+/mws64 * ba[2] * writes		wide write, narrow memory
+*)
+
+Dmuxd20 :=	ND4 (dmuxd20,notpws64,ba[2],reads,ourackl);
+Dmuxd21 :=	ND3 (dmuxd21,notmws64,ba[2],notreads);
+Dmuxdi[2] :=	ND2 (dmuxdi[2],dmuxd20,dmuxd21);
+Dmuxd[2] :=	NIVU2 (dmuxd[2],dmuxdi[2]);
+
+(*
+dmuxd[1] is asserted when
+pws816 * ba[1] * reads		narrow read, wide memory
+mws816 * ba[1] * writes		wide write, narrow memory
+*)
+
+Dmuxd10 :=	ND4 (dmuxd10,pws816,ba[1],reads,ourackl);
+Dmuxd11 :=	ND3 (dmuxd11,mws816,ba[1],notreads);
+Dmuxdi[1] :=	ND2 (dmuxdi[1],dmuxd10,dmuxd11);
+Dmuxd[1] :=	NIVU2 (dmuxd[1],dmuxdi[1]);
+
+(*
+dmuxd[0] is asserted when
+pws8 * ba[0] * reads			narrow read, wide memory
+mws8 * ba[0] * writes			wide write, narrow memory
+*)
+
+Dmuxd00 :=	ND4 (dmuxd00,pws8,ba[0],reads,ourackl);
+Dmuxd01 :=	ND3 (dmuxd01,mws8,ba[0],notreads);
+Dmuxdi[0] :=	ND2 (dmuxdi[0],dmuxd00,dmuxd01);
+Dmuxd[0] :=	NIVU2 (dmuxd[0],dmuxdi[0]);
+
+(* dren is enabled when internal memory is read and during interrupt ack *)
+
+Dren0 :=	ND2 (dren0,intdev,reads);
+Dreni :=	ND2 (dreni,dren0,ourackl);
+Dren :=		NIVH (dren,dreni);
+
+
+(*
+xdsrc is asserted when the data source is outside the chip 
+
+xdsrc is not asserted
+when an internal bus master is writing
+when internal memory is being read
+during interrupt acknowledge
+*)
+
+Xdsrc1 :=	ND2 (xdsrc1,intdev,reads);
+Ourackl :=	IVM (ourackl,ourack);
+Xdsrci :=	AN3 (xdsrci,intbmw,xdsrc1,ourackl);
+Xdsrc :=	NIVU2 (xdsrc,xdsrci);
+
+END;
+
+

@@ -1,0 +1,37 @@
+/******************************************************************
+addrcomp.net
+25/3/91
+
+Address Window bounds comparator
+--------------------------------
+This module flags when an address is outside the window bounds
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF ADDRCOMP (
+	a1_outside	/* A1 pointer is outside window bounds */
+	:OUT;
+INT16/	a1_x
+INT16/	a1_y
+INT15/	a1_win_x
+INT15/	a1_win_y
+	:IN);
+BEGIN
+
+/* The address is outside if negative, or if greater than or equal
+to the window size */
+
+A1_xcomp	:= MAG_15 (a1xgr, a1xeq, a1xlt, a1_x{0..14}, 
+			a1_win_x{0..14});
+A1_ycomp	:= MAG_15 (a1ygr, a1yeq, a1ylt, a1_y{0..14}, 
+			a1_win_y{0..14});
+A1_outside	:= OR6 (a1_outside, a1_x{15}, a1xgr, a1xeq, 
+			a1_y{15}, a1ygr, a1yeq);
+
+Unused0		:= DUMMY (a1xlt);
+Unused1		:= DUMMY (a1ylt);
+
+END;
+

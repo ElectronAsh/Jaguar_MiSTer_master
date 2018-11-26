@@ -1,0 +1,35 @@
+/******************************************************************
+enumerates.net
+15/3/91
+
+Enumerated type blocks
+----------------------
+
+******************************************************************/
+
+IMPORT prim;
+
+/* Disasm
+GPU Op-code disassembler */
+
+DEF DSP_DISASM (INT6/out :OUT; INT6/in :IN);
+
+BEGIN
+#GRIDCOUNT      0
+#GATECOUNT      0
+#MEGACOUNT      0
+
+Disasm          := ENUM_PRIM (out,in 
+<       
+add,    addc,   addq,   addqt,	sub,    subc,   subq,	subqt,	
+neg,	and,    or,     xor,    not,    btst,	bset,	bclr,
+mult,   imult,  imultn,	resmac,	imacn	div,    abs,	sh,
+shlq,   shrq,   sha,    sharq, 	rol,	rolq,   cmp,    cmpq,   
+subqmod,sat16,	move,   moveq,  moveta, movefa, movei,  loadb,  
+loadw,  load,   sat32,  load14, load15, storeb, storew, store,  
+mirror, store14,store15,movepc, jump,   jr,     mmult,  mtoi,   
+normi,  nop , loadr14, loadr15, storer14, storer15, spare, addqmod
+>);
+
+END;
+

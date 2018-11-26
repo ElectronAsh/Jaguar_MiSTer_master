@@ -1,0 +1,64 @@
+/******************************************************************
+lfu
+27/11/90
+
+Blitter logic function unit
+
+******************************************************************/
+
+IMPORT duplo, tosh;
+
+DEF LFU (
+INT32/	lfu[0..1]
+	 :OUT;
+INT32/	srcd[0..1]
+INT32/	dstd[0..1]
+	lfc[0..3]	/* LFU mode control */
+	:IN);
+
+INT32/	dstd\[0..1], lfunc[0..3], lfuncb[0..3], srcd\[0..1]
+INT32/	trma[0..1], trmb[0..1], trmc[0..1], trmd[0..1]
+:LOCAL;
+BEGIN
+
+Srcd\[0-1]	:= IV (srcd\[0-1], srcd[0-1]);
+Dstd\[0-1]	:= IV (dstd\[0-1], dstd[0-1]);
+Lfcb[0-3]	:= NIVU (lfcb[0-3], lfc[0-3]);
+Lfunc[0-3]	:= JOIN (lfunc[0-3], lfc[0-3], lfc[0-3], lfc[0-3], 
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3], lfc[0-3], lfc[0-3], lfc[0-3],  
+			lfc[0-3]);
+Lfuncb[0-3]	:= JOIN (lfuncb[0-3], lfcb[0-3], lfcb[0-3], 
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3], lfcb[0-3], lfcb[0-3],
+			lfcb[0-3], lfcb[0-3]);
+Lftrma[0]	:= ND3 (trma[0], srcd\[0], dstd\[0], 
+			lfunc[0]);
+Lftrmb[0]	:= ND3 (trmb[0], srcd\[0], dstd[0], 
+			lfunc[1]);
+Lftrmc[0]	:= ND3 (trmc[0], srcd[0], dstd\[0], 
+			lfunc[2]);
+Lftrmd[0]	:= ND3 (trmd[0], srcd[0], dstd[0], 
+			lfunc[3]);
+Lftrma[1]	:= ND3 (trma[1], srcd\[1], dstd\[1], 
+			lfuncb[0]);
+Lftrmb[1]	:= ND3 (trmb[1], srcd\[1], dstd[1], 
+			lfuncb[1]);
+Lftrmc[1]	:= ND3 (trmc[1], srcd[1], dstd\[1], 
+			lfuncb[2]);
+Lftrmd[1]	:= ND3 (trmd[1], srcd[1], dstd[1], 
+			lfuncb[3]);
+Lfgen[0-1]	:= ND4 (lfu[0-1], trma[0-1], trmb[0-1], trmc[0-1], 
+			trmd[0-1]);
+
+END;

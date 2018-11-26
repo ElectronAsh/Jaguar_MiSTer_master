@@ -1,0 +1,76 @@
+/******************************************************************
+blitstop.net
+16/5/91
+
+Blitter collision stop and resume logic
+---------------------------------------
+
+This module controls the mechanism which allows the blitter to be
+stopped under certain conditions.  These are the outputs from 
+the data and zed comparators.  When it is stopped it disables the
+bus request line from the blitter, freezing its internal state.
+
+The blitter may either be restarted for reset from this frozen 
+state.
+
+(1/168)
+******************************************************************/
+
+IMPORT tosh;
+
+DEF BLITSTOP (
+	gpu_dout[1]	/* readable port bus */
+	:TRI;
+	stopped		/* retract blitter bus request */
+	reset\		/* reset to the rest of the blitter */
+	:OUT;
+	clk[0]		/* co-processor clock */
+	dwrite[1]	/* inner loop dest write state, p-l stg 1*/
+INT32/	gpu_din		/* GPU data bus */
+	nowrite		/* suppress inner loop write operation */
+	statrd		/* blitter status read port */
+	stopld		/* collsion stop register load */
+	xreset\		/* external reset into the blitter */
+	:IN);
+
+BEGIN
+
+Resume\		:= ND2 (resume\, stopld, gpu_din{0});
+Coll_abort\	:= ND2 (coll_abort\,  stopld, gpu_din{1});
+Coll_abort	:= IV (coll_abort, coll_abort\);
+Stopen		:= FDSYNCR (stopen, gpu_din{2}, stopld, clk[0],
+			xreset\);
+
+/* make the status readable */
+
+Stat[1]		:= TS (gpu_dout[1], stopped, statrd);
+
+/* The collide signal goes active for one tick at the start of
+dwrite[1] when the appropriate conditions are met. 
+collide = dwrite[1] . nowrite
+*/
+
+Collidea	:= AN3 (collidea, nowrite, stopen, dwrite[1]);
+Collideb	:= FD1Q (collideb, collidea, clk[0]);
+Collideb\	:= IV (collideb\, collideb);
+Collide		:= AN2 (collide, collidea, collideb\);
+
+/* The collision stop state machine */
+
+Idle		:= NR2 (idle, stopped, drv_reset);
+
+Stt0		:= ND2 (stt[0], idle, collide);
+Stt1		:= ND3 (stt[1], stopped, resume\, coll_abort\);
+Stt2		:= ND2 (stt[2], stt[0..1]);
+Stopped		:= FD2Q (stopped, stt[2], clk[0], xreset\);
+
+Drst		:= AN2 (drst, stopped, coll_abort);
+Drv_reset	:= FD2Q (drv_reset, drst, clk[0], xreset\);
+
+/* Drive reset to the rest of the blitter from external reset or 
+the drive reset state. */
+
+Drv_reset\	:= IV (drv_reset\, drv_reset);
+Reset\		:= AN2U (reset\, xreset\, drv_reset\);
+
+END;

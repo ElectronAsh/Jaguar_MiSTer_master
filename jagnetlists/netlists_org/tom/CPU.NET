@@ -1,0 +1,115 @@
+(*****************************************************************
+
+	cpu.net
+
+This module interfaces the cpu/dsp to the internal bus in the Jaguar video chip.
+
+******************************************************************)
+
+
+IMPORT	tosh,	(* Toshiba gate & pad definitions *)
+	lego;
+
+
+DEF	CPU     (sizin[0..1],rwin,notack,
+		ack,dreqin,resetl,clk[0],
+		intbm,intbms,m68k,ba,dbgl:IN;
+
+		dtackl,erd:IO;
+
+        	w[0..3],rw,mreq,justify:BUS);
+
+BEGIN
+
+(******************* CPU/DSP bus interface ****************)
+
+/*
+ if the CPU is a 68k then the size bits must be synthesised from lds/uds
+ (sizin[0]/sizin[1])
+*/
+
+W68k[1] :=	NR2 (w68k[1],sizin[0..1]);	/* word if both asserted */
+W68k[0] :=	IV (w68k[0],w68k[1]);		/* else byte */
+Bmcpu :=	IV (bmcpu,ba);
+Bm68k :=	AN2 (bm68k,m68k,bmcpu);
+Jsizin[2] :=	NR2 (sizin[2],sizin[0..1]);	/* non-68k zero means long */
+
+
+Xw[0] :=	MX2 (xw[0],sizin[0],w68k[0],bm68k);
+Xw[1] :=	MX2 (xw[1],sizin[1],w68k[1],bm68k);
+Xw[2] :=	MX2 (xw[2],sizin[2],gnd,bm68k);
+
+Xp :=		IVM (xp,intbm);
+Extbms :=	IVM (extbms,intbms);
+Dbg :=		IV (dbg,dbgl);
+
+W[0-2] :=	TS (w[0-2],xw[0-2],xp);
+W[3]	 :=	TS (w[3],gnd,xp);
+Rw :=		TS (rw,rwin,xp);
+Mreq :=		TSM (mreq,cmreq,xp);
+Justify :=	TS (justify,gnd,xp);
+Gnd :=		TIE0 (gnd);
+Vcc :=		TIE1 (vcc);
+
+(* the CPU/DSP needs a state machine to make it work with the pipelined bus *)
+(*
+
+10	idle	if (sreq) goto 11 
+		else goto 10
+
+11	req	assert cmreq
+		if (ack) goto 12
+		else goto 11
+
+12	ack	if (ack) goto 13
+		else goto 12
+
+13	dtack	assert dtack
+		if (read) assert erd
+		if (!sreq) goto 10
+		else goto 13
+
+*)
+
+Q11 :=		FD2Q (q11,d11,clk[0],resetl);
+Q12 :=		FD2Q (q12,d12,clk[0],resetl);
+Q13 :=		FD2Q (q13,d13,clk[0],resetl);
+
+Idlei :=	NR3 (idlei,q11,q12,q13);
+Idle :=		NIV (idle,idlei);
+
+Mt11a :=	ND3 (mt11a,dbg,dreqin,idle);
+Mt11b :=	ND6 (mt11b,bmcpu,dreqin,not68k,extbms,vcc,idle);
+Mt11c :=	ND6 (mt11c,bmcpu,dreqin,lds,m68k,extbms,idle);
+Mt11d :=	ND6 (mt11d,bmcpu,dreqin,uds,m68k,extbms,idle);
+Mt111 :=	ND2 (mt111,q11,notack);
+D11 :=		ND6 (d11,mt11a,mt11b,mt11c,mt11d,vcc,mt111);
+
+Mt120 :=	ND2 (mt120,q11,ack);
+Mt121 :=	ND2 (mt121,q12,notack);
+D12 :=		ND2 (d12,mt120,mt121);
+
+Mt130 :=	ND2 (mt130,q12,ack);
+Mt13a :=	ND4 (mt13a,ba,dreqin,extbms,q13);
+Mt13b :=	ND6 (mt13b,bmcpu,dreqin,not68k,extbms,vcc,q13);
+Mt13c :=	ND6 (mt13c,bmcpu,dreqin,lds,m68k,extbms,q13);
+Mt13d :=	ND6 (mt13d,bmcpu,dreqin,uds,m68k,extbms,q13);
+D13 :=		ND6 (d13,mt130,mt13a,mt13b,mt13c,mt13d,vcc);
+
+Cmreq :=	NIV (cmreq,q11);
+
+Dt1 :=		IV (dtackl,q13);
+
+Erd1 :=		AN2 (erd,q13,readcycle);
+
+(* latch direction of cycle *)
+
+Readcycle :=	SLATCH (readcycle,rw,clk[0],q11);
+
+Lds :=		IV (lds,sizin[0]);
+Uds :=		IV (uds,sizin[1]);
+Not68k :=	IV (not68k,m68k);
+
+END;
+
+

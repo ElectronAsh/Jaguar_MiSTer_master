@@ -1,0 +1,478 @@
+/*****************************************************************
+
+	tom.net
+
+This is the top level hdl description of the Jaguar video chip.
+
+******************************************************************)
+
+
+IMPORT 	mem,		(* memory controller	*)
+	dbus,		(* main data path	*)
+	abus,		(* address bus logic	*)
+	graphics,	(* graphics processor	*)
+	ob,		(* object processor	*)
+	wbk,		(* writeback mechanism	*)
+	obdata,		(* object data path	*)
+	lbuf,		(* line buffer		*)
+	vid,		(* video timing		*)
+	pix,		(* pixel generation	*)
+	clk,		(* clock generator	*)
+	iodec,		(* local address decode	*)
+	misc,		(* miscelaneous		*)
+
+	lego,
+	tosh;		(* Toshiba gate & pad definitions *)
+
+
+DEF TOM	(
+
+(****************** INPUTS ***********************)
+
+	xbgl,		(* this input is the bus grant from the CPU *)
+	xdbrl[0..1],	(* requests the bus for the dsp *)
+	xlp,		(* light pen *)
+	xdint,		(* external interrupt *)
+	xtest,
+	xpclk,		(* system clock input 50% duty cycle *)
+	xvclk,		(* video clock input *)
+	xwaitl,		(* synchronous wait input *)	
+	xresetl:IN;	(* clean reset input *)
+
+(*********************** BIDIRECTIONAL SIGNALS ***************)
+
+	xd[0..63],	(* 64 bit data bus
+			memory devices may be 8,16,32 or 64 bits wide
+			and will be placed on the lowest part of this bus
+			as will 16 or 32 bit processors *)
+	xa[0..23],	(* 23 bit address bus
+			processors, peripherals and static address memory
+			will share this bus. *)
+	xma[0..10],	(* multiplexed address bus out 
+			also used on power-up to
+			specify initial memory configuration*)
+	xhs,xvs,	(* sync i/o *)
+
+(* The following bidirectional signals are driven by the ASIC when it has
+bus ownership. This is when bg is active *)
+
+	xsiz[0..1],	(* indicates the number of bytes to be
+			transfered in the current memory cycle
+			when enabled as an output
+			1 -> byte
+			2 -> word
+			3 -> long
+			0 -> phrase
+			as an input
+			1-> byte
+			2-> word
+			3-> three bytes
+			0-> long *)
+
+		
+
+	xfc[0..2],	(* 68K style function code
+			 in non Motorola mode fc[0] is intal *)
+	xrw,		(* indicates direction of current memory cycle *)
+	xdreql,		(* data transfer request *)
+	xba,		(* bus grant acknowledge *)
+	xbrl:TRI;	(* requests the bus from the microprocessor *)
+
+
+(*************************** OUTPUTS ***************************)
+
+
+	xr[0..7],	(* RGB *)
+	xg[0..7],
+	xb[0..7],
+	xinc,		(* incrust *)
+	xoel[0..2],	(* memory output enables
+			oel[0] enables d0-d15,
+			oel[1] enables d16-d31,
+			oel[2] enables d32-d63. *)
+	xmaska[0..2],	(* low order address bits for narrow memory *)
+	xromcsl[0..1],	(* rom chip selects *)
+	xcasl[0..1],	(* cas for each bank of DRAM *)
+	xdbgl,		(* this output grants the bus to the dsp *)
+	xexpl,		(* enables slow bus buffers *)
+	xdspcsl,	(* enables jerry *)
+	xwel[0..7],	(* memory write strobes wel0 writes d0-d7, etc *)
+	xrasl[0..1],	(* ras for each bank of DRAM *)
+	xdtackl,	(* data transfer acknowledge *)
+	xintl, (* active low interrupt output *)
+	hs_o,hhs_o,vs_o, refreq, obbreq, bbreq[0..1], gbreq[0..1], dram, blank:IO;
+	tlw, ram_rdy:IN; aen, den[0..2]:OUT); (* GE *)	
+
+	(* GE - commented out *)
+	(* INT8/xd0_7,xd8_15,xd16_23,xd24_31,xd32_39,xd40_47,xd48_55,xd56_63,
+	INT24/xa:IO; *)
+	(* GE - added *)
+	wd[0..63],a[0..23],w[0..3],rw,mreq,dr[0..15],justify:BUS;
+	
+	
+BEGIN
+
+(* Byte lanes for display purposes *)
+
+(* GE - commented out *)
+(* D0 :=	JOIN_BUS (xd0_7,xd[0..7]);
+D1 :=	JOIN_BUS (xd8_15,xd[8..15]);
+D2 :=	JOIN_BUS (xd16_23,xd[16..23]);
+D3 :=	JOIN_BUS (xd24_31,xd[24..31]);
+D4 :=	JOIN_BUS (xd32_39,xd[32..39]);
+D5 :=	JOIN_BUS (xd40_47,xd[40..47]);
+D6 :=	JOIN_BUS (xd48_55,xd[48..55]);
+D7 :=	JOIN_BUS (xd56_63,xd[56..63]);
+D0u :=	DUMMY (xd0_7);
+D1u :=	DUMMY (xd8_15);
+D2u :=	DUMMY (xd16_23);
+D3u :=	DUMMY (xd24_31);
+D4u :=	DUMMY (xd32_39);
+D5u :=	DUMMY (xd40_47);
+D6u :=	DUMMY (xd48_55);
+D7u :=	DUMMY (xd56_63);
+
+Xa :=	JOIN_BUS (xa,gnd,xa[1..23]);
+Xau :=	DUMMY (xa); *)
+
+(* Pads (assumes Toshiba 24SC cell library) *)
+
+Dpad[0] :=	BD8T (xd[0],din[0],nt[78],dp[0],gnd,den[0],nt[77]);
+Dpad[1] :=	BD8T (xd[1],din[1],nt[74],dp[1],gnd,den[0],nt[73]);
+Dpad[2] :=	BD8T (xd[2],din[2],nt[70],dp[2],gnd,den[0],nt[69]);
+Dpad[3] :=	BD8T (xd[3],din[3],nt[66],dp[3],gnd,den[0],nt[65]);
+Dpad[4] :=	BD8T (xd[4],din[4],nt[62],dp[4],gnd,den[0],nt[61]);
+Dpad[5] :=	BD8T (xd[5],din[5],nt[58],dp[5],gnd,den[0],nt[57]);
+Dpad[6] :=	BD8T (xd[6],din[6],nt[54],dp[6],gnd,den[0],nt[53]);
+Dpad[7] :=	BD8T (xd[7],din[7],nt[50],dp[7],gnd,den[0],nt[49]);
+
+Dpad[8] :=	BD8T (xd[8],din[8],nt[49],dp[8],gnd,den[0],nt[48]);
+Dpad[9] :=	BD8T (xd[9],din[9],nt[53],dp[9],gnd,den[0],nt[52]);
+Dpad[10] :=	BD8T (xd[10],din[10],nt[57],dp[10],gnd,den[0],nt[56]);
+Dpad[11] :=	BD8T (xd[11],din[11],nt[61],dp[11],gnd,den[0],nt[60]);
+Dpad[12] :=	BD8T (xd[12],din[12],nt[65],dp[12],gnd,den[0],nt[64]);
+Dpad[13] :=	BD8T (xd[13],din[13],nt[69],dp[13],gnd,den[0],nt[68]);
+Dpad[14] :=	BD8T (xd[14],din[14],nt[73],dp[14],gnd,den[0],nt[72]);
+Dpad[15] :=	BD8T (xd[15],din[15],nt[77],dp[15],gnd,den[0],nt[76]);
+
+Dpad[16] :=	BD4T (xd[16],din[16],nt[76],dout[16],gnd,den[1],nt[75]);
+Dpad[17] :=	BD4T (xd[17],din[17],nt[72],dout[17],gnd,den[1],nt[71]);
+Dpad[18] :=	BD4T (xd[18],din[18],nt[68],dout[18],gnd,den[1],nt[67]);
+Dpad[19] :=	BD4T (xd[19],din[19],nt[64],dout[19],gnd,den[1],nt[63]);
+Dpad[20] :=	BD4T (xd[20],din[20],nt[60],dout[20],gnd,den[1],nt[59]);
+Dpad[21] :=	BD4T (xd[21],din[21],nt[56],dout[21],gnd,den[1],nt[55]);
+Dpad[22] :=	BD4T (xd[22],din[22],nt[52],dout[22],gnd,den[1],nt[51]);
+Dpad[23] :=	BD4T (xd[23],din[23],nt[48],dout[23],gnd,den[1],nt[47]);
+
+Dpad[24] :=	BD4T (xd[24],din[24],nt[47],dout[24],gnd,den[1],nt[46]);
+Dpad[25] :=	BD4T (xd[25],din[25],nt[51],dout[25],gnd,den[1],nt[50]);
+Dpad[26] :=	BD4T (xd[26],din[26],nt[55],dout[26],gnd,den[1],nt[54]);
+Dpad[27] :=	BD4T (xd[27],din[27],nt[59],dout[27],gnd,den[1],nt[58]);
+Dpad[28] :=	BD4T (xd[28],din[28],nt[63],dout[28],gnd,den[1],nt[62]);
+Dpad[29] :=	BD4T (xd[29],din[29],nt[67],dout[29],gnd,den[1],nt[66]);
+Dpad[30] :=	BD4T (xd[30],din[30],nt[71],dout[30],gnd,den[1],nt[70]);
+Dpad[31] :=	BD4T (xd[31],din[31],nt[75],dout[31],gnd,den[1],nt[74]);
+
+Dpad[32] :=	BD4T (xd[32],din[32],nt[119],dout[32],gnd,den[2],nt[118]);
+Dpad[33] :=	BD4T (xd[33],din[33],nt[115],dout[33],gnd,den[2],nt[114]);
+Dpad[34] :=	BD4T (xd[34],din[34],nt[111],dout[34],gnd,den[2],nt[110]);
+Dpad[35] :=	BD4T (xd[35],din[35],nt[107],dout[35],gnd,den[2],nt[106]);
+Dpad[36] :=	BD4T (xd[36],din[36],nt[103],dout[36],gnd,den[2],nt[102]);
+Dpad[37] :=	BD4T (xd[37],din[37],nt[99],dout[37],gnd,den[2],nt[98]);
+Dpad[38] :=	BD4T (xd[38],din[38],nt[95],dout[38],gnd,den[2],nt[94]);
+Dpad[39] :=	BD4T (xd[39],din[39],nt[91],dout[39],gnd,den[2],nt[90]);
+
+Dpad[40] :=	BD4T (xd[40],din[40],nt[90],dout[40],gnd,den[2],nt[89]);
+Dpad[41] :=	BD4T (xd[41],din[41],nt[94],dout[41],gnd,den[2],nt[93]);
+Dpad[42] :=	BD4T (xd[42],din[42],nt[98],dout[42],gnd,den[2],nt[97]);
+Dpad[43] :=	BD4T (xd[43],din[43],nt[102],dout[43],gnd,den[2],nt[101]);
+Dpad[44] :=	BD4T (xd[44],din[44],nt[106],dout[44],gnd,den[2],nt[105]);
+Dpad[45] :=	BD4T (xd[45],din[45],nt[110],dout[45],gnd,den[2],nt[109]);
+Dpad[46] :=	BD4T (xd[46],din[46],nt[114],dout[46],gnd,den[2],nt[113]);
+Dpad[47] :=	BD4T (xd[47],din[47],nt[118],dout[47],gnd,den[2],nt[117]);
+
+Dpad[48] :=	BD4T (xd[48],din[48],nt[121],dout[48],gnd,den[2],nt[120]);
+Dpad[49] :=	BD4T (xd[49],din[49],nt[117],dout[49],gnd,den[2],nt[116]);
+Dpad[50] :=	BD4T (xd[50],din[50],nt[113],dout[50],gnd,den[2],nt[112]);
+Dpad[51] :=	BD4T (xd[51],din[51],nt[109],dout[51],gnd,den[2],nt[108]);
+Dpad[52] :=	BD4T (xd[52],din[52],nt[105],dout[52],gnd,den[2],nt[104]);
+Dpad[53] :=	BD4T (xd[53],din[53],nt[101],dout[53],gnd,den[2],nt[100]);
+Dpad[54] :=	BD4T (xd[54],din[54],nt[97],dout[54],gnd,den[2],nt[96]);
+Dpad[55] :=	BD4T (xd[55],din[55],nt[93],dout[55],gnd,den[2],nt[92]);
+
+Dpad[56] :=	BD4T (xd[56],din[56],nt[92],dout[56],gnd,den[2],nt[91]);
+Dpad[57] :=	BD4T (xd[57],din[57],nt[96],dout[57],gnd,den[2],nt[95]);
+Dpad[58] :=	BD4T (xd[58],din[58],nt[100],dout[58],gnd,den[2],nt[99]);
+Dpad[59] :=	BD4T (xd[59],din[59],nt[104],dout[59],gnd,den[2],nt[103]);
+Dpad[60] :=	BD4T (xd[60],din[60],nt[108],dout[60],gnd,den[2],nt[107]);
+Dpad[61] :=	BD4T (xd[61],din[61],nt[112],dout[61],gnd,den[2],nt[111]);
+Dpad[62] :=	BD4T (xd[62],din[62],nt[116],dout[62],gnd,den[2],nt[115]);
+Dpad[63] :=	BD4T (xd[63],din[63],nt[120],dout[63],gnd,den[2],nt[119]);
+
+Apad[0] := 	BD4T (xa[0],ain[0],nt[23],maska[0],gnd,aen,nt[22]);
+Apad[1] := 	BD4T (xa[1],ain[1],nt[24],maska[1],gnd,aen,nt[23]);
+Apad[2] := 	BD4T (xa[2],ain[2],nt[25],maska[2],gnd,aen,nt[24]);
+Apad[3-23] := BD4T (xa[3-23],ain[3-23],nt[26-46],aout[3-23],gnd,aen,nt[25-45]);
+
+Mapad[0] :=	BD16T (xma[0],cfg[0],nt[89],ma[0],gnd,cfgen,nt[88]);
+Mapad[1] :=	BD16T (xma[1],cfg[1],nt[88],ma[1],gnd,cfgen,nt[87]);
+Mapad[2] :=	BD16T (xma[2],cfg[2],nt[87],ma[2],gnd,cfgen,nt[86]);
+Mapad[3] :=	BD16T (xma[3],cfg[3],nt[86],ma[3],gnd,cfgen,nt[85]);
+Mapad[4] :=	BD16T (xma[4],cfg[4],nt[85],ma[4],gnd,cfgen,nt[84]);
+Mapad[5] :=	BD16T (xma[5],cfg[5],nt[84],ma[5],gnd,cfgen,nt[83]);
+Mapad[6] :=	BD16T (xma[6],cfg[6],nt[83],ma[6],gnd,cfgen,nt[82]);
+Mapad[7] :=	BD16T (xma[7],cfg[7],nt[82],ma[7],gnd,cfgen,nt[81]);
+Mapad[8] :=	BD16T (xma[8],cfg[8],nt[81],ma[8],gnd,cfgen,nt[80]);
+Mapad[9] :=	BD16T (xma[9],cfg[9],nt[80],ma[9],gnd,cfgen,nt[79]);
+Cfgu[9-10] :=	DUMMY (cfg[9-10]);
+
+Mapad[10] :=	BD16T (xma[10],cfg[10],nt[79],ma[10],gnd,cfgen,nt[78]);
+
+Maska[0-2] :=	B2 (xmaska[0-2],maska[0-2]);	/* low order address bits for
+						   narrow memory */
+
+Romcs[0-1] :=	B2 (xromcsl[0-1],romcsl[0-1]);
+
+Ras[0-1] :=	B16 (xrasl[0-1],rasl[0-1]);
+Notndtest :=	IV (notndtest,ndtest);
+
+Cas[0-1] :=	B16 (xcasl[0-1],casl[0-1]);
+
+Oe[0] :=	B16 (xoel[0],oel[0]);
+Oe[1] :=	B8 (xoel[1],oel[1]);
+Oe[2] :=	B8 (xoel[2],oel[2]);
+
+We[0-1] := B16 (xwel[0-1],wel[0-1]);
+We[2-7] := B4 (xwel[2-7],wel[2-7]);
+
+Pclk :=		IBUF (pclk,nt[21],xpclk,nt[20]);
+Vclk :=		IBUF (vxclk,nt[22],xvclk,nt[21]);
+Reseti :=	IBUF (resetli,nt[16],xresetl,nt[15]);
+Reset :=	BNIV34 (resetl,resetli);
+
+Wait :=		IBUF (waitl,nt[18],xwaitl,nt[17]);
+
+
+Dreq :=		BD2T (xdreql,notdreqin,nt[7],dreqlout,gnd,aen,nt[6]);
+Dtack :=	B2 (xdtackl,dtackl);
+Rw :=		BD2T (xrw,rwin,nt[9],reads,gnd,aen,nt[7]);
+Siz[0] :=	BD2T (xsiz[0],sizin[0],nt[10],sizout[0],gnd,aen,nt[9]);
+Siz[1] :=	BD2T (xsiz[1],sizin[1],nt[11],sizout[1],gnd,aen,nt[10]);
+Dreqin :=	IVU (dreqin,notdreqin);
+
+Dbrli[0] :=	IBUF (dbrl[0],nt[20],xdbrl[0],nt[19]);
+Dbrli[1] :=	IBUF (dbrl[1],nt[19],xdbrl[1],nt[18]);
+Dbgl :=		B2 (xdbgl,dbgl);
+Expl :=		B4 (xexpl,expl);
+Dspcsl :=	B2 (xdspcsl,dspcsl);
+
+(* the output of the nand tree is output on intl if bit 2 of test1 is set *)
+
+Intlt :=	MX2P (intlt,intl,nt[121],ndtest);
+Xintl :=	B2 (xintl,intlt);
+
+Hs :=		BD2T (xhs,hlock,nt[1],hsl,gnd,snden,vcc);
+Vs :=		BD2T (xvs,vlock,nt[2],vsl,gnd,snden,nt[1]);
+
+Snden :=	AN2 (snden,syncen,notndtest);
+
+Lp :=		IBUF (lp,nt[3],xlp,nt[2]);
+
+R[0-7] :=	B2 (xr[0-7],r[0-7]);
+G[0-7] :=	B2 (xg[0-7],g[0-7]);
+B[0-7] :=	B2 (xb[0-7],b[0-7]);
+
+Inc :=		B2 (xinc,inc);
+
+Dint :=		IBUF (dint,nt[12],xdint,nt[11]);
+
+Fc[0] :=	BD2T (xfc[0],fc[0],nt[4],vcc,gnd,fcen,nt[3]);
+Fc[1] :=	BD2T (xfc[1],fc[1],nt[5],gnd,gnd,aen,nt[4]);
+Fc[2] :=	BD2T (xfc[2],fc[2],nt[6],vcc,gnd,aen,nt[5]);
+Fcen :=		AN2 (fcen,aen,m68k);
+
+Brl :=		BD2T (xbrl,brlin,nt[13],gnd,brlout,testen,nt[12]);
+Bgl :=		IBUF (bglin,nt[14],xbgl,nt[13]);
+Ba :=           BD2T (xba,bgain,nt[15],gnd,gnd,ba,nt[14]);
+
+Test :=		IBUF (test,nt[17],xtest,nt[16]);
+
+Gnd :=		TIE0 (gnd);
+Vcc :=		TIE1 (vcc);
+
+(*
+ Testen is used to enable those signals which might conflict with the
+ tester because the tester changes from input to output on test cycle
+ boundaries whereas the chip typically changes on clock edges
+*)
+
+Nottest :=	IV (nottest,test);
+Testen :=	OR2 (testen,nottest,dint);
+
+
+Gpu := 	GRAPHICS (maska[0..2],aout[3..15],dout[0..31],ack,bback,
+		gback,resetl,clk,tlw,dint,grpintreq,tint,
+		gpuread,gpuwrite,nocpu,d[0..63],at[1],
+
+		bbreq[0..1],gbreq[0..1],gpuint,lock,
+
+		wd[0..63],a[0..23],w[0..3],rw,mreq,dr[0..15],justify);
+
+Iodec := IODEC	(maska[0..2],aout[3..15],intdev,wet,oet,intswe,
+		reads,intwe,lba,lbb,clut,ourack,romcsl[0..1],dspcsl,
+
+		memc1r, memc2r, hcr, vcr, lphr, lpvr, 
+		ob0r, ob1r, ob2r, ob3r,
+		lbrar,test2r,test3r,intr,
+		pit0r,pit1r,
+
+		memc1w, memc2w, olp1w, olp2w, obfw, vmodew,bord1w,bord2w,
+		hcw, hpw, hbbw, hbew, hsw, hvsw, hdb1w, hdb2w, hdew, vcw, vpw,
+		vbbw, vbew, vsw, vdbw, vdew, vebw, veew, viw, 
+		pit0w, pit1w, heqw, test1w,
+		lbraw, int1w, int2w,bgwr,expl);
+
+Vid := 	VID	(dout[0..11],vmodew,hcw,hcr,hpw,hbbw,
+		hbew,hdb1w,hdb2w,hdew,
+		hsw,hvsw,vcw,vcr,vpw,vbbw,
+		vbew,vdbw,vdew,vebw,veew,
+		vsw,viw,lphr,lpvr,
+		hlock,vlock,resetl,vclk,lp,heqw,test1w,test2r,test3r,
+		wet,vgy,vey,vly,lock,
+
+		start,dd,lbufa,lbufb,hsl,vsl,syncen,vint,vactive,
+		blank,nextpixa,nextpixd,
+		cry16,rgb24,rg16,rgb16,mptest,ndtest,varmod,vc[0..10],
+		tcount,incen,binc,bgw,word2,pp,lbaactive,lbbactive,
+		hcb[10], hs_o, hhs_o, vs_o,
+
+		dr[0..15]);
+
+
+Pix :=	PIX	(dout[0..15],dd,vactive,blank,
+                nextpixa,nextpixd,cry16,rgb24,rg16,lbrd[0..31],
+                lbraw,lbrar,bord1w,bord2w,
+                resetl,vclk,gnd,mptest,incen,binc,
+		lp,rgb16,varmod,word2,pp,
+
+                lbra[0..8],r[0..7],g[0..7],b[0..7],inc,
+
+                dr[0..8]);
+
+
+Dbus := DBUS	(din[0..63],dr[0..15],dinlatch[0..7],
+                dmuxd[0..2],dmuxu[0..2],dren,
+                xdsrc,ourack,wd[0..63],clk[1],
+
+                dp[0..15],dout[0..63],d[0..63]);
+
+Abus :=	ABUS	(ain[0..23],ainen,at[0..2],
+		dout[0..14],newrow,resrow,mux,resetl,vcc,
+		memc1r, memc2r, memc1w, memc2w,
+		cfg[0..2],cfg[4..6],cfg[8],cfgw,cfgen,ack,clk[2],
+		ba,fc[0..2],sizin[1],mreq,
+		dreqin,lbufa,d7a,readt,wet,
+
+		aout[3..23],ma[0..10],match,
+		intdev,fintdev,fextdev,fdram,from,
+                dspd[0..1],romspd[0..1],iospd[0..1],
+		dram,mw[0..1],bs[0..3],cpu32,refrate[0..3],
+		bigend,ourack,nocpu,gpuread,gpuwrite,abs[2..3],
+		hilo,lba,lbb,lbt,clut,clutt,fastrom,m68k,
+		at[3..10],
+
+        	a[0..23],dr[0..15]);
+
+Mem :=	MEM	(bbreq[0..1],gbreq[0..1],obbreq,sizin[0..1],dbrl[0..1],
+                dreqin,rwin,bs[0..3],match,intdev,dram,
+                fextdev,fintdev,fdram,from,cpu32,refreq,
+                dspd[0..1],romspd[0..1],iospd[0..1],
+                a[0..2],mw[0..1],ourack,
+                resetl,clk[3],vcc,gnd,
+                bglin,brlin,ihandler,bigend,bgain,abs[2..3],
+		testen,waitl,fastrom,m68k,pclk,
+	
+                ack,bback,gback,obback,
+                romcsl[0..1],rasl[0..1],casl[0..1],oel[0..2],
+                wel[0..7],sizout[0..2],
+                den[0..2],aen,dtackl,
+                brlout,dbgl,dreqlout,d7a,readt,
+
+                dinlatch[0..7],
+                dmuxu[0..2],dmuxd[0..2],dren,
+                xdsrc,
+                maska[0..2],at[0..2],
+                ainen,newrow,resrow,
+                mux,refack,reads,wet,oet,
+		ba,intswe,intwe,dspcsl,
+
+                w[0..3],rw,mreq,justify, tlw, ram_rdy);
+
+
+Ob :=	OB	(dout[0..15],olp1w,olp2w, obfw, 
+		ob0r, ob1r, ob2r, ob3r,
+		start, newdata[0..20],newheight[0..9], newrem[0..7],
+		obdready,offscreen, refack, obback, ack, clk[4],resetl,vcc,gnd,
+		vc[0..10],wbkdone,obdone,heightnz,d[0..63],
+		bback,gback,wet,hcb[10],
+
+		scaled,obdlatch,mode1,mode2,mode4,mode8,
+                mode16,mode24,rmw,index[1..7],xld,reflected,transen,
+                hscale[0..7],dwidth[0..9],
+                obbreq,vscale[0..7], wbkstart, grpintreq, obint,
+		obld[0..2],startref,vgy,vey,vly,
+
+		wd[0..63],a[0..23],w[0..3],rw,mreq,justify,dr[0..15]);
+
+Wbk :=	WBK	(d[14..23],d[43..63],obld[0], obld[2],dwidth[0..9],
+		vscale[0..7],clk[12],resetl,scaled,wbkstart,
+
+		newdata[0..20],newheight[0..9],newrem[0..7],
+		heightnz,wbkdone);
+
+
+
+Obd :=	OBDATA	(aout[9],dout[0..15],reads,clut,clutt,
+		d[0..63],obdlatch,mode1,mode2,mode4,mode8,
+                mode16,mode24,scaled,rmw,index[1..7],
+                xld,reflected,transen,hscale[0..7],
+                resetl,clk[13],obld[1..2],hilo,lbt,at[1..10],
+
+                obdone,obdready,lbwa[1..9],lbwe[0..1],lbwd[0..31],offscreen,
+		rmw1,lben,dr[0..15]);
+
+Lbuf := LBUF	(maska[1],aout[15],dout[0..15],dout[16..31],
+		sizout[2],
+		lbwa[1..9],lbra[0..8],lbwe[0..1],
+		lbwd[0..31],lbufa,lbufb,lba,lbb,rmw1,
+		reads,vclk,clk[14],lben,bgw,bgwr,vactive,
+		lbaactive,lbbactive,bigend,
+
+		lbrd[0..31],dr[0..15]);
+
+Clk := CLK	(resetl,pclk,vxclk,ndtest,cfg[7],
+
+		cfgw,cfgen,clk,vclk,tlw_unused);
+Clk[0] :=	BUF24 (clk[0],clk);
+Clk[1] :=	BUF24 (clk[1],clk);
+Clk[2] :=	BUF16 (clk[2],clk);
+Clk[3] :=	BUF24 (clk[3],clk);
+Clk[4] :=	BUF48 (clk[4],clk);
+Clk[12] :=	BUF16 (clk[12],clk);
+Clk[13] :=	BUF96 (clk[13],clk);
+Clk[14] :=	BUF16 (clk[14],clk);
+
+Misc_ := MISC	(dout[0..15],clk[0],resetl,
+		pit0w, pit1w,int1w,int2w,intr, obint, gpuint, vint, dint,
+		refrate[0..3], refack, ack, startref,
+		wet,pit0r,pit1r,tcount,test3r,
+
+		ihandler, tint, refreq, intl,
+
+		dr[0..15], mreq);
+
+GE := DUMMY(tlw_unused);
+
+END;
+
+

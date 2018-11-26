@@ -1,0 +1,94 @@
+[*]
+[*] GTKWave Analyzer v3.3.39 (w)1999-2012 BSI
+[*] Thu May 09 15:23:17 2013
+[*]
+[dumpfile] "D:\FPGA\JagNetlists\verilog\vtb.fst"
+[savefile] "D:\FPGA\JagNetlists\verilog\gtkw_vjag_s2"
+[timestart] 11232956000
+[size] 1920 1021
+[pos] -9 -9
+*-18.544594 11234181250 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.v.
+[treeopen] TOP.v.jag.
+[treeopen] TOP.v.jag.j68_inst.
+[treeopen] TOP.v.jag.tom_inst.
+[treeopen] TOP.v.jag.tom_inst.gpu_inst.
+[treeopen] TOP.v.jag.tom_inst.gpu_inst.gpu_ram_inst.
+[sst_width] 240
+[signals_width] 351
+[sst_expanded] 1
+[sst_vpaned_height] 301
+@28
+TOP.v.jag.sys_clk
+TOP.v.jag.xpclk
+TOP.v.jag.tlw
+@22
+TOP.v.jag.xa_r[23:0]
+TOP.v.jag.xd_r[63:0]
+@28
+TOP.v.jag.tom_inst.wet
+TOP.v.jag.tom_inst.mem_inst.int_wel
+TOP.v.jag.tom_inst.mem_inst.startwe
+@a2
+TOP.v.jag.tom_inst.gpu_inst.gpu_ram_inst.program_inst.gpu_data_in[0:31]
+@28
+TOP.v.jag.tom_inst.gpu_inst.gpu_ram_inst.program_inst.ramcs
+TOP.v.jag.tom_inst.gpu_inst.gpu_ram_inst.ramwe
+TOP.v.jag.tom_inst.gpu_inst.gpu_ram_inst.gpu_memw
+TOP.v.jag.tom_inst.oet
+TOP.v.jag.ram_rdy
+@22
+TOP.v.jag.j_xd_oe[0:31]
+TOP.v.jag.dbus[0:63]
+@28
+TOP.v.jag.xba_in
+TOP.v.jag.j68_wr_ena
+TOP.v.jag.rw
+TOP.v.jag.xrw_in
+TOP.v.jag.xdtackl
+TOP.v.jag.xromcsl[0:1]
+@22
+TOP.v.jag.j68_address_final[23:0]
+@28
+TOP.v.jag.xintl
+@22
+TOP.v.jag.j68_inst.U_mem_io.r_vec_addr[15:1]
+@23
+TOP.v.jag.j68_inst.U_mem_io.w_vec_addr[31:0]
+@28
+TOP.v.jag.j68_fc[2:0]
+TOP.v.jag.j68_rd_ena
+TOP.v.jag.j68_byte_ena[1:0]
+@22
+TOP.v.jag.j68_wr_data[15:0]
+TOP.v.jag.j68_rd_data[15:0]
+TOP.v.jag.cart_a[23:0]
+@28
+TOP.v.jag.fdram
+TOP.v.jag.dram_ras_n
+TOP.v.jag.dram_cas_n
+@22
+TOP.v.jag.dram_lw_n[0:3]
+TOP.v.jag.dram_uw_n[0:3]
+TOP.v.jag.dram_oe_n[0:3]
+TOP.v.mem_cyc[3:0]
+@28
+TOP.v.jag.obbreq
+TOP.v.jag.tom_inst.mem_inst.d3a
+TOP.v.jag.tom_inst.mem_inst.q3a
+TOP.v.jag.tom_inst.mem_inst.d3b
+TOP.v.jag.tom_inst.mem_inst.q3b
+TOP.v.jag.tom_inst.mem_inst.dinlatch
+TOP.v.jag.tom_inst.mem_inst.ack
+TOP.v.jag.tom_inst.mem_inst.lwdl
+TOP.v.jag.tom_inst.mem_inst.wet
+TOP.v.jag.tom_inst.mem_inst.startwe
+TOP.v.jag.tom_inst.mem_inst.dinlatch_4
+TOP.v.jag.tom_inst.mem_inst.dinlatch_2
+TOP.v.jag.tom_inst.mem_inst.dinlatch_3
+TOP.v.jag.tom_inst.mem_inst.dinlatch_0
+TOP.v.jag.tom_inst.mem_inst.dinlatch_1
+TOP.v.jag.tom_inst.mem_inst.reads
+[pattern_trace] 1
+[pattern_trace] 0

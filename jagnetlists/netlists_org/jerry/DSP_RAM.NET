@@ -1,0 +1,164 @@
+/******************************************************************
+dsp_ram.net
+21/2/91
+
+The GPU local RAM
+-----------------
+******************************************************************/
+
+IMPORT duplo, tosh, moto;
+
+DEF DSP_RAM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+	gpu_memw	/* GPU system write enable */
+	ram_addr[2..11]	/* address to internal RAM */
+	ramen[0..1]	/* RAM enable */
+	romen		/* ROM enable */
+
+	:IN);
+
+BEGIN
+
+/* WARNING - ensure write meets Trh requirement */
+
+/* Attempt to gain address hold margin with dbuffers */
+
+Ramdd[0-9]	:= NIV  (ramdd[0-9], ram_addr[2-11]);
+Ramad[0-9]	:= NIVM (ramad[0-9], ramdd[0-9]);
+Rama		:= JOIN (rama, ramad[0..9]);
+
+Ramwe[0-1]	:= ND2P (ramwe[0-1], ramen[0-1], gpu_memw);
+
+Program[0-1]	:= GPURAM (gpu_data, clk, rama, ramen[0-1], 
+			ramwe[0-1]);
+
+Sinerom		:= SINEROM (gpu_data, clk, rama, romen);
+END;
+
+DEF GPURAM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+INT10/	rama
+	ramen		/* RAM enable */
+	ramwe		/* RAM write control */
+	:IN);
+#if TOSHIBA
+INT16/	gpudlo, gpudhi 
+:LOCAL;
+#endif
+#if VERILOG
+INT32/	dbo
+:LOCAL;
+#endif
+BEGIN
+
+#if TOSHIBA
+Ramcs		:= CLKGEN (ramcs, clk, ramen);
+
+Gpudlo		:= JOIN_BUS (gpudlo, gpu_data{0..15});
+Gpudhi		:= JOIN_BUS (gpudhi, gpu_data{16..31});
+Gpu_data	:= JOIN_BUS (gpu_data, gpudlo, gpudhi);
+
+/* RAM uses 2 1024 x 16 modules */
+
+Ramlo		:= ABA016A (gpudlo, ramcs, ramwe, rama);
+Ramhi		:= ABA016B (gpudhi, ramcs, ramwe, rama);
+
+
+#endif
+#if VERILOG
+Ramen\		:= IV (ramen\, ramen);
+/* Produce a strobe from delayed clock 
+5 DLY8 = 14.66 ns
+7 DLY8 = 19.90 ns
+*/
+Stba		:= DLY8 (stba, clk);
+Stbb		:= DLY8 (stbb, stba);
+Stbc		:= DLY8 (stbc, stbb);
+Stbd		:= DLY8 (stbd, stbc);
+Stb		:= DLY8 (stb, stbd);
+Ram0		:= RP1024X8 (dbo[7], dbo[6], dbo[5], dbo[4], dbo[3], dbo[2], 
+			dbo[1], dbo[0], ramwe, stb, ramen\, a[9], a[8], a[7], 
+			a[6], a[5], a[4], a[3], a[2], a[1], a[0], d[7], d[6], 
+			d[5], d[4], d[3], d[2], d[1], d[0]);
+Ram1		:= RP1024X8 (dbo[15], dbo[14], dbo[13], dbo[12], dbo[11], 
+			dbo[10], dbo[9], dbo[8], ramwe, stb, ramen\, a[9], 
+			a[8], a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0], 
+			d[15], d[14], d[13], d[12], d[11], d[10], d[9], d[8]);
+Ram2		:= RP1024X8 (dbo[23], dbo[22], dbo[21], dbo[20], dbo[19], 
+			dbo[18], dbo[17], dbo[16], ramwe, stb, ramen\, a[9], 
+			a[8], a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0], 
+			d[23], d[22], d[21], d[20], d[19], d[18], d[17], d[16]);
+Ram3		:= RP1024X8 (dbo[31], dbo[30], dbo[29], dbo[28], dbo[27], 
+			dbo[26], dbo[25], dbo[24], ramwe, stb, ramen\, a[9], 
+			a[8], a[7], a[6], a[5], a[4], a[3], a[2], a[1], a[0], 
+			d[31], d[30], d[29], d[28], d[27], d[26], d[25], d[24]);
+Dbo		:= JOIN (dbo, dbo[0..31]);
+Daten		:= AN2U (daten, ramen, ramwe);
+Datard		:= TSM (gpu_data, dbo, daten);
+D[0-31]		:= JOIN (d[0-31], gpu_data{0-31});
+A[0-9]		:= JOIN (a[0-9], rama{0-9});
+#endif
+#if FLARE
+Ramcs		:= CLKGEN (ramcs, clk, ramen);
+
+Ram		:= ABA032A (gpu_data, ramcs, ramwe, rama);
+
+#endif
+END;
+
+DEF SINEROM (
+INT32/	gpu_data	/* GPU system data bus */
+	:BUS;
+	clk		/* chip select timing */
+INT10/	roma
+	romen		/* ROM enable */
+	:IN);
+INT16/	rom_data
+:IO;
+BEGIN
+
+#if FLARE
+Romcs		:= CLKGEN (romcs, clk, romen);
+Sinerom		:= RAA016A (rom_data, romcs, roma);
+
+Romhidi		:= NIVH (romhidi, rom_data{15});
+Romenb		:= NIVH (romenb, romen);
+Romhid[16-31]	:= TS (romhid[16-31], romhidi, romenb);
+Gpu_data	:= JOIN_BUS (gpu_data, rom_data, romhid[16..31]);
+#endif
+#if TOSHIBA
+Romcs		:= CLKGEN (romcs, clk, romen);
+Sinerom		:= RAA016A (rom_data, romcs, roma);
+
+Romhidi		:= NIVH (romhidi, rom_data{15});
+Romenb		:= NIVH (romenb, romen);
+Romhid[16-31]	:= TS (romhid[16-31], romhidi, romenb);
+Gpu_data	:= JOIN_BUS (gpu_data, rom_data, romhid[16..31]);
+#endif
+#if VERILOG
+Clkdela		:= DLY8 (clkdela, clk);
+Clkdelb		:= DLY8 (clkdelb, clkdela);
+Clkdelc		:= DLY8 (clkdelc, clkdelb);
+Clkdeld		:= DLY8 (clkdeld, clkdelc);
+Clkdele		:= DLY8 (clkdele, clkdeld);
+Clkdel\		:= IV (clkdel\, clkdele);
+Romcst		:= AN2 (romcst, clk, clkdel\);
+Romen\		:= IV (romen\, romen);
+Romcs		:= OR2P (romcs, romcst, romen\);
+Sinerom		:= RAA016A (rom_data, romcs, roma);
+
+Romdata[15]	:= TS (rom_datat[15], rom_data{15}, romenb);
+Romhidi		:= NIVU (romhidi, rom_data{15});
+Romenb		:= NIVH (romenb, romen);
+Romhid[16-31]	:= TS (romhid[16-31], romhidi, romenb);
+Gpu_data	:= JOIN_BUS (gpu_data, rom_data{0..14}, rom_datat[15], 
+			romhid[16..31]);
+#endif
+
+END;
+
+

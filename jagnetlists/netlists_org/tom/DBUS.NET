@@ -1,0 +1,136 @@
+(*****************************************************************
+
+	dbus.net
+
+This is main data path in in Jaguar video chip.
+
+The principal function of this section is to take care of data which
+are narrower than the 64 bit bus. This is needed because memory may be
+narrower than 64 bits and because the co-processors can write byte fields
+of arbitrary width. 
+
+
+******************************************************************)
+
+
+IMPORT	lego,tosh;	(* Toshiba gate & pad definitions *)
+
+DEF	DBUS	(din[0..63],dr[0..15],dinlatch[0..7],
+		dmuxd[0..2],dmuxu[0..2],dren,
+		xdsrc,ourack,wd[0..63],clk:IN;
+
+        	dp[0..15],dob[0..15],dout[16..31],d5[32..63],d[0..63]:IO);
+
+
+	INT16/d,INT3/dmuxu,dmuxd:IO;
+
+(*
+dmuxd[0..2],	moves high order long,word,byte down for writes to narrow
+		memory dmux[2] swaps long, dmux[1] swaps word, etc.
+dmuxu[0..2],	moves low order long,word,byte up for reads from narrow
+		memory dmux[2] swaps long, dmux[1] swaps word, etc
+dren,		selects internal memory data onto up logic instead of 
+		main data bus 
+dinlatch[0..7],	enables eight byte wide read latches
+xdsrc		external data source
+		eg. reading external memory
+		or external processor writing 
+
+*)
+
+BEGIN
+
+D :=		JOIN (d,dr[0..15]);
+Du :=		DUMMY (d);
+Dmuxu :=	JOIN (dmuxu,dmuxu[0..2]);
+Duu :=		DUMMY (dmuxu);
+Dmuxd :=	JOIN (dmuxd,dmuxd[0..2]);
+Ddu :=		DUMMY (dmuxd);
+
+
+(* Select internal or incoming data *)
+
+D3i[0-15] :=  MX4 (d3i[0-15],wd[0-15],dr[0-15],din[0-15],din[0-15],dren,xdsrc);
+D3[0-15] := NIV (d3[0-15],d3i[0-15]);
+D3[16-63] := MX2 (d3[16-63],wd[16-63],din[16-63],xdsrc);
+
+(* and feed into the "up" network *)
+
+D4 :=		UP (d3[0..63],dmuxu[0..2],d4[8..63]);
+
+(* latch this data for building wide read cycles from narrow memory *)
+
+D5[0-7] :=	STLATCH (d5[0-7],d3[0-7],clk,dinlatch[0]);
+D5[8-15] :=	STLATCH (d5[8-15],d4[8-15],clk,dinlatch[1]);
+D5[16-23] :=	STLATCH (d5[16-23],d4[16-23],clk,dinlatch[2]);
+D5[24-31] :=	STLATCH (d5[24-31],d4[24-31],clk,dinlatch[3]);
+D5[32-39] :=	STLATCH (d5[32-39],d4[32-39],clk,dinlatch[4]);
+D5[40-47] :=	STLATCH (d5[40-47],d4[40-47],clk,dinlatch[5]);
+D5[48-55] :=	STLATCH (d5[48-55],d4[48-55],clk,dinlatch[6]);
+D5[56-63] :=	STLATCH (d5[56-63],d4[56-63],clk,dinlatch[7]);
+
+(* feed this data into the "down" network *)
+
+Dout :=		DOWN (d5[0..63],dmuxd[0..2],dout[0..31]);
+
+(* buffer this data onto internal bus *)
+
+D[0-31] :=	NIVM (d[0-31],dout[0-31]);
+D[32-63] :=	NIVM (d[32-63],d5[32-63]);
+
+(* generate vector 64 during iack cycles *)
+
+Vd[0-5] :=	MX2 (vd[0-5],dout[0-5],gnd,ourack);
+Vd[6] :=	MX2 (vd[6],dout[6],vcc,ourack);
+Vd[7] :=	MX2 (vd[7],dout[7],gnd,ourack);
+
+Gnd :=		TIE0 (gnd);
+Tie :=		TIE1 (vcc);
+
+(* buffer write data *)
+
+Dob[0-7] :=	NIVU2 (dob[0-7],vd[0-7]);
+Dob[8-9] :=	NIVU2 (dob[8-9],dout[8-9]);
+Dob[10-15] :=	NIVU (dob[10-15],dout[10-15]);
+Dp[0-7] :=	NIV (dp[0-7],vd[0-7]);
+Dp[8-15] :=	NIV (dp[8-15],dout[8-15]);
+
+END;
+
+DEF	UP	(din[0..63], dmuxu[0..2]:IN;
+
+        	dout[8..63]:IO);
+
+BEGIN
+
+(*
+Dout[8-15] :=	MX2P (dout[8-15],din[8-15],din[0-7],dmuxu[0]);
+Dout[16-23] :=	MX2P (dout[16-23],din[16-23],din[0-7],dmuxu[1]);
+Dout[24-31] :=	MX2P (dout[24-31],din[24-31],dout[8-15],dmuxu[1]);
+Dout[32-39] :=	MX2P (dout[32-39],din[32-39],din[0-7],dmuxu[2]);
+Dout[40-63] :=	MX2P (dout[40-63],din[40-63],dout[8-31],dmuxu[2]);
+*)
+Dout[8-15] :=	MX2P (dout[8-15],din[8-15],din[0-7],dmuxu[0]);
+Dout[16-23] :=	MX2P (dout[16-23],din[16-23],din[0-7],dmuxu[1]);
+Dout[24-31] :=	MX4P (dout[24-31],din[24-31],din[24-31],din[8-15],din[0-7],
+			dmuxu[0..1]);
+Dout[32-39] :=	MX2P (dout[32-39],din[32-39],din[0-7],dmuxu[2]);
+Dout[40-63] :=	MX2P (dout[40-63],din[40-63],dout[8-31],dmuxu[2]);
+
+
+END;
+DEF	DOWN	(din[0..63], dmuxd[0..2]:IN;
+
+        	dout[0..31]:IO);
+
+BEGIN
+
+Dout[16-31] :=	MX2P (dout[16-31],din[16-31],din[48-63],dmuxd[2]);
+D1[8-15] :=	MX2P (d1[8-15],din[8-15],din[40-47],dmuxd[2]);
+
+Dout[8-15] :=	MX2P (dout[8-15],d1[8-15],dout[24-31],dmuxd[1]);
+
+Dout[0-7] :=	MX8P (dout[0-7],din[0-7],din[8-15],din[16-23],din[24-31],
+		din[32-39],din[40-47],din[48-55],din[56-63],dmuxd[0..2]);
+
+END;

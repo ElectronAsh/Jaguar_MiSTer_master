@@ -1,0 +1,72 @@
+/******************************************************************
+register.net
+22/11/90
+
+Register Macros
+---------------
+This module contains the major register block definitions, which 
+may be encoded efficiently as the silicon vendor allows.
+
+******************************************************************/
+
+IMPORT tosh;
+
+/**  REG32 - 32-bit synchronously loaded register  ***************/
+
+DEF REG32 (INT32/dout :OUT; INT32/din, loaden, clk :IN);
+
+INT32/	dd :LOCAL;
+BEGIN
+
+Dsel 		:= MX2  (dd, dout, din, loaden);
+Dlat		:= FD1Q (dout, dd, clk);
+
+END;
+
+/**  REG29 - 29-bit synchronously loaded register  ***************/
+
+DEF REG29 (INT29/dout :OUT; INT29/din, loaden, clk :IN);
+
+INT29/	dd :LOCAL;
+BEGIN
+
+Dsel 		:= MX2  (dd, dout, din, loaden);
+Dlat		:= FD1Q (dout, dd, clk);
+
+END;
+
+/**  REG21 - 21-bit synchronously loaded register  ***************/
+
+DEF REG21 (INT21/dout :OUT; INT21/din, loaden, clk :IN);
+
+INT21/	dd :LOCAL;
+BEGIN
+
+Dsel 		:= MX2  (dd, dout, din, loaden);
+Dlat		:= FD1Q (dout, dd, clk);
+
+END;
+
+/**  REG16 - 16-bit synchronously loaded register  ***************/
+
+DEF REG16 (INT16/dout :OUT; INT16/din, loaden, clk :IN);
+
+INT16/	dd :LOCAL;
+BEGIN
+
+Dsel 		:= MX2  (dd, dout, din, loaden);
+Dlat		:= FD1Q (dout, dd, clk);
+
+END;
+
+/**  REG15 - 15-bit synchronously loaded register  ***************/
+
+DEF REG15 (INT15/dout :OUT; INT15/din, loaden, clk :IN);
+
+INT15/	dd :LOCAL;
+BEGIN
+
+Dsel 		:= MX2  (dd, dout, din, loaden);
+Dlat		:= FD1Q (dout, dd, clk);
+
+END;
