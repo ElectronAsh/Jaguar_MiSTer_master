@@ -58,11 +58,12 @@ module jaguar
 	output [7:0] vga_g,
 	output [7:0] vga_b,
 	
-	output	aud_l_pwm,
-	output	aud_r_pwm,
+`ifdef VERILATOR
+	output wire	[0:31]	j_xd_in,
+`endif
 	
-	output [15:0] aud_l,
-	output [15:0] aud_r
+	output	aud_l,
+	output	aud_r
 );
 
 wire		rst;
@@ -205,7 +206,11 @@ wire					j_xresetil;
 // JERRY - Bidirs
 wire	[0:31]	j_xd_out;
 wire	[0:31]	j_xd_oe;
+
+`ifndef VERILATOR
 wire	[0:31]	j_xd_in;
+`endif
+
 wire	[0:23]	j_xa_out;
 wire	[0:23]	j_xa_oe;
 wire	[0:23]	j_xa_in;
@@ -321,15 +326,15 @@ wire        j68_rd_ena_int;       // Read strobe
 wire        j68_wr_ena_int;       // Write strobe
 reg	        j68_data_ack_int = 1'b0;     // Data acknowledge
 
-wire [1:0]  j68_byte_ena/*synthesis keep*/;     // Byte enable
-wire [31:0] j68_address/*synthesis keep*/;      // Address bus
-wire [15:0] j68_rd_data/*synthesis keep*/;      // Data bus in
-wire [15:0] j68_wr_data/*synthesis keep*/;      // Data bus out
+wire [1:0]  j68_byte_ena;     // Byte enable
+wire [31:0] j68_address;      // Address bus
+wire [15:0] j68_rd_data;      // Data bus in
+wire [15:0] j68_wr_data;      // Data bus out
 // 68000 control
-wire [2:0]  j68_fc/*synthesis keep*/;           // Function code
-wire [2:0]  j68_ipl_n/*synthesis keep*/;        // Interrupt level
+wire [2:0]  j68_fc;           // Function code
+wire [2:0]  j68_ipl_n;        // Interrupt level
 // For interrupt management
-wire [23:0]	j68_address_final/*synthesis keep*/;
+wire [23:0]	j68_address_final;
 
 
 
@@ -1884,7 +1889,6 @@ reg  [22:0] r_smp_r;
 reg  [22:0] r_acc_l;
 reg  [22:0] r_acc_r;
 
-/*
 // FIFO storing 256 samples for left and right
 sample_fifo U_sample_fifo
 (
@@ -1896,7 +1900,6 @@ sample_fifo U_sample_fifo
   .rd_smp_l(w_rd_smp_l),
   .rd_smp_r(w_rd_smp_r)
 );
-
 assign w_rd_smp_hi_l = {7{w_rd_smp_l[15]}};
 assign w_rd_smp_hi_r = {7{w_rd_smp_r[15]}};
 
@@ -1939,11 +1942,6 @@ s2_hq_dac dac_r
 	//.pcm_in({r_aud_r[15:0], r_aud_r[3:0]}),
 	.dac_out(aud_r)
 );
-*/
-
-assign aud_l = r_aud_l;
-assign aud_r = r_aud_r;
-
 
 /*reg [15:0] acc_l;
 reg [15:0] acc_r;

@@ -6,23 +6,23 @@ module jag_s2
 	input		[3:0]	SW,
 	input 				OSC_CLK0,
  	
-  output        SSRAM_CLK,
-  output        SSRAM_CE1_n,
-  output        SSRAM_CE2,
-  output        SSRAM_CE3_n,
-  output        SSRAM_OE_n,
-  output        SSRAM_BWE_n,
-  output        SSRAM_GW_n,   
-  output        SSRAM_ADSC_n, 
-  output        SSRAM_ADSP_n, 
-  output        SSRAM_ADV_n,  
-  output [20:0] SSRAM_ADDR,
-  output  [3:0] SSRAM_BE_n,
+	output        SSRAM_CLK,
+	output        SSRAM_CE1_n,
+	output        SSRAM_CE2,
+	output        SSRAM_CE3_n,
+	output        SSRAM_OE_n,
+	output        SSRAM_BWE_n,
+	output        SSRAM_GW_n,   
+	output        SSRAM_ADSC_n, 
+	output        SSRAM_ADSP_n, 
+	output        SSRAM_ADV_n,  
+	output [20:0] SSRAM_ADDR,
+	output  [3:0] SSRAM_BE_n,
 `ifdef verilator3
-  input  [31:0] SSRAM_Q,
-  output [31:0] SSRAM_D,
+	input  [31:0] SSRAM_Q,
+	output [31:0] SSRAM_D,
 `else
-  inout  [31:0] SSRAM_DQ,
+	inout  [31:0] SSRAM_DQ,
 `endif
 	
 	output				FLS_CS_n,
@@ -343,8 +343,8 @@ jaguar jag
 
 // Burst Read
 // 1) MC: Sets address, Asserts ADSC_N / OE_N		SS: Idle
-// 2) MC:	Asserts ADV_N													SS: Receives "Read start"
-// 3) MC: Deasserts ADV_N												SS: Receives "Burst advance"
+// 2) MC:	Asserts ADV_N							SS: Receives "Read start"
+// 3) MC: Deasserts ADV_N							SS: Receives "Burst advance"
 // 4) MC: Latches data @address at the eoc			SS: Outputs data @address
 // 5) MC: Latches data @address+1 at the eoc		SS: Outputs data @address+1
 
@@ -355,10 +355,10 @@ jaguar jag
 `define SS_RD_5	4'b0101
 
 // Burst Write
-// 1) MC: Sets address, Asserts ADSC_N / WE_N									SS: Idle
-// 2) MC: Sets data @address, BWEs, asserts ADV_N	???					SS: Receives "Write start"
+// 1) MC: Sets address, Asserts ADSC_N / WE_N						SS: Idle
+// 2) MC: Sets data @address, BWEs, asserts ADV_N	???				SS: Receives "Write start"
 // 3) MC: Sets data @address+1, BWEs,	(de)asserts ADV_N	???		SS: Latches data @address, receives "Burst advance"
-// 4) MC: Deasserts all																				SS: Latches data @address+1, receives "Burst stop"
+// 4) MC: Deasserts all												SS: Latches data @address+1, receives "Burst stop"
 `define SS_WR_1	4'b1001
 `define SS_WR_2	4'b1010
 `define SS_WR_3	4'b1011

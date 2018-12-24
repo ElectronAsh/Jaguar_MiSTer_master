@@ -42,11 +42,17 @@ Init:
 * = 0x1871
 * Slow ROM
 *	move.w	#0x1861, MEMCON1
+
+* Slow ROM, slightly slower DRAM.	
+	move.w	#0x1841, MEMCON1
+	
 * Speed up the ROM a little bit
 *	move.w	#0x1879, MEMCON1
-	move.w	#0x1871, MEMCON1
+*	move.w	#0x1871, MEMCON1
+
 * Use FASTROM
 *	move.w	#0x18F9, MEMCON1
+
 
 	move.w	#0x35CC, MEMCON2
 

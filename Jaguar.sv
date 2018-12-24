@@ -78,6 +78,29 @@ module emu
 	output        SD_CS,
 	input         SD_CD,
 
+`ifdef VERILATOR
+	output	[16:0]	os_rom_a,
+	output					os_rom_ce_n,
+	output					os_rom_oe_n,
+	input		[7:0]		os_rom_q,
+	input						os_rom_oe,
+	
+	input wire        ioctl_download,
+	input wire        ioctl_wr,
+	//input wire [24:0] ioctl_addr,
+	input wire [15:0] ioctl_data,
+	input wire  [7:0] ioctl_index,
+	output reg         ioctl_wait,
+	
+	output reg [31:0] loader_addr,
+	
+	output wire [23:0] cart_a,
+	
+	output wire [31:0] cart_q,
+	
+	output wire [1:0] cart_oe,
+`endif
+	
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -109,23 +132,39 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 //assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 
-assign LED_USER  = ioctl_download;
+//assign LED_USER  = ioctl_download;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 
-assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
-assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
+//assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
+//assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
 
-wire SYS_CLK = CLK_50M;
+
+wire CLK_33M;
+wire CLK_54M;
+wire locked;
+pll_jag pll_jag_inst
+(
+	.refclk(CLK_50M),
+	.rst(0),
+	.outclk_0(CLK_33M),
+	.outclk_1(CLK_54M),
+	.locked(locked)
+);
+
+wire clk_sys = CLK_33M;
+
+
+//(*keep*)wire clk_sys = CLK_50M;
 
 
 wire [1:0] scale = status[3:2];
 
 `include "build_id.v"
 localparam CONF_STR = {
-	"Genesis;;",
+	"Jaguar;;",
 	"-;",
-	"F,JAG ;",
+	"F,JAG;",
 	"-;",
 	"O67,Region,JP,US,EU;",
 	"O8,Auto Region,No,Yes;",
@@ -157,7 +196,7 @@ wire [10:0] ps2_key;
 
 hps_io #(.STRLEN($size(CONF_STR)>>3), .PS2DIV(1000), .WIDE(1)) hps_io
 (
-	.clk_sys(SYS_CLK),
+	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
 
 	.conf_str(CONF_STR),
@@ -182,13 +221,22 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .PS2DIV(1000), .WIDE(1)) hps_io
 
 
 
+`ifndef VERILATOR
 reg [31:0] loader_addr;
-reg [15:0] loader_data;
+`endif
+
+//reg [15:0] loader_data;
+(*keep*)wire [15:0] loader_data = ioctl_data;
+
 reg        loader_wr;
 reg        loader_en;
 reg        loader_reset = 0;
 
-reg [7:0] loader_be;
+//reg [7:0] loader_be;
+wire [7:0] loader_be = (loader_en && loader_addr[2:0]==0) ? 8'b11000000 :
+							  (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
+							  (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
+							  (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;
 
 reg [7:0] cnt = 0;
 reg [1:0] status_reg = 0;
@@ -196,14 +244,16 @@ reg       old_download;
 integer   timeout = 0;
 
 
-always @(posedge SYS_CLK or posedge reset)
+always @(posedge clk_sys or posedge reset)
 if (reset) begin
+	ioctl_wait <= 0;
 	cnt <= 0;
 	status_reg <= 0;
 	old_download <= 0;
 	timeout <= 0;
 	loader_wr <= 0;
 	loader_en <= 0;
+	loader_addr <= 32'h00800000;
 end
 else begin
 	old_download <= ioctl_download;
@@ -213,36 +263,36 @@ else begin
 		loader_addr <= 32'h00800000;									// Force the ROM to load at 0x800000 in DDR for Jag core. (byte address!)
 		status_reg <= 0;
 		loader_reset <= 1;
-		ioctl_wait <= 1;
+		ioctl_wait <= 0;
 		timeout <= 3000000;
 		cnt <= 0;
 	end
 	
-	loader_wr <= 0;
+	loader_wr <= 0;	// Default!
 	if(loader_wr) loader_addr <= loader_addr + 2;				// Writing 16-bit WORDs at a time!
 
 	if(ioctl_wr && ioctl_index) begin
 		loader_en <= 1;
 		case(status_reg)
-			0: if(ioctl_data == 8'hED) status_reg <= 1;
-				else begin
+			0: /*if(ioctl_data == 8'hED) status_reg <= 1;
+				else*/ begin
 					loader_wr <= 1;
-					loader_data <= ioctl_data;
+					/*loader_data <= ioctl_data;
 					loader_be <= (loader_en && loader_addr[2:0]==0) ? 8'b11000000 :
-									 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
-									 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
-									 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;
+								 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
+								 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
+								 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;*/
 				end
 			1: begin
 					cnt <= ioctl_data;
 					status_reg <= ioctl_data ? 2'd2 : 2'd3; // cnt = 0 => stop
 				end
 			2: begin
-					loader_data <= ioctl_data;
+					/*loader_data <= ioctl_data;
 					loader_be <= (loader_en && loader_addr[2:0]==0) ? 8'b11000000 :
-									 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
-									 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
-									 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;
+								 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
+								 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
+								 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;*/
 					ioctl_wait <= 1;
 				end
 		endcase
@@ -261,7 +311,11 @@ else begin
 	if(RESET) ioctl_wait <= 0;
 end
 
+`ifndef VERILATOR
 wire reset = RESET | status[0] | buttons[1];
+`else
+wire reset = RESET;
+`endif
 
 
 /*
@@ -320,7 +374,7 @@ jaguar jaguar_inst
 (
 	.xresetl( !(reset | loader_reset | loader_en) ) ,			// input  xresetl
 	
-	.sys_clk( SYS_CLK ) ,		// input  sys_clk
+	.sys_clk( clk_sys ) ,		// input  clk_sys
 	
 	.dram_a( dram_a ) ,			// output [0:9] dram_a
 	.dram_ras_n( dram_ras_n ) ,// output  dram_ras_n
@@ -372,12 +426,16 @@ jaguar jaguar_inst
 	.vga_g( vga_g ) ,			// output [7:0] vga_g
 	.vga_b( vga_b ) ,			// output [7:0] vga_b
 	
-	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l
-	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r
+	.hblank( hblank ) ,
+	.vblank( vblank ) ,
+	
+//	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l
+//	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r
 	
 	.aud_l( aud_l ) ,			// output  [15:0] aud_l
 	.aud_r( aud_r )			// output  [15:0] aud_r
 );
+
 
 wire DBG_CPU_RDEN/*synthesis keep*/;
 wire DBG_CPU_WREN/*synthesis keep*/;
@@ -398,6 +456,7 @@ wire DBG_IFETCH/*synthesis keep*/;
 
 wire fdram;
 
+`ifndef VERILATOR
 wire [16:0] os_rom_a;
 wire os_rom_ce_n;
 wire os_rom_oe_n;
@@ -406,18 +465,19 @@ wire os_rom_oe = (~os_rom_ce_n & ~os_rom_oe_n);
 
 os_rom	os_rom_inst (
 	.address ( os_rom_a[13:0] ),
-	.clock ( SYS_CLK ),
+	.clock ( clk_sys ),
 	.q ( os_rom_q )
 );
-
+`endif
 
 /*
 cart_rom	cart_rom_inst (
 	.address ( cart_a[13:0] ),
-	.clock ( SYS_CLK ),
+	.clock ( clk_sys ),
 	.q ( CART_ROM_DO )
 );
 wire [31:0] CART_ROM_DO;
+assign cart_q = CART_ROM_DO;
 */
 
 
@@ -430,48 +490,66 @@ wire [7:0] vga_r;
 wire [7:0] vga_g;
 wire [7:0] vga_b;
 
-assign CLK_VIDEO = SYS_CLK;
-//assign VGA_SL = {~interlace,~interlace} & sl[1:0];
-
 /*
-reg old_ce_pix;
-always @(posedge CLK_VIDEO) old_ce_pix <= ce_pix;
-
-
-video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(1)) video_mixer
-(
-	.*,
-
-	.clk_sys(CLK_VIDEO),
-	.ce_pix(~old_ce_pix & ce_pix),
-	.ce_pix_out(CE_PIXEL),
-
-	.scanlines(0),
-	.scandoubler(~interlace && (scale || forced_scandoubler)),
-	.hq2x(scale==1),
-
-	.mono(0),
-
-	.R(vga_r),
-	.G(vga_g),
-	.B(vga_b),
-
-	// Positive pulses.
-	.HSync(!vga_hs_n),
-	.VSync(!vga_vs_n),
-	.HBlank(hblank),
-	.VBlank(vblank)
-);
-*/
-
 assign VGA_DE = !vga_bl;
 
-assign VGA_HS = vga_hs_n;
-assign VGA_VS = vga_vs_n;
+assign VGA_HS = !vga_hs_n;
+assign VGA_VS = !vga_vs_n;
 
 assign VGA_R = vga_r;
 assign VGA_G = vga_g;
 assign VGA_B = vga_b;
+*/
+
+assign CLK_VIDEO = clk_sys;
+//assign VGA_SL = {~interlace,~interlace} & sl[1:0];
+
+
+//reg ce_pix;
+//always @(posedge CLK_VIDEO) ce_pix <= !ce_pix;
+
+
+//reg old_ce_pix;
+//always @(posedge CLK_VIDEO) old_ce_pix <= ce_pix;
+
+
+video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0)) video_mixer
+(
+	.clk_sys(CLK_VIDEO),					// input clk_sys
+	
+	//.ce_pix(~old_ce_pix & ce_pix),	// input ce_pix
+	.ce_pix( 1'b1 ),	// input ce_pix
+	
+	.ce_pix_out(CE_PIXEL),				// output ce_pix_out
+
+	.scanlines(0),							// input [1:0] scanlines
+	//.scandoubler(~interlace && (scale || forced_scandoubler)),
+	
+	.scandoubler(1'b0),
+	
+	.hq2x(scale==1),
+
+	.mono(0),				// input mono
+
+	.R(vga_r),				// Input [DW:0] R (set by HALF_DEPTH. is [7:0] here).
+	.G(vga_g),				// Input [DW:0] G (set by HALF_DEPTH. is [7:0] here).
+	.B(vga_b),				// Input [DW:0] B (set by HALF_DEPTH. is [7:0] here).
+
+	// Positive pulses.
+	.HSync(!vga_hs_n),	// input HSync
+	.VSync(!vga_vs_n),	// input VSync
+	.HBlank(hblank),		// input HBlank
+	.VBlank(vblank),		// input VBlank
+	
+	.VGA_R( VGA_R ),		// output [7:0] VGA_R
+	.VGA_G( VGA_G ),		// output [7:0] VGA_G
+	.VGA_B( VGA_B ),		// output [7:0] VGA_B
+	.VGA_VS( VGA_VS ),	// output VGA_VS
+	.VGA_HS( VGA_HS ),	// output VGA_HS
+	.VGA_DE( VGA_DE )		// output VGA_DE
+	
+);
+
 
 
 wire aud_l_pwm;
@@ -518,7 +596,7 @@ wire [0:3] dram_oe = (~dram_cas_n) ? ~dram_oe_n : 4'b0000;
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
 */
-assign DDRAM_CLK = SYS_CLK;
+assign DDRAM_CLK = clk_sys;
 assign DDRAM_BURSTCNT = 1;
 
 
@@ -533,18 +611,22 @@ assign DDRAM_WE = (loader_en) ? loader_wr :
 										  DDR_WR_REQ;
 
 // Byteswap...
+//
+// Needs this when loading the ROM on MiSTer, at least under Verilator simulation. ElectronAsh. 
+//
 wire [15:0] loader_data_bs = {loader_data[7:0], loader_data[15:8]};
-										  
+
 //assign DDRAM_DIN = dram_d;
 assign DDRAM_DIN = (loader_en) ? {loader_data_bs, loader_data_bs, loader_data_bs, loader_data_bs} :
-											{r_dram_d[63], r_dram_d[62], r_dram_d[61], r_dram_d[60], r_dram_d[59], r_dram_d[58], r_dram_d[57], r_dram_d[56], 
-											 r_dram_d[55], r_dram_d[54], r_dram_d[53], r_dram_d[52], r_dram_d[51], r_dram_d[50], r_dram_d[49], r_dram_d[48], 
-											 r_dram_d[47], r_dram_d[46], r_dram_d[45], r_dram_d[44], r_dram_d[43], r_dram_d[42], r_dram_d[41], r_dram_d[40], 
-											 r_dram_d[39], r_dram_d[38], r_dram_d[37], r_dram_d[36], r_dram_d[35], r_dram_d[34], r_dram_d[33], r_dram_d[32],
-											 r_dram_d[31], r_dram_d[30], r_dram_d[29], r_dram_d[28], r_dram_d[27], r_dram_d[26], r_dram_d[25], r_dram_d[24], 
-											 r_dram_d[23], r_dram_d[22], r_dram_d[21], r_dram_d[20], r_dram_d[19], r_dram_d[18], r_dram_d[17], r_dram_d[16], 
-											 r_dram_d[15], r_dram_d[14], r_dram_d[13], r_dram_d[12], r_dram_d[11], r_dram_d[10], r_dram_d[9], r_dram_d[8], 
-											 r_dram_d[7], r_dram_d[6], r_dram_d[5], r_dram_d[4], r_dram_d[3], r_dram_d[2], r_dram_d[1], r_dram_d[0]};
+								/*{loader_data, loader_data, loader_data, loader_data} :*/
+								{r_dram_d[63], r_dram_d[62], r_dram_d[61], r_dram_d[60], r_dram_d[59], r_dram_d[58], r_dram_d[57], r_dram_d[56], 
+								 r_dram_d[55], r_dram_d[54], r_dram_d[53], r_dram_d[52], r_dram_d[51], r_dram_d[50], r_dram_d[49], r_dram_d[48], 
+								 r_dram_d[47], r_dram_d[46], r_dram_d[45], r_dram_d[44], r_dram_d[43], r_dram_d[42], r_dram_d[41], r_dram_d[40], 
+								 r_dram_d[39], r_dram_d[38], r_dram_d[37], r_dram_d[36], r_dram_d[35], r_dram_d[34], r_dram_d[33], r_dram_d[32],
+								 r_dram_d[31], r_dram_d[30], r_dram_d[29], r_dram_d[28], r_dram_d[27], r_dram_d[26], r_dram_d[25], r_dram_d[24], 
+								 r_dram_d[23], r_dram_d[22], r_dram_d[21], r_dram_d[20], r_dram_d[19], r_dram_d[18], r_dram_d[17], r_dram_d[16], 
+								 r_dram_d[15], r_dram_d[14], r_dram_d[13], r_dram_d[12], r_dram_d[11], r_dram_d[10], r_dram_d[9], r_dram_d[8], 
+								 r_dram_d[7], r_dram_d[6], r_dram_d[5], r_dram_d[4], r_dram_d[3], r_dram_d[2], r_dram_d[1], r_dram_d[0]};
 
 
 assign DDRAM_BE = (loader_en) ? loader_be :
@@ -553,22 +635,37 @@ assign DDRAM_BE = (loader_en) ? loader_be :
 
 reg [7:0] DDRAM_BE_REG;
 
-
+`ifndef VERILATOR
 wire [23:0] cart_a;
+wire [31:0] cart_q;
+wire [1:0] cart_oe;
+`endif
+
 wire cart_ce_n;
 wire [1:0] cart_oe_n;
-//wire [31:0] cart_q = CART_ROM_DO;
-wire [1:0] cart_oe;
 
 assign	cart_oe[0] = ~cart_oe_n[0] & ~cart_ce_n;
 assign	cart_oe[1] = ~cart_oe_n[1] & ~cart_ce_n;
 
+/*
+assign cart_q = ({cart_a[2:1],1'b0}==0) ? {DDRAM_DOUT[63:48],DDRAM_DOUT[63:48]} :
+				({cart_a[2:1],1'b0}==2) ? {DDRAM_DOUT[47:32],DDRAM_DOUT[47:32]} :
+				({cart_a[2:1],1'b0}==4) ? {DDRAM_DOUT[31:16],DDRAM_DOUT[31:16]} :
+										  {DDRAM_DOUT[15:0],DDRAM_DOUT[15:0]};
+*/
 
-wire [31:0] cart_q = ({cart_a[2:1],1'b0}==0) ? {DDRAM_DOUT[63:48],DDRAM_DOUT[63:48]} :
-							({cart_a[2:1],1'b0}==2) ? {DDRAM_DOUT[47:32],DDRAM_DOUT[47:32]} :
-							({cart_a[2:1],1'b0}==4) ? {DDRAM_DOUT[31:16],DDRAM_DOUT[31:16]} :
-															  {DDRAM_DOUT[15:0],DDRAM_DOUT[15:0]};
+// 8-bit cart mode... WORKING in Verilator! ElectronAsh.
+//
+assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_DOUT[63:56]} :
+					 ({cart_a[2:0]}==1) ? {DDRAM_DOUT[55:48],DDRAM_DOUT[55:48],DDRAM_DOUT[55:48],DDRAM_DOUT[55:48]} :
+					 ({cart_a[2:0]}==2) ? {DDRAM_DOUT[47:40],DDRAM_DOUT[47:40],DDRAM_DOUT[47:40],DDRAM_DOUT[47:40]} :
+					 ({cart_a[2:0]}==3) ? {DDRAM_DOUT[39:32],DDRAM_DOUT[39:32],DDRAM_DOUT[39:32],DDRAM_DOUT[39:32]} :
+					 ({cart_a[2:0]}==4) ? {DDRAM_DOUT[31:24],DDRAM_DOUT[31:24],DDRAM_DOUT[31:24],DDRAM_DOUT[31:24]} :
+					 ({cart_a[2:0]}==5) ? {DDRAM_DOUT[23:16],DDRAM_DOUT[23:16],DDRAM_DOUT[23:16],DDRAM_DOUT[23:16]} :
+					 ({cart_a[2:0]}==6) ? {DDRAM_DOUT[15:8],DDRAM_DOUT[15:8],DDRAM_DOUT[15:8],DDRAM_DOUT[15:8]} :
+												 {DDRAM_DOUT[7:0],DDRAM_DOUT[7:0],DDRAM_DOUT[7:0],DDRAM_DOUT[7:0]};
 
+//assign cart_q = (!cart_a[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:0];
 
 
 `define SS_IDLE	4'b0000
@@ -587,7 +684,7 @@ wire [31:0] cart_q = ({cart_a[2:1],1'b0}==0) ? {DDRAM_DOUT[63:48],DDRAM_DOUT[63:
 `define SS_WR_5	4'b1101
 
 
-wire mem_clk = SYS_CLK;
+wire mem_clk = clk_sys;
 
 wire ram_rdy = (mem_cyc == `SS_END);
 

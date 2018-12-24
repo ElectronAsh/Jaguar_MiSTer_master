@@ -1,17 +1,17 @@
-Analysis & Synthesis Status : Successful - Mon Nov 05 03:18:07 2018
+Analysis & Synthesis Status : Successful - Sat Dec 22 04:09:39 2018
 Quartus Prime Version : 17.0.0 Build 595 04/25/2017 SJ Standard Edition
 Revision Name : Jaguar
 Top-level Entity Name : sys_top
 Family : Cyclone V
 Logic utilization (in ALMs) : N/A
-Total registers : 19733
+Total registers : 19628
 Total pins : 128
 Total virtual pins : 0
-Total block memory bits : 2,556,528
-Total DSP Blocks : 7
+Total block memory bits : 2,542,192
+Total DSP Blocks : 6
 Total HSSI RX PCSs : 0
 Total HSSI PMA RX Deserializers : 0
 Total HSSI TX PCSs : 0
 Total HSSI PMA TX Serializers : 0
-Total PLLs : 1
+Total PLLs : 2
 Total DLLs : 0
