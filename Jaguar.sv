@@ -147,15 +147,18 @@ pll_jag pll_jag_inst
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(CLK_33M),
+	.outclk_0(CLK_26M),
 	.outclk_1(CLK_54M),
+	.outclk_2(CLK_13M),
 	.locked(locked)
 );
 
-wire clk_sys = CLK_33M;
+(*keep*)wire clk_sys = CLK_26M;
 
+//(*keep*)wire clk_sys = CLK_54M;
 
-//(*keep*)wire clk_sys = CLK_50M;
+//(*keep*)wire clk_sys = CLK_13M;
+
 
 
 wire [1:0] scale = status[3:2];
@@ -253,51 +256,35 @@ if (reset) begin
 	timeout <= 0;
 	loader_wr <= 0;
 	loader_en <= 0;
-	loader_addr <= 32'h00800000;
+	loader_addr <= 32'h0080_0000;
 end
 else begin
 	old_download <= ioctl_download;
 	
-	loader_reset <= 0;
+	loader_reset <= 0;// Default!
+	loader_wr <= 0;	// Default!
+	
 	if(~old_download && ioctl_download && ioctl_index) begin
-		loader_addr <= 32'h00800000;									// Force the ROM to load at 0x800000 in DDR for Jag core. (byte address!)
+		loader_addr <= 32'h0080_0000;									// Force the cart ROM to load at 0x00800000 in DDR for Jag core. (byte address!)
+																				// (The ROM actually gets written at 0x30800000 in DDR, which is done when load_addr gets assigned to DDRAM_ADDR below).
+		loader_en <= 1;
 		status_reg <= 0;
 		loader_reset <= 1;
 		ioctl_wait <= 0;
 		timeout <= 3000000;
 		cnt <= 0;
 	end
-	
-	loader_wr <= 0;	// Default!
+
 	if(loader_wr) loader_addr <= loader_addr + 2;				// Writing 16-bit WORDs at a time!
 
 	if(ioctl_wr && ioctl_index) begin
-		loader_en <= 1;
-		case(status_reg)
-			0: /*if(ioctl_data == 8'hED) status_reg <= 1;
-				else*/ begin
-					loader_wr <= 1;
-					/*loader_data <= ioctl_data;
-					loader_be <= (loader_en && loader_addr[2:0]==0) ? 8'b11000000 :
-								 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
-								 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
-								 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;*/
-				end
-			1: begin
-					cnt <= ioctl_data;
-					status_reg <= ioctl_data ? 2'd2 : 2'd3; // cnt = 0 => stop
-				end
-			2: begin
-					/*loader_data <= ioctl_data;
-					loader_be <= (loader_en && loader_addr[2:0]==0) ? 8'b11000000 :
-								 (loader_en && loader_addr[2:0]==2) ? 8'b00110000 :
-								 (loader_en && loader_addr[2:0]==4) ? 8'b00001100 :
-								 (loader_en && loader_addr[2:0]==6) ? 8'b00000011 : 8'b11111111;*/
-					ioctl_wait <= 1;
-				end
-		endcase
+		loader_wr <= 1;
 	end
+	
+	if (loader_en && DDRAM_BUSY) ioctl_wait <= 1;
+	else ioctl_wait <= 0;
 
+/*
 	if(ioctl_wait && !loader_wr) begin
 		if(cnt) begin
 			cnt <= cnt - 1'd1;
@@ -306,8 +293,12 @@ else begin
 		else if(timeout) timeout <= timeout - 1;
 		else {status_reg,ioctl_wait} <= 0;
 	end
+*/
 
-	if(old_download & ~ioctl_download) loader_en <= 0;
+	if(old_download & ~ioctl_download) begin
+		loader_en <= 0;
+		ioctl_wait <= 0;
+	end
 	if(RESET) ioctl_wait <= 0;
 end
 
@@ -490,16 +481,18 @@ wire [7:0] vga_r;
 wire [7:0] vga_g;
 wire [7:0] vga_b;
 
-/*
-assign VGA_DE = !vga_bl;
 
-assign VGA_HS = !vga_hs_n;
-assign VGA_VS = !vga_vs_n;
+//assign VGA_DE = !vga_bl;
+//assign VGA_HS = !vga_hs_n;
+//assign VGA_VS = !vga_vs_n;
+
+assign VGA_HS = vga_hs_n ^ vga_vs_n;
+assign VGA_VS = 1'b1;
 
 assign VGA_R = vga_r;
 assign VGA_G = vga_g;
 assign VGA_B = vga_b;
-*/
+
 
 assign CLK_VIDEO = clk_sys;
 //assign VGA_SL = {~interlace,~interlace} & sl[1:0];
@@ -541,11 +534,11 @@ video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0)) video_mixer
 	.HBlank(hblank),		// input HBlank
 	.VBlank(vblank),		// input VBlank
 	
-	.VGA_R( VGA_R ),		// output [7:0] VGA_R
-	.VGA_G( VGA_G ),		// output [7:0] VGA_G
-	.VGA_B( VGA_B ),		// output [7:0] VGA_B
-	.VGA_VS( VGA_VS ),	// output VGA_VS
-	.VGA_HS( VGA_HS ),	// output VGA_HS
+//	.VGA_R( VGA_R ),		// output [7:0] VGA_R
+//	.VGA_G( VGA_G ),		// output [7:0] VGA_G
+//	.VGA_B( VGA_B ),		// output [7:0] VGA_B
+//	.VGA_VS( VGA_VS ),	// output VGA_VS
+//	.VGA_HS( VGA_HS ),	// output VGA_HS
 	.VGA_DE( VGA_DE )		// output VGA_DE
 	
 );
@@ -600,8 +593,11 @@ assign DDRAM_CLK = clk_sys;
 assign DDRAM_BURSTCNT = 1;
 
 
-assign DDRAM_ADDR = (loader_en)  ? {8'b0000000, loader_addr[23:3]} :
-						                 {8'b0000000, cart_a[23:3]};		// DRAM address is using "cart_a" here (byte address, so three LSB bits are ignored!)
+// Jag DRAM is now mapped at 0x30000000 in DDR on MiSTer, hence the setting of the upper bits here.
+// The cart ROM is loaded at 0x30800000, as the Jag normally expects the cart to be mapped at offset 0x800000.
+
+assign DDRAM_ADDR = (loader_en)  ? {8'b0110000, loader_addr[23:3]} :	// 
+						                 {8'b0110000, cart_a[23:3]};		// DRAM address is using "cart_a" here (byte address, so three LSB bits are ignored!)
 																						// so the MSB bit will be set by the Jag core when reading that.
 
 assign DDRAM_RD = (loader_en) ? 1'b0 :

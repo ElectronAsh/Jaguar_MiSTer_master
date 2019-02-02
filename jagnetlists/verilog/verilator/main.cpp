@@ -29,7 +29,8 @@ unsigned int osrom_size = 1024*128;	// 128KB.
 uint8_t *osrom_ptr = (uint8_t *) malloc(osrom_size);
 
 
-unsigned int rom_size = 1024*4096;	// 4MBytes (16-bit wide).
+unsigned int rom_size = 1024*2048;	// 2MBytes (16-bit wide).
+//unsigned int rom_size = 1024*4096;	// 4MBytes (16-bit wide).
 uint16_t *rom_ptr = (uint16_t *) malloc(rom_size);
 
 unsigned int ram_size = 1024*4096*4;	// 4MBytes. (64-bit wide).
@@ -110,8 +111,8 @@ int main(int argc, char **argv, char **env)
   */
   
   	FILE *romfile;
-	//romfile = fopen("tempest.bin","r");
-	romfile = fopen("alien.bin","r");
+	romfile = fopen("tempest.bin","r");
+	//romfile = fopen("alien.bin","r");
 	if (romfile!=NULL) {
 		printf("\nCart ROM file loaded OK.\n");
 	}
@@ -134,9 +135,9 @@ int main(int argc, char **argv, char **env)
 	//ssram->load("dram.bin", 0x4000, 0x200000);
 	
 	BIOS *bios = new BIOS(0, 0x100000);
-	bios->load("os.bin", 0x0, 0x100000);
+	//bios->load("os.bin", 0x0, 0x100000);
 	//bios->load("os_cart_fastrom.bin", 0x0, 0x100000);
-	//bios->load("jagboot.rom", 0x0, 0x100000);
+	bios->load("jagboot.rom", 0x0, 0x100000);
 	
 	//CART *cart = new CART(1 /* 16 bits */, 0, 0x800000);
 	//CART *cart = new CART(0, 0, 0x800000);

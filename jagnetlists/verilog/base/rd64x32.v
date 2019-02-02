@@ -26,14 +26,14 @@ begin
 	if (clka) begin
 		if (~nwea) begin
 			ram_blk[aa][31:0] <= da;
-			$display("GPU REG WR-A $%x #%x", aa, da);
+			//$display("GPU REG WR-A $%x #%x", aa, da);
 		end
 		//GE r_qa <= ram_blk[aa][31:0];
 	end
 	if (clkb) begin
 		if (~nweb) begin
 			ram_blk[ab][31:0] <= db;
-			$display("GPU REG WR-B $%x #%x", ab, db);
+			//$display("GPU REG WR-B $%x #%x", ab, db);
 		end
 		//GE r_qb <= ram_blk[ab][31:0];
 	end
@@ -55,10 +55,10 @@ assign wren_b = ~nweb & clkb;
 always @(posedge sys_clk)
 begin
 	if (~nwea & clka) begin
-		$display("GPU REG WR-A $%x #%x", aa, da);
+		//$display("GPU REG WR-A $%x #%x", aa, da);
 	end
 	if (~nweb & clkb) begin
-		$display("GPU REG WR-B $%x #%x", ab, db);
+		//$display("GPU REG WR-B $%x #%x", ab, db);
 	end
 end
 

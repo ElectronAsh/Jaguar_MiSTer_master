@@ -1,17 +1,17 @@
-Fitter Status : Successful - Sat Dec 22 04:20:16 2018
+Fitter Status : Successful - Thu Jan 31 21:07:22 2019
 Quartus Prime Version : 17.0.0 Build 595 04/25/2017 SJ Standard Edition
 Revision Name : Jaguar
 Top-level Entity Name : sys_top
 Family : Cyclone V
 Device : 5CSEBA6U23I7
 Timing Models : Final
-Logic utilization (in ALMs) : 12,644 / 41,910 ( 30 % )
-Total registers : 20216
+Logic utilization (in ALMs) : 12,894 / 41,910 ( 31 % )
+Total registers : 19697
 Total pins : 128 / 314 ( 41 % )
 Total virtual pins : 0
-Total block memory bits : 2,542,192 / 5,662,720 ( 45 % )
-Total RAM Blocks : 319 / 553 ( 58 % )
-Total DSP Blocks : 6 / 112 ( 5 % )
+Total block memory bits : 2,564,720 / 5,662,720 ( 45 % )
+Total RAM Blocks : 322 / 553 ( 58 % )
+Total DSP Blocks : 7 / 112 ( 6 % )
 Total HSSI RX PCSs : 0
 Total HSSI PMA RX Deserializers : 0
 Total HSSI TX PCSs : 0

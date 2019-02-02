@@ -875,12 +875,12 @@ wire  [1:0] led_disk;
 
 wire vs_emu, hs_emu;
 
-//sync_fix sync_v(FPGA_CLK3_50, vs_emu, vs);
-//sync_fix sync_h(FPGA_CLK3_50, hs_emu, hs);
+sync_fix sync_v(FPGA_CLK3_50, vs_emu, vs);
+sync_fix sync_h(FPGA_CLK3_50, hs_emu, hs);
 
 
-assign vs = vs_emu;
-assign hs = hs_emu;
+//assign vs = vs_emu;
+//assign hs = hs_emu;
 
 
 emu emu
