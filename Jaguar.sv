@@ -379,6 +379,8 @@ jaguar jaguar_inst
 	
 	.ram_rdy( ram_rdy ) ,		// input  ram_rdy
 	
+	.ddr_ready( ddr_ready ) ,	// input ddr_ready
+	
 	.DBG_CPU_RDEN( DBG_CPU_RDEN ) ,	// output  DBG_CPU_RDEN
 	.DBG_CPU_WREN( DBG_CPU_WREN ) ,	// output  DBG_CPU_WREN
 	.DBG_CPU_DTACK( DBG_CPU_DTACK ) ,// output  DBG_CPU_DTACK
@@ -693,6 +695,8 @@ reg	[0:63]	r_dram_d;
 reg DDR_RD_REQ;
 reg DDR_WR_REQ;
 
+reg ddr_ready;
+
 reg [3:0] mem_cyc;
 initial begin
 	mem_cyc <= `SS_IDLE;
@@ -715,9 +719,15 @@ else begin
 	// end else begin
 		case (mem_cyc)
 			`SS_IDLE: begin
+				ddr_ready <= 1'b1;	// NEEDS THIS, to allow DTACK on the j68 CPU core for all other memory ranges.
+											// Then, as soon as a RAM read occurs, we set ddr_ready low, until the read data becomes valid.
+											// (and also do the same for writes, ie. keep ddr_ready low if DRAM_BUSY is high.)
+				
 				if ( (fdram && (dram_oe_n != 4'b1111)) | (!fdram && cart_ce_n_falling) ) begin
+					ddr_ready <= 1'b0;
 					mem_cyc <= `SS_RD_1;
 				end else if (fdram && ({dram_uw_n, dram_lw_n} != 8'b11111111)) begin
+					ddr_ready <= 1'b0;
 					mem_cyc <= `SS_WR_1;
 				end
 			end

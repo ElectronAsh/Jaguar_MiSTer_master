@@ -17,6 +17,8 @@ module jaguar
 	output	[0:63]	dram_d,
 	input		[0:63]	dram_q,
 	input		[0:3]		dram_oe,
+	
+	input        ddr_ready,
 
 	input						ram_rdy,
 	
@@ -877,7 +879,7 @@ assign j68_clk = sys_clk;
 // assign j68_ipl_n = 3'b111;
 assign j68_ipl_n = { 1'b1, xintl, 1'b1 };
 
-assign j68_data_ack = ~xdtackl & xba_in;
+assign j68_data_ack = ~xdtackl & xba_in & ddr_ready;	// xdtackl is from tom->mem->cpu. ElectronAsh.
 
 // Bus sync (pclk)
 reg dtackack = 1'b1;

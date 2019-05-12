@@ -3,91 +3,91 @@ TimeQuest Timing Analyzer Summary
 ------------------------------------------------------------
 
 Type  : Setup 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk'
-Slack : -11.545
-TNS   : -1763.508
+Slack : -11.543
+TNS   : -1708.268
 
 Type  : Setup 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk'
-Slack : -10.145
-TNS   : -17985.661
+Slack : -10.855
+TNS   : -17913.171
 
 Type  : Setup 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
-Slack : -9.049
-TNS   : -9.049
+Slack : -8.169
+TNS   : -8.169
 
 Type  : Setup 'FPGA_CLK3_50'
-Slack : -8.105
-TNS   : -541.501
+Slack : -7.665
+TNS   : -550.155
 
 Type  : Setup 'FPGA_CLK1_50'
-Slack : -7.434
-TNS   : -317.595
+Slack : -7.332
+TNS   : -315.480
 
 Type  : Setup 'altera_reserved_tck'
-Slack : 7.464
+Slack : 7.076
 TNS   : 0.000
 
 Type  : Setup 'FPGA_CLK2_50'
-Slack : 12.082
+Slack : 10.876
 TNS   : 0.000
 
 Type  : Hold 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk'
-Slack : 0.241
-TNS   : 0.000
-
-Type  : Hold 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
-Slack : 0.417
+Slack : 0.242
 TNS   : 0.000
 
 Type  : Hold 'FPGA_CLK1_50'
-Slack : 0.419
+Slack : 0.381
 TNS   : 0.000
 
-Type  : Hold 'altera_reserved_tck'
-Slack : 0.432
+Type  : Hold 'sysmem|fpga_interfaces|clocks_resets|h2f_user0_clk'
+Slack : 0.414
 TNS   : 0.000
 
 Type  : Hold 'FPGA_CLK3_50'
-Slack : 0.434
+Slack : 0.426
 TNS   : 0.000
 
-Type  : Hold 'FPGA_CLK2_50'
-Slack : 0.437
+Type  : Hold 'altera_reserved_tck'
+Slack : 0.433
 TNS   : 0.000
 
 Type  : Hold 'pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk'
-Slack : 0.437
+Slack : 0.436
+TNS   : 0.000
+
+Type  : Hold 'FPGA_CLK2_50'
+Slack : 0.439
 TNS   : 0.000
 
 Type  : Recovery 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk'
-Slack : -6.864
-TNS   : -6442.089
+Slack : -7.280
+TNS   : -6811.603
 
 Type  : Recovery 'FPGA_CLK1_50'
-Slack : 12.401
+Slack : 13.187
 TNS   : 0.000
 
 Type  : Recovery 'FPGA_CLK3_50'
-Slack : 16.360
+Slack : 15.338
 TNS   : 0.000
 
 Type  : Recovery 'altera_reserved_tck'
-Slack : 22.846
+Slack : 23.961
 TNS   : 0.000
 
 Type  : Removal 'FPGA_CLK3_50'
-Slack : 0.917
+Slack : 0.853
 TNS   : 0.000
 
 Type  : Removal 'altera_reserved_tck'
-Slack : 0.999
+Slack : 1.039
 TNS   : 0.000
 
 Type  : Removal 'FPGA_CLK1_50'
-Slack : 1.541
+Slack : 1.450
 TNS   : 0.000
 
 Type  : Removal 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk'
-Slack : 1.586
+Slack : 1.817
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~FRACTIONAL_PLL|vcoph[0]'
@@ -107,11 +107,11 @@ Slack : 4.288
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'FPGA_CLK3_50'
-Slack : 9.171
+Slack : 9.169
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'FPGA_CLK1_50'
-Slack : 9.178
+Slack : 9.170
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'FPGA_CLK2_50'
@@ -119,11 +119,11 @@ Slack : 9.189
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'altera_reserved_tck'
-Slack : 15.325
+Slack : 15.336
 TNS   : 0.000
 
 Type  : Minimum Pulse Width 'emu|pll_jag_inst|pll_jag_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk'
-Slack : 17.362
+Slack : 17.360
 TNS   : 0.000
 
 ------------------------------------------------------------

@@ -1387,6 +1387,7 @@ assign _wait = ~waitl;
 
 // MEM.NET (522) - waitdonei : nr6
 assign waitdonei = ~(wq_0 | wq_1 | wq_2 | wq_3 | _wait | gnd);
+//assign waitdonei = ~(wq_0 | wq_1 | wq_2 | wq_3 | _wait | gnd | !ram_rdy);
 
 // MEM.NET (523) - notwaitdone : iv
 assign notwaitdone = ~waitdonei;
