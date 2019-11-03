@@ -20,7 +20,7 @@ module jaguar
 	
 	input        ddr_ready,
 
-	input						ram_rdy,
+	input				ram_rdy,
 	
   output        DBG_CPU_RDEN,
   output        DBG_CPU_WREN,

@@ -92,7 +92,7 @@ module emu
 	input wire  [7:0] ioctl_index,
 	output reg         ioctl_wait,
 	
-	output reg [31:0] loader_addr,
+	(*noprune*)output reg [31:0] loader_addr,
 	
 	output wire [23:0] cart_a,
 	
@@ -129,7 +129,7 @@ module emu
 );
 
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
-assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
+//assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 //assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 
 //assign LED_USER  = ioctl_download;
@@ -142,7 +142,7 @@ assign LED_POWER = 0;
 
 wire CLK_33M;
 wire CLK_54M;
-wire locked;
+wire pll_locked;
 pll_jag pll_jag_inst
 (
 	.refclk(CLK_50M),
@@ -150,14 +150,18 @@ pll_jag pll_jag_inst
 	.outclk_0(CLK_26M),
 	.outclk_1(CLK_54M),
 	.outclk_2(CLK_13M),
-	.locked(locked)
+	.outclk_3(clk_106M),
+	.outclk_4(clk_106M_sdram),
+	.locked(pll_locked)
 );
 
-(*keep*)wire clk_sys = CLK_26M;
+(*keep*)wire clk_sys = CLK_13M;	// TESTING !!
+
+//(*keep*)wire clk_sys = CLK_26M;
 
 //(*keep*)wire clk_sys = CLK_54M;
 
-//(*keep*)wire clk_sys = CLK_13M;
+
 
 
 
@@ -275,7 +279,7 @@ else begin
 		cnt <= 0;
 	end
 
-	if(loader_wr) loader_addr <= loader_addr + 2;				// Writing 16-bit WORDs at a time!
+	if(loader_wr) loader_addr <= loader_addr + 2;				// Writing a 16-bit WORD at a time!
 
 	if(ioctl_wr && ioctl_index) begin
 		loader_wr <= 1;
@@ -360,10 +364,11 @@ always @(posedge clk_sys) begin
 end
 */
 
+wire xresetl = !(reset | loader_reset | loader_en);
 
 jaguar jaguar_inst
 (
-	.xresetl( !(reset | loader_reset | loader_en) ) ,			// input  xresetl
+	.xresetl( xresetl ) ,		// input  xresetl
 	
 	.sys_clk( clk_sys ) ,		// input  clk_sys
 	
@@ -568,7 +573,8 @@ wire [0:3] dram_lw_n;
 wire [0:63] dram_d;
 
 //wire [0:63] dram_q = DDRAM_DOUT;
-wire [0:63] dram_q = {DDRAM_DOUT[0], DDRAM_DOUT[1], DDRAM_DOUT[2], DDRAM_DOUT[3], DDRAM_DOUT[4], DDRAM_DOUT[5], DDRAM_DOUT[6], DDRAM_DOUT[7],
+wire [0:63] dram_q = /*(!cart_ce_n) ? {sdram_dout,sdram_dout,sdram_dout,sdram_dout} :*/
+							{DDRAM_DOUT[0], DDRAM_DOUT[1], DDRAM_DOUT[2], DDRAM_DOUT[3], DDRAM_DOUT[4], DDRAM_DOUT[5], DDRAM_DOUT[6], DDRAM_DOUT[7],
 							 DDRAM_DOUT[8], DDRAM_DOUT[9], DDRAM_DOUT[10], DDRAM_DOUT[11], DDRAM_DOUT[12], DDRAM_DOUT[13], DDRAM_DOUT[14], DDRAM_DOUT[15],
 							 DDRAM_DOUT[16], DDRAM_DOUT[17], DDRAM_DOUT[18], DDRAM_DOUT[19], DDRAM_DOUT[20], DDRAM_DOUT[21], DDRAM_DOUT[22], DDRAM_DOUT[23],
 							 DDRAM_DOUT[24], DDRAM_DOUT[25], DDRAM_DOUT[26], DDRAM_DOUT[27], DDRAM_DOUT[28], DDRAM_DOUT[29], DDRAM_DOUT[30], DDRAM_DOUT[31],
@@ -598,14 +604,14 @@ assign DDRAM_BURSTCNT = 1;
 // Jag DRAM is now mapped at 0x30000000 in DDR on MiSTer, hence the setting of the upper bits here.
 // The cart ROM is loaded at 0x30800000, as the Jag normally expects the cart to be mapped at offset 0x800000.
 
-assign DDRAM_ADDR = (loader_en)  ? {8'b0110000, loader_addr[23:3]} :	// 
+assign DDRAM_ADDR = /*(loader_en)  ? {8'b0110000, loader_addr[23:3]} :	// */
 						                 {8'b0110000, cart_a[23:3]};		// DRAM address is using "cart_a" here (byte address, so three LSB bits are ignored!)
 																						// so the MSB bit will be set by the Jag core when reading that.
 
-assign DDRAM_RD = (loader_en) ? 1'b0 :
+assign DDRAM_RD = /*(loader_en) ? 1'b0 :*/
 										  DDR_RD_REQ;
 
-assign DDRAM_WE = (loader_en) ? loader_wr :
+assign DDRAM_WE = /*(loader_en) ? loader_wr :*/
 										  DDR_WR_REQ;
 
 // Byteswap...
@@ -615,8 +621,9 @@ assign DDRAM_WE = (loader_en) ? loader_wr :
 wire [15:0] loader_data_bs = {loader_data[7:0], loader_data[15:8]};
 
 //assign DDRAM_DIN = dram_d;
+/*
 assign DDRAM_DIN = (loader_en) ? {loader_data_bs, loader_data_bs, loader_data_bs, loader_data_bs} :
-								/*{loader_data, loader_data, loader_data, loader_data} :*/
+								//{loader_data, loader_data, loader_data, loader_data} :
 								{r_dram_d[63], r_dram_d[62], r_dram_d[61], r_dram_d[60], r_dram_d[59], r_dram_d[58], r_dram_d[57], r_dram_d[56], 
 								 r_dram_d[55], r_dram_d[54], r_dram_d[53], r_dram_d[52], r_dram_d[51], r_dram_d[50], r_dram_d[49], r_dram_d[48], 
 								 r_dram_d[47], r_dram_d[46], r_dram_d[45], r_dram_d[44], r_dram_d[43], r_dram_d[42], r_dram_d[41], r_dram_d[40], 
@@ -630,8 +637,21 @@ assign DDRAM_DIN = (loader_en) ? {loader_data_bs, loader_data_bs, loader_data_bs
 assign DDRAM_BE = (loader_en) ? loader_be :
 						(!cart_ce_n) ? 8'b11111111 :
 											DDRAM_BE_REG;
-
+*/
 reg [7:0] DDRAM_BE_REG;
+
+assign DDRAM_DIN = {r_dram_d[63], r_dram_d[62], r_dram_d[61], r_dram_d[60], r_dram_d[59], r_dram_d[58], r_dram_d[57], r_dram_d[56], 
+						  r_dram_d[55], r_dram_d[54], r_dram_d[53], r_dram_d[52], r_dram_d[51], r_dram_d[50], r_dram_d[49], r_dram_d[48], 
+						  r_dram_d[47], r_dram_d[46], r_dram_d[45], r_dram_d[44], r_dram_d[43], r_dram_d[42], r_dram_d[41], r_dram_d[40], 
+						  r_dram_d[39], r_dram_d[38], r_dram_d[37], r_dram_d[36], r_dram_d[35], r_dram_d[34], r_dram_d[33], r_dram_d[32],
+						  r_dram_d[31], r_dram_d[30], r_dram_d[29], r_dram_d[28], r_dram_d[27], r_dram_d[26], r_dram_d[25], r_dram_d[24], 
+						  r_dram_d[23], r_dram_d[22], r_dram_d[21], r_dram_d[20], r_dram_d[19], r_dram_d[18], r_dram_d[17], r_dram_d[16], 
+						  r_dram_d[15], r_dram_d[14], r_dram_d[13], r_dram_d[12], r_dram_d[11], r_dram_d[10], r_dram_d[9], r_dram_d[8], 
+						  r_dram_d[7], r_dram_d[6], r_dram_d[5], r_dram_d[4], r_dram_d[3], r_dram_d[2], r_dram_d[1], r_dram_d[0]};
+						  
+assign DDRAM_BE = /*(!cart_ce_n) ? 8'b11111111 :*/
+											DDRAM_BE_REG;
+
 
 `ifndef VERILATOR
 wire [23:0] cart_a;
@@ -654,6 +674,7 @@ assign cart_q = ({cart_a[2:1],1'b0}==0) ? {DDRAM_DOUT[63:48],DDRAM_DOUT[63:48]} 
 
 // 8-bit cart mode... WORKING in Verilator! ElectronAsh.
 //
+/*
 assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_DOUT[63:56]} :
 					 ({cart_a[2:0]}==1) ? {DDRAM_DOUT[55:48],DDRAM_DOUT[55:48],DDRAM_DOUT[55:48],DDRAM_DOUT[55:48]} :
 					 ({cart_a[2:0]}==2) ? {DDRAM_DOUT[47:40],DDRAM_DOUT[47:40],DDRAM_DOUT[47:40],DDRAM_DOUT[47:40]} :
@@ -662,8 +683,72 @@ assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_
 					 ({cart_a[2:0]}==5) ? {DDRAM_DOUT[23:16],DDRAM_DOUT[23:16],DDRAM_DOUT[23:16],DDRAM_DOUT[23:16]} :
 					 ({cart_a[2:0]}==6) ? {DDRAM_DOUT[15:8],DDRAM_DOUT[15:8],DDRAM_DOUT[15:8],DDRAM_DOUT[15:8]} :
 												 {DDRAM_DOUT[7:0],DDRAM_DOUT[7:0],DDRAM_DOUT[7:0],DDRAM_DOUT[7:0]};
+*/
 
 //assign cart_q = (!cart_a[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:0];
+
+assign SDRAM_CLK = clk_106M_sdram;
+
+sdram sdram (
+    // system interface
+   .init           ( ~pll_locked               ),
+	.clk            ( clk_106M                  ),
+   
+   // interface to the MT48LC16M16 chip
+   .SDRAM_DQ       ( SDRAM_DQ                  ),
+   .SDRAM_A        ( SDRAM_A                   ),
+   .SDRAM_DQML     ( SDRAM_DQML                ),
+	.SDRAM_DQMH     ( SDRAM_DQMH                ),
+   .SDRAM_nCS      ( SDRAM_nCS                 ),
+   .SDRAM_BA       ( SDRAM_BA                  ),
+   .SDRAM_nWE      ( SDRAM_nWE                 ),
+   .SDRAM_nRAS     ( SDRAM_nRAS                ),
+   .SDRAM_nCAS     ( SDRAM_nCAS                ),
+	.SDRAM_CKE      ( SDRAM_CKE                 ),
+
+   // cpu interface
+	.addr           ( my_sdram_addr             ),
+   .din            ( loader_data_bs            ),
+	.wtbt				 ( 2'b11                     ),
+   .we             ( loader_en & loader_wr     ),
+	
+   .rd             ( !loader_en & sdram_rd_trig),
+   .dout           ( sdram_dout                ),
+	.ready          ( sdram_ready               )
+);
+
+(*keep*) wire [15:0] sdram_dout;
+(*keep*) wire sdram_ready;
+
+
+wire [24:0] my_sdram_addr = (loader_en) ? {2'b00,loader_addr[22:0]} : {2'b00,cart_a[22:0]};
+
+
+// This should in theory work for 8-bit or 16-bit cart ROM reads, using the latest MiSTer SDRAM controller...
+//assign cart_q = {sdram_dout, sdram_dout};
+
+assign cart_q = (!cart_a[0]) ? {SDRAM_DQ[15:8], SDRAM_DQ[15:8]} : {SDRAM_DQ[7:0], SDRAM_DQ[7:0]};
+
+
+reg [23:0] old_cart_a;
+reg cart_ce_n_1 = 1;
+wire cart_ce_n_falling = (cart_ce_n_1 && !cart_ce_n);
+
+reg sdram_rd_trig;
+always @(posedge clk_sys or negedge xresetl)
+if (!xresetl) begin
+	sdram_rd_trig <= 1'b0;
+	old_cart_a <= 24'h112233;
+end
+else begin
+	old_cart_a <= cart_a;
+	cart_ce_n_1 <= cart_ce_n;
+	
+	sdram_rd_trig <= 1'b0;	// default
+	
+	if ( cart_ce_n_falling || (cart_a != old_cart_a) ) sdram_rd_trig <= 1'b1;
+end
+
 
 
 `define SS_IDLE	4'b0000
@@ -682,13 +767,7 @@ assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_
 `define SS_WR_5	4'b1101
 
 
-wire mem_clk = clk_sys;
-
 wire ram_rdy = (mem_cyc == `SS_END);
-
-reg cart_ce_n_1 = 1;
-
-wire cart_ce_n_falling = (cart_ce_n_1 && !cart_ce_n);
 
 reg	[0:63]	r_dram_d;
 
@@ -704,7 +783,7 @@ initial begin
 	DDR_WR_REQ <= 1'b0;
 end
 
-always @(posedge mem_clk or posedge reset)
+always @(posedge clk_sys or posedge reset)
 if (reset) begin
 	mem_cyc <= `SS_IDLE;
 end
@@ -712,7 +791,6 @@ else begin
 	DDR_RD_REQ <= 1'b0;
 	DDR_WR_REQ <= 1'b0;
 	
-	cart_ce_n_1 <= cart_ce_n;
 
 	// if (~fdram) begin
 		// mem_cyc <= `SS_IDLE;
@@ -723,7 +801,7 @@ else begin
 											// Then, as soon as a RAM read occurs, we set ddr_ready low, until the read data becomes valid.
 											// (and also do the same for writes, ie. keep ddr_ready low if DRAM_BUSY is high.)
 				
-				if ( (fdram && (dram_oe_n != 4'b1111)) | (!fdram && cart_ce_n_falling) ) begin
+				if (fdram && (dram_oe_n != 4'b1111)) begin
 					ddr_ready <= 1'b0;
 					mem_cyc <= `SS_RD_1;
 				end else if (fdram && ({dram_uw_n, dram_lw_n} != 8'b11111111)) begin

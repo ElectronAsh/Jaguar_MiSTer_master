@@ -26,20 +26,26 @@ Init:
 *	move.w	#0x1861, MEMCON1
 * 0x1861
 * 0001 1000 0110 0001
+
 * 0 0     0 11      000 0       11        00       00       1
 * u CPU32 u IOSPEED u   FASTROM DRAMSPEED ROMSPEED ROMWIDTH ROMHI
+
 * 0 0     0 11      000 0       11        11       01       1
 * 0001 1000 0111 1011
 * = 0x187B
+
 * 0 0     0 11      000 0       11        11       00       1
 * 0001 1000 0111 1001
 * = 0x1879
+
 * 0 0     0 11      000 1       11        11       00       1
 * 0001 1000 1111 1001
 * = 0x18F9
+
 * 0 0     0 11      000 0       11        10       00       1
 * 0001 1000 0111 0001
 * = 0x1871
+
 * Slow ROM
 *	move.w	#0x1861, MEMCON1
 
@@ -49,6 +55,9 @@ Init:
 * Speed up the ROM a little bit
 *	move.w	#0x1879, MEMCON1
 *	move.w	#0x1871, MEMCON1
+
+* Speed up the ROM, 16-bit
+*	move.w	#0x187B, MEMCON1
 
 * Use FASTROM
 *	move.w	#0x18F9, MEMCON1
@@ -133,6 +142,9 @@ Boot_Start:
 * See above - For 16-bit cartridge mode only
 *	move.w	#0x187B, MEMCON1
 
+* Slow ROM, slightly slower DRAM.
+	move.w	#0x1841, MEMCON1
+
 * Jump to "standard" entry point for homebrew games
 *	lea.l	0x00004000, %a0
 
@@ -140,7 +152,7 @@ Boot_Start:
 *	lea.l	0x00800404, %a1
 *	move.l	(%a1), %a0
 	
-* Entry point for most cartridges (should be fetched instead from $800404)	
+* Entry point for most retail cartridges (should really be fetched from $800404 instead )
 	lea.l	0x00802000, %a0
 	jmp		(%a0)
 	
