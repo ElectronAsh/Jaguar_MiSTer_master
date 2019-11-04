@@ -64,8 +64,11 @@ module jaguar
 	output wire	[0:31]	j_xd_in,
 `endif
 	
-	output	aud_l,
-	output	aud_r,
+	output	aud_l_pwm,
+	output	aud_r_pwm,
+	
+	output   [15:0] aud_16_l,
+	output   [15:0] aud_16_r,
 	
 	output	hblank,
 	output	vblank
@@ -74,25 +77,44 @@ module jaguar
 wire		rst;
 assign rst = ~xresetl;
 
+//assign aud_16_l = r_acc_l[22:7];
+//assign aud_16_r = r_acc_r[22:7];
 
+assign aud_16_l = r_aud_l;
+assign aud_16_r = r_aud_r;
+
+
+// TESTING !! ElectronAsh...
+wire xpclk = (clkdiv == 2'd0);
+wire xvclk = xpclk;
+//wire xvclk = sys_clk;
+
+wire tlw = (clkdiv == 2'd2);
+
+reg [1:0] clkdiv = 2'b00;
+always @(posedge sys_clk) begin
+	clkdiv <= clkdiv + 2'b01;
+	
+	if (clkdiv == 2'b10) begin
+		clkdiv <= 2'b00;
+	end
+end
+
+
+/*
 reg [2:0] clkdiv = 3'b000;
 reg xpclk = 1'b0;
 reg xvclk = 1'b0;
 reg tlw = 1'b1;
-// wire xpclk;
-// wire xvclk;
-// wire tlw;
-// assign xpclk = (clkdiv == 3'd0) || (clkdiv == 3'd3);
-// assign tlw = (clkdiv == 3'd2) || (clkdiv == 3'd5);
-// assign xvclk = xpclk;
 
 always @(posedge sys_clk)
 begin
 	clkdiv <= clkdiv + 3'b001;
+
 	if (clkdiv == 3'b101) begin
 		clkdiv <= 3'b000;
 	end
-
+	
 	if ((clkdiv == 3'd0) || (clkdiv == 3'd3)) begin
 		xpclk <= 1'b1;
 		xvclk <= 1'b1;
@@ -106,6 +128,8 @@ begin
 		tlw <= 1'b0;
 	end
 end
+*/
+
 
 // `ifndef verilator3
 // reg						xpclk;
@@ -879,7 +903,8 @@ assign j68_clk = sys_clk;
 // assign j68_ipl_n = 3'b111;
 assign j68_ipl_n = { 1'b1, xintl, 1'b1 };
 
-assign j68_data_ack = ~xdtackl & xba_in & ddr_ready;	// xdtackl is from tom->mem->cpu. ElectronAsh.
+//assign j68_data_ack = ~xdtackl & xba_in & ddr_ready;	// xdtackl is from tom->mem->cpu. ElectronAsh.
+assign j68_data_ack = ~xdtackl & xba_in;
 
 // Bus sync (pclk)
 reg dtackack = 1'b1;
@@ -1795,8 +1820,8 @@ assign vga_b = {xb[7], xb[6], xb[5], xb[4], xb[3], xb[2], xb[1], xb[0]};
 //assign vga_vs_n = vs_o;
 //assign vga_hs_n = hs_o;
 
-assign vga_vs_n = !(vc < 2);
-assign vga_hs_n = !(hc>=16'h0000 && hc<=16'h0080);
+//assign vga_vs_n = !(vc < 2);
+//assign vga_hs_n = !(hc>=16'h0000 && hc<=16'h0080);
 
 assign vga_bl = vga_blank;
 
@@ -1839,8 +1864,8 @@ end
 // BP = 48px
 // VA = 640px
 // FP = 16px 
-//assign vga_hs_n = (vga_hc < 304) ? 1'b0 : 1'b1;
-//assign vga_vs_n = (vc < 2) ? 1'b0 : 1'b1;
+assign vga_hs_n = (vga_hc < 304) ? 1'b0 : 1'b1;
+assign vga_vs_n = (vc < 2) ? 1'b0 : 1'b1;
 assign vga_blank = ( (vc > 2+17) && (vc < 240+2+17) && (vga_hc > 304+152) && (vga_hc < 304+152+2026) ) ? 1'b0 : 1'b1;
 
 assign hblank = !(vga_hc > 304+152) && (vga_hc < 304+152+2026);
@@ -1955,7 +1980,7 @@ s2_hq_dac dac_l
 	.clk_ena(dac_clk),
 	.pcm_in(r_acc_l[22:3]),
 	//.pcm_in({r_aud_l[15:0], r_aud_l[3:0]}),
-	.dac_out(aud_l)
+	.dac_out(aud_l_pwm)
 );
 
 s2_hq_dac dac_r
@@ -1965,7 +1990,7 @@ s2_hq_dac dac_r
 	.clk_ena(dac_clk),
 	.pcm_in(r_acc_r[22:3]),
 	//.pcm_in({r_aud_r[15:0], r_aud_r[3:0]}),
-	.dac_out(aud_r)
+	.dac_out(aud_r_pwm)
 );
 
 /*reg [15:0] acc_l;

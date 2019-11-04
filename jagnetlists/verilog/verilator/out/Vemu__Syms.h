@@ -1,7 +1,8 @@
 // Verilated -*- C++ -*-
 // DESCRIPTION: Verilator output: Symbol table internal header
 //
-// Internal details; most calling programs do not need this header
+// Internal details; most calling programs do not need this header,
+// unless using verilator public meta comments.
 
 #ifndef _Vemu__Syms_H_
 #define _Vemu__Syms_H_
@@ -31,4 +32,4 @@ class Vemu__Syms : public VerilatedSyms {
     
 } VL_ATTR_ALIGNED(64);
 
-#endif // guard
+#endif  // guard

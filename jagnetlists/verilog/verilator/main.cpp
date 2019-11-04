@@ -43,6 +43,7 @@ int main_time = 0;
 int main(int argc, char **argv, char **env)
 {
 	unsigned int file_size;
+	unsigned int cart_file_size;
 	
 	// Half cycles
 	vluint64_t hcycle = 0;
@@ -121,9 +122,9 @@ int main(int argc, char **argv, char **env)
 		return 0;
 	};
 	fseek(romfile, 0L, SEEK_END);
-	file_size = ftell(romfile);
+	cart_file_size = ftell(romfile);
 	fseek(romfile, 0L, SEEK_SET);
-	fread(rom_ptr, 1, file_size, romfile);	// Read the whole CART ROM file into RAM.
+	fread(rom_ptr, 1, cart_file_size, romfile);	// Read the whole CART ROM file into RAM.
 	
   
   // Init VGA output C++ model
@@ -262,7 +263,7 @@ for(ms = 0; ms < NUM_MS; ms++) {
 	if (main_time > 20) {
 		top->ioctl_download = 1;
 		
-		if (cart_index<rom_size/2) {
+		if (cart_index<cart_file_size/2) {
 			if (top->ioctl_wait==0 && (main_time&3)==0) {
 				
 				top->ioctl_index = 1;
@@ -291,6 +292,8 @@ for(ms = 0; ms < NUM_MS; ms++) {
 			}
 		}
 	}
+	
+	if (top->cart_a < cart_file_size) top->SDRAM_DQ = rom_ptr[top->cart_a>>1];
 	
 	uint64_t ramdata;
 		

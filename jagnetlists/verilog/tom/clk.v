@@ -4,15 +4,20 @@
 module clk
 (
 	input resetl,
+	
 	input pclk,
 	input vxclk,
+	
 	input ndtest,
 	input cfg_7,
+	
 	output cfgw,
 	output cfgen,
-	output clk,
-	output vclk,
-	output tlw,
+	
+	output clk,		// Direct from pclk.
+	output vclk,	// Direct from vxclk (xvclk).
+	output tlw,		// Inverted pclk.
+	
 	input sys_clk // Generated
 );
 wire clk1;

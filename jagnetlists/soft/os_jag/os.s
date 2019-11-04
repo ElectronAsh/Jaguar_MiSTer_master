@@ -46,11 +46,14 @@ Init:
 * 0001 1000 0111 0001
 * = 0x1871
 
-* Slow ROM
+* Slow ROM (8-bit)
 *	move.w	#0x1861, MEMCON1
 
-* Slow ROM, slightly slower DRAM.	
+* Slow ROM (8-bit), slightly slower DRAM.	
 	move.w	#0x1841, MEMCON1
+	
+* Slow ROM (8-bit), slowest DRAM.	
+*	move.w	#0x1801, MEMCON1
 	
 * Speed up the ROM a little bit
 *	move.w	#0x1879, MEMCON1

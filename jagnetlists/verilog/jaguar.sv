@@ -354,7 +354,7 @@ always @(posedge clk_sys) begin
 end
 */
 
-
+/* verilator lint_off PINMISSING */
 jaguar jaguar_inst
 (
 	.xresetl( !(reset | loader_reset | loader_en) ) ,			// input  xresetl
@@ -418,11 +418,14 @@ jaguar jaguar_inst
 	.j_xd_in( j_xd_in ) ,		// output [0:31] j_xd_in
 `endif
 	
-	.aud_l( aud_l ) ,			// output  [15:0] aud_l
-	.aud_r( aud_r )			// output  [15:0] aud_r
+	.aud_16_l( aud_16_l ) ,		// output  [15:0] aud_l
+	.aud_16_r( aud_16_r )			// output  [15:0] aud_r
 );
+/* verilator lint_on PINMISSING */
 
+`ifndef VERILATOR
 wire [31:0] j_xd_in;
+`endif
 
 wire DBG_CPU_RDEN/*synthesis keep*/;
 wire DBG_CPU_WREN/*synthesis keep*/;
@@ -523,13 +526,13 @@ assign VGA_B = vga_b;
 wire aud_l_pwm;
 wire aud_r_pwm;
 
-wire [15:0] aud_l;
-wire [15:0] aud_r;
+wire [15:0] aud_16_l;
+wire [15:0] aud_16_r;
 
 assign AUDIO_S = 1;
 assign AUDIO_MIX = 0;
-assign AUDIO_L = aud_l;
-assign AUDIO_R = aud_r;
+assign AUDIO_L = aud_16_l;
+assign AUDIO_R = aud_16_r;
 
 
 wire [0:9] dram_a;

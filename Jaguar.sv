@@ -139,28 +139,29 @@ assign LED_POWER = 0;
 //assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
 //assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
 
+wire CLK_26M;
+wire CLK_52M;
+wire CLK_13M;
+wire CLK_104M;
 
-wire CLK_33M;
-wire CLK_54M;
 wire pll_locked;
 pll_jag pll_jag_inst
 (
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(CLK_26M),
-	.outclk_1(CLK_54M),
+	.outclk_1(CLK_52M),
 	.outclk_2(CLK_13M),
-	.outclk_3(clk_106M),
-	.outclk_4(clk_106M_sdram),
+	.outclk_3(clk_104M),
+	.outclk_4(clk_104M_sdram),
 	.locked(pll_locked)
 );
 
-(*keep*)wire clk_sys = CLK_13M;	// TESTING !!
+//(*keep*)wire clk_sys = CLK_26M;		// Normal core freq. I think? ElectronAsh.
 
-//(*keep*)wire clk_sys = CLK_26M;
-
-//(*keep*)wire clk_sys = CLK_54M;
-
+//(*keep*)wire clk_sys = CLK_13M;	// TESTING !!
+(*keep*)wire clk_sys = CLK_52M;	// TESTING !!
+//(*keep*)wire clk_sys = CLK_104M;	// TESTING !!
 
 
 
@@ -366,6 +367,7 @@ end
 
 wire xresetl = !(reset | loader_reset | loader_en);
 
+/* verilator lint_off PINMISSING */
 jaguar jaguar_inst
 (
 	.xresetl( xresetl ) ,		// input  xresetl
@@ -383,8 +385,6 @@ jaguar jaguar_inst
 	.dram_oe( dram_oe ) ,		// input [0:3] dram_oe
 	
 	.ram_rdy( ram_rdy ) ,		// input  ram_rdy
-	
-	.ddr_ready( ddr_ready ) ,	// input ddr_ready
 	
 	.DBG_CPU_RDEN( DBG_CPU_RDEN ) ,	// output  DBG_CPU_RDEN
 	.DBG_CPU_WREN( DBG_CPU_WREN ) ,	// output  DBG_CPU_WREN
@@ -427,13 +427,13 @@ jaguar jaguar_inst
 	.hblank( hblank ) ,
 	.vblank( vblank ) ,
 	
-//	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l
-//	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r
+	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l_pwm
+	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r_pwm
 	
-	.aud_l( aud_l ) ,			// output  [15:0] aud_l
-	.aud_r( aud_r )			// output  [15:0] aud_r
+	.aud_16_l( aud_16_l ) ,		// output  [15:0] aud_16_l
+	.aud_16_r( aud_16_r )		// output  [15:0] aud_16_r
 );
-
+/* verilator lint_on PINMISSING */
 
 wire DBG_CPU_RDEN/*synthesis keep*/;
 wire DBG_CPU_WREN/*synthesis keep*/;
@@ -555,13 +555,13 @@ video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0)) video_mixer
 wire aud_l_pwm;
 wire aud_r_pwm;
 
-wire [15:0] aud_l;
-wire [15:0] aud_r;
+wire [15:0] aud_16_l;
+wire [15:0] aud_16_r;
 
 assign AUDIO_S = 1;
 assign AUDIO_MIX = 0;
-assign AUDIO_L = aud_l;
-assign AUDIO_R = aud_r;
+assign AUDIO_L = aud_16_l;
+assign AUDIO_R = aud_16_r;
 
 
 wire [0:9] dram_a;
@@ -687,12 +687,12 @@ assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_
 
 //assign cart_q = (!cart_a[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:0];
 
-assign SDRAM_CLK = clk_106M_sdram;
+assign SDRAM_CLK = clk_104M_sdram;
 
 sdram sdram (
     // system interface
    .init           ( ~pll_locked               ),
-	.clk            ( clk_106M                  ),
+	.clk            ( clk_104M                  ),
    
    // interface to the MT48LC16M16 chip
    .SDRAM_DQ       ( SDRAM_DQ                  ),
@@ -727,26 +727,39 @@ wire [24:0] my_sdram_addr = (loader_en) ? {2'b00,loader_addr[22:0]} : {2'b00,car
 // This should in theory work for 8-bit or 16-bit cart ROM reads, using the latest MiSTer SDRAM controller...
 //assign cart_q = {sdram_dout, sdram_dout};
 
-assign cart_q = (!cart_a[0]) ? {SDRAM_DQ[15:8], SDRAM_DQ[15:8]} : {SDRAM_DQ[7:0], SDRAM_DQ[7:0]};
+assign cart_q = (!cart_a[0]) ? {SDRAM_DATA_REG[15:8], SDRAM_DATA_REG[15:8], SDRAM_DATA_REG[15:8], SDRAM_DATA_REG[15:8]} :
+										 {SDRAM_DATA_REG[7:0],  SDRAM_DATA_REG[7:0],  SDRAM_DATA_REG[7:0],  SDRAM_DATA_REG[7:0]};
 
-
-reg [23:0] old_cart_a;
 reg cart_ce_n_1 = 1;
 wire cart_ce_n_falling = (cart_ce_n_1 && !cart_ce_n);
 
+/*
+reg [23:0] old_cart_a;
 reg sdram_rd_trig;
+*/
+
+reg [2:0] my_clk_div;
+wire sdram_rd_trig = !cart_ce_n && !my_clk_div;
+
+reg [15:0] SDRAM_DATA_REG;
+
 always @(posedge clk_sys or negedge xresetl)
 if (!xresetl) begin
-	sdram_rd_trig <= 1'b0;
-	old_cart_a <= 24'h112233;
+	//sdram_rd_trig <= 1'b0;
+	//old_cart_a <= 24'h112233;
 end
 else begin
-	old_cart_a <= cart_a;
+	//old_cart_a <= cart_a;
 	cart_ce_n_1 <= cart_ce_n;
 	
-	sdram_rd_trig <= 1'b0;	// default
+	//sdram_rd_trig <= 1'b0;	// default
 	
-	if ( cart_ce_n_falling || (cart_a != old_cart_a) ) sdram_rd_trig <= 1'b1;
+	//if ( cart_ce_n_falling || (cart_a != old_cart_a) ) sdram_rd_trig <= 1'b1;
+	
+	if (cart_ce_n_falling) my_clk_div <= 3'd7;
+	else my_clk_div <= my_clk_div + 1;
+	
+	/*if (my_clk_div==3'd6)*/ SDRAM_DATA_REG <= SDRAM_DQ;
 end
 
 

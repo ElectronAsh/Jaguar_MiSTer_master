@@ -1,5 +1,5 @@
 Assembler report for Jaguar
-Fri Nov 01 01:55:47 2019
+Mon Nov 04 10:25:18 2019
 Quartus Prime Version 17.0.0 Build 595 04/25/2017 SJ Standard Edition
 
 
@@ -40,7 +40,7 @@ agreement for further details.
 +---------------------------------------------------------------+
 ; Assembler Summary                                             ;
 +-----------------------+---------------------------------------+
-; Assembler Status      ; Successful - Fri Nov 01 01:55:47 2019 ;
+; Assembler Status      ; Successful - Mon Nov 04 10:25:18 2019 ;
 ; Revision Name         ; Jaguar                                ;
 ; Top-level Entity Name ; sys_top                               ;
 ; Family                ; Cyclone V                             ;
@@ -80,8 +80,8 @@ agreement for further details.
 +----------------+------------------------------------------------------------------------------+
 ; Option         ; Setting                                                                      ;
 +----------------+------------------------------------------------------------------------------+
-; JTAG usercode  ; 0x0A23494E                                                                   ;
-; Checksum       ; 0x0A23494E                                                                   ;
+; JTAG usercode  ; 0x0A1408F7                                                                   ;
+; Checksum       ; 0x0A1408F7                                                                   ;
 +----------------+------------------------------------------------------------------------------+
 
 
@@ -91,7 +91,7 @@ agreement for further details.
 ; Option              ; Setting                                                                 ;
 +---------------------+-------------------------------------------------------------------------+
 ; Raw Binary File     ;                                                                         ;
-;  Compression Ratio  ; 1                                                                       ;
+;  Compression Ratio  ; 2                                                                       ;
 +---------------------+-------------------------------------------------------------------------+
 
 
@@ -101,12 +101,12 @@ agreement for further details.
 Info: *******************************************************************
 Info: Running Quartus Prime Assembler
     Info: Version 17.0.0 Build 595 04/25/2017 SJ Standard Edition
-    Info: Processing started: Fri Nov 01 01:55:21 2019
+    Info: Processing started: Mon Nov 04 10:24:51 2019
 Info: Command: quartus_asm --read_settings_files=off --write_settings_files=off Jaguar -c Jaguar
 Info (115030): Assembler is generating device programming files
 Info: Quartus Prime Assembler was successful. 0 errors, 0 warnings
-    Info: Peak virtual memory: 5180 megabytes
-    Info: Processing ended: Fri Nov 01 01:55:48 2019
+    Info: Peak virtual memory: 5177 megabytes
+    Info: Processing ended: Mon Nov 04 10:25:18 2019
     Info: Elapsed time: 00:00:27
     Info: Total CPU time (on all processors): 00:00:27
 
