@@ -748,9 +748,14 @@ vga_out vga_out
 
 assign VGA_VS = VGA_EN ? 1'bZ      : csync ?     1'b1     : ~vs1;
 assign VGA_HS = VGA_EN ? 1'bZ      : csync ? ~(vs1 ^ hs1) : ~hs1;
-assign VGA_R  = VGA_EN ? 6'bZZZZZZ : vga_o[23:18];
-assign VGA_G  = VGA_EN ? 6'bZZZZZZ : vga_o[15:10];
-assign VGA_B  = VGA_EN ? 6'bZZZZZZ : vga_o[7:2];
+
+//assign VGA_R  = VGA_EN ? 6'bZZZZZZ : vga_o[23:18];
+//assign VGA_G  = VGA_EN ? 6'bZZZZZZ : vga_o[15:10];
+//assign VGA_B  = VGA_EN ? 6'bZZZZZZ : vga_o[7:2];
+
+assign VGA_R  = r_out[7:2];
+assign VGA_G  = g_out[7:2];
+assign VGA_B  = b_out[7:2];
 
 
 

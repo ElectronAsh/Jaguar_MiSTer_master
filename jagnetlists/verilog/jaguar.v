@@ -64,11 +64,14 @@ module jaguar
 	output wire	[0:31]	j_xd_in,
 `endif
 	
-	output	aud_l_pwm,
-	output	aud_r_pwm,
+	//output	aud_l_pwm,
+	//output	aud_r_pwm,
 	
 	output   [15:0] aud_16_l,
 	output   [15:0] aud_16_r,
+	
+	output wire	snd_l_en,
+	output wire	snd_r_en,
 	
 	output	hblank,
 	output	vblank
@@ -294,8 +297,8 @@ wire					j_aen;
 wire					j_ainen;
 wire	[0:15]	snd_l;
 wire	[0:15]	snd_r;
-wire					snd_l_en;
-wire					snd_r_en;
+//wire					snd_l_en;
+//wire					snd_r_en;
 
 
 // Tristates / Busses
@@ -396,12 +399,13 @@ wire	ee_di;
 wire	ee_do;
 
 // Scandoubler
-reg		[15:0]	vc				= 16'h0000;
-reg		[15:0]	hc				= 16'h0000;
-reg		[15:0]	vga_hc		= 16'h0000;
-reg		hs_o_prev					= 1'b0;
-reg		hhs_o_prev				= 1'b0;
-reg		vs_o_prev					= 1'b0;
+(*noprune*) reg		[15:0]	vc				= 16'h0000;
+(*noprune*) reg		[15:0]	hc				= 16'h0000;
+(*noprune*) reg		[15:0]	vga_hc		= 16'h0000;
+(*noprune*) reg		hs_o_prev				= 1'b0;
+(*noprune*) reg		hhs_o_prev				= 1'b0;
+(*noprune*) reg		vs_o_prev				= 1'b0;
+
 wire	[23:0]	lb_d;
 wire					lb0_we;
 wire	[9:0]		lb0_a;
@@ -1817,13 +1821,20 @@ assign vga_r = {xr[7], xr[6], xr[5], xr[4], xr[3], xr[2], xr[1], xr[0]};
 assign vga_g = {xg[7], xg[6], xg[5], xg[4], xg[3], xg[2], xg[1], xg[0]};
 assign vga_b = {xb[7], xb[6], xb[5], xb[4], xb[3], xb[2], xb[1], xb[0]};
 
-//assign vga_vs_n = vs_o;
-//assign vga_hs_n = hs_o;
+assign vga_vs_n = vs_o;
+assign vga_hs_n = (hc>=16'd4800 && hc<=16'd4950);
+assign vga_bl = 1'b0;
 
-//assign vga_vs_n = !(vc < 2);
+(*keep*) wire my_h_de = (hc>=300) && (hc<=4700);
+(*keep*) wire my_v_de = (vc>2+17) && (vc<240+2+17);
+
+assign hblank = !my_h_de;
+assign vblank = !my_v_de;
+
 //assign vga_hs_n = !(hc>=16'h0000 && hc<=16'h0080);
+//assign vga_vs_n = !(vc < 2);
 
-assign vga_bl = vga_blank;
+//assign vga_bl = vga_blank;
 
 
 always @(posedge sys_clk)
@@ -1864,12 +1875,12 @@ end
 // BP = 48px
 // VA = 640px
 // FP = 16px 
-assign vga_hs_n = (vga_hc < 304) ? 1'b0 : 1'b1;
-assign vga_vs_n = (vc < 2) ? 1'b0 : 1'b1;
+//assign vga_hs_n = (vga_hc < 304) ? 1'b0 : 1'b1;
+//assign vga_vs_n = (vc < 2) ? 1'b0 : 1'b1;
 assign vga_blank = ( (vc > 2+17) && (vc < 240+2+17) && (vga_hc > 304+152) && (vga_hc < 304+152+2026) ) ? 1'b0 : 1'b1;
 
-assign hblank = !(vga_hc > 304+152) && (vga_hc < 304+152+2026);
-assign vblank = !(vc > 2+17) && (vc < 240+2+17);
+//assign hblank = !(vga_hc > 304+152) && (vga_hc < 304+152+2026);
+//assign vblank = !(vc > 2+17) && (vc < 240+2+17);
 
 
 assign w_aud_l[15:0] = { 
@@ -1893,9 +1904,14 @@ begin
     r_aud_l <= 16'd0;
     r_aud_r <= 16'd0;
   end else begin
-		if (snd_clk) begin
-			r_aud_l <= w_aud_l;
-			r_aud_r <= w_aud_r;
+		if (snd_l_en) r_aud_l <= w_aud_l;
+		if (snd_r_en) r_aud_r <= w_aud_r;
+		
+  
+		//if (snd_clk) begin
+			//r_aud_l <= w_aud_l;
+			//r_aud_r <= w_aud_r;
+			
 			/*if (w_aud_l[15]) begin
 				r_aud_l <= {1'b0, ~w_aud_l[14:0]};
 			end else begin
@@ -1907,7 +1923,7 @@ begin
 			end else begin
 				r_aud_r <= {1'b1, w_aud_r[14:0]};
 			end*/
-		end
+		//end
 	end
 end
 
@@ -1972,7 +1988,7 @@ always @(posedge rst or posedge sys_clk) begin
   end
 end
 
-
+/*
 s2_hq_dac dac_l
 (
 	.reset(rst),
@@ -1992,6 +2008,7 @@ s2_hq_dac dac_r
 	//.pcm_in({r_aud_r[15:0], r_aud_r[3:0]}),
 	.dac_out(aud_r_pwm)
 );
+*/
 
 /*reg [15:0] acc_l;
 reg [15:0] acc_r;

@@ -6,7 +6,7 @@
 //  Jaguar core code.
 //  Copyright (C) 2018 Gregory Estrade (Torlus).
 //
-//  Port of Jaguar core to MiSTer by Ash Evans (ElectronAsh / OzOnE).
+//  Port of Jaguar core to MiSTer (ElectronAsh / OzOnE).
 //
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
@@ -427,8 +427,8 @@ jaguar jaguar_inst
 	.hblank( hblank ) ,
 	.vblank( vblank ) ,
 	
-	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l_pwm
-	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r_pwm
+//	.aud_l_pwm( aud_l_pwm ) ,	// output  aud_l_pwm
+//	.aud_r_pwm( aud_r_pwm ) , 	// output  aud_r_pwm
 	
 	.aud_16_l( aud_16_l ) ,		// output  [15:0] aud_16_l
 	.aud_16_r( aud_16_r )		// output  [15:0] aud_16_r
@@ -493,8 +493,8 @@ wire [7:0] vga_b;
 //assign VGA_HS = !vga_hs_n;
 //assign VGA_VS = !vga_vs_n;
 
-assign VGA_HS = vga_hs_n ^ vga_vs_n;
-assign VGA_VS = 1'b1;
+assign VGA_HS = !(vga_hs_n ^ vga_vs_n);
+assign VGA_VS = vga_vs_n;
 
 assign VGA_R = vga_r;
 assign VGA_G = vga_g;

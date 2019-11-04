@@ -23,10 +23,6 @@ dc.l	0x001ffffc
 	dc.l	Init
 Init:
 
-*	move.w	#0x1861, MEMCON1
-* 0x1861
-* 0001 1000 0110 0001
-
 * 0 0     0 11      000 0       11        00       00       1
 * u CPU32 u IOSPEED u   FASTROM DRAMSPEED ROMSPEED ROMWIDTH ROMHI
 
@@ -46,24 +42,31 @@ Init:
 * 0001 1000 0111 0001
 * = 0x1871
 
-* Slow ROM (8-bit)
+* Slow ROM (8-bit), slowest DRAM.	
+	move.w	#0x1801, MEMCON1
+
+* Slow ROM (8-bit) (ROMSPEED==b00), slightly slower DRAM (DRAMSPEED==b10).
+*	move.w	#0x1841, MEMCON1
+
+* Slow ROM (8-bit) (ROMSPEED==b00). Fastest DRAM (DRAMSPEED==b11).
 *	move.w	#0x1861, MEMCON1
 
-* Slow ROM (8-bit), slightly slower DRAM.	
-	move.w	#0x1841, MEMCON1
-	
-* Slow ROM (8-bit), slowest DRAM.	
-*	move.w	#0x1801, MEMCON1
-	
-* Speed up the ROM a little bit
-*	move.w	#0x1879, MEMCON1
+* Speed up the ROM a bit (ROMSPEED==b10). Fastest DRAM (DRAMSPEED==b11).
 *	move.w	#0x1871, MEMCON1
 
-* Speed up the ROM, 16-bit
-*	move.w	#0x187B, MEMCON1
+* Fastest ROM (8-bit) (ROMSPEED==b11), Fastest DRAM (DRAMSPEED==b11).
+*	move.w	#0x1879, MEMCON1
 
+* NOTE: The "FASTROM" bit is only for testing, as it does the cart accesses within only two clock cycles.
+*       so probably wouldn't work for SDRAM on MiSTer!
+*       For the "fastest" ROM setting, please use ROMSPEED=b11.
+*
 * Use FASTROM
 *	move.w	#0x18F9, MEMCON1
+
+* Speed up the ROM, 16-bit!
+* Doesn't seem to boot with the cart in 16-bit mode, even with the logic added. ElectronAsh.
+*	move.w	#0x187B, MEMCON1
 
 
 	move.w	#0x35CC, MEMCON2
@@ -142,21 +145,16 @@ Copy_Loop:
 
 
 Boot_Start:
-* See above - For 16-bit cartridge mode only
-*	move.w	#0x187B, MEMCON1
-
-* Slow ROM, slightly slower DRAM.
-	move.w	#0x1841, MEMCON1
 
 * Jump to "standard" entry point for homebrew games
 *	lea.l	0x00004000, %a0
 
 * (fetching the proper entry point from the cart, at offset 0x404. ElectronAsh).
-*	lea.l	0x00800404, %a1
-*	move.l	(%a1), %a0
+	lea.l	0x00800404, %a1
+	move.l	(%a1), %a0
 	
 * Entry point for most retail cartridges (should really be fetched from $800404 instead )
-	lea.l	0x00802000, %a0
+*	lea.l	0x00802000, %a0
 	jmp		(%a0)
 	
 * Prog_Start:
