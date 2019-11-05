@@ -139,30 +139,22 @@ assign LED_POWER = 0;
 //assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
 //assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
 
-wire CLK_26M;
-wire CLK_52M;
-wire CLK_13M;
-wire CLK_104M;
+wire clk_52m;
+wire clk_104m;
+wire clk_104m_sdram;
 
 wire pll_locked;
 pll_jag pll_jag_inst
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(CLK_26M),
-	.outclk_1(CLK_52M),
-	.outclk_2(CLK_13M),
-	.outclk_3(clk_104M),
-	.outclk_4(clk_104M_sdram),
+	.outclk_0(clk_52m),
+	.outclk_1(clk_104m),
+	.outclk_2(clk_104m_sdram),
 	.locked(pll_locked)
 );
 
-//(*keep*)wire clk_sys = CLK_26M;		// Normal core freq. I think? ElectronAsh.
-
-//(*keep*)wire clk_sys = CLK_13M;	// TESTING !!
-(*keep*)wire clk_sys = CLK_52M;	// TESTING !!
-//(*keep*)wire clk_sys = CLK_104M;	// TESTING !!
-
+(*keep*)wire clk_sys = clk_52m;
 
 
 
@@ -493,12 +485,12 @@ wire [7:0] vga_b;
 //assign VGA_HS = !vga_hs_n;
 //assign VGA_VS = !vga_vs_n;
 
-assign VGA_HS = !(vga_hs_n ^ vga_vs_n);
-assign VGA_VS = vga_vs_n;
+//assign VGA_HS = !(vga_hs_n ^ vga_vs_n);
+//assign VGA_VS = vga_vs_n;
 
-assign VGA_R = vga_r;
-assign VGA_G = vga_g;
-assign VGA_B = vga_b;
+//assign VGA_R = vga_r;
+//assign VGA_G = vga_g;
+//assign VGA_B = vga_b;
 
 
 assign CLK_VIDEO = clk_sys;
@@ -536,18 +528,17 @@ video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0)) video_mixer
 	.B(vga_b),				// Input [DW:0] B (set by HALF_DEPTH. is [7:0] here).
 
 	// Positive pulses.
-	.HSync(!vga_hs_n),	// input HSync
-	.VSync(!vga_vs_n),	// input VSync
+	.HSync(vga_hs_n),		// input HSync
+	.VSync(vga_vs_n),		// input VSync
 	.HBlank(hblank),		// input HBlank
 	.VBlank(vblank),		// input VBlank
 	
-//	.VGA_R( VGA_R ),		// output [7:0] VGA_R
-//	.VGA_G( VGA_G ),		// output [7:0] VGA_G
-//	.VGA_B( VGA_B ),		// output [7:0] VGA_B
-//	.VGA_VS( VGA_VS ),	// output VGA_VS
-//	.VGA_HS( VGA_HS ),	// output VGA_HS
+	.VGA_R( VGA_R ),		// output [7:0] VGA_R
+	.VGA_G( VGA_G ),		// output [7:0] VGA_G
+	.VGA_B( VGA_B ),		// output [7:0] VGA_B
+	.VGA_VS( VGA_VS ),	// output VGA_VS
+	.VGA_HS( VGA_HS ),	// output VGA_HS
 	.VGA_DE( VGA_DE )		// output VGA_DE
-	
 );
 
 
@@ -687,12 +678,12 @@ assign cart_q = ({cart_a[2:0]}==0) ? {DDRAM_DOUT[63:56],DDRAM_DOUT[63:56],DDRAM_
 
 //assign cart_q = (!cart_a[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:0];
 
-assign SDRAM_CLK = clk_104M_sdram;
+assign SDRAM_CLK = clk_104m_sdram;
 
 sdram sdram (
     // system interface
    .init           ( ~pll_locked               ),
-	.clk            ( clk_104M                  ),
+	.clk            ( clk_104m                  ),
    
    // interface to the MT48LC16M16 chip
    .SDRAM_DQ       ( SDRAM_DQ                  ),

@@ -749,13 +749,15 @@ vga_out vga_out
 assign VGA_VS = VGA_EN ? 1'bZ      : csync ?     1'b1     : ~vs1;
 assign VGA_HS = VGA_EN ? 1'bZ      : csync ? ~(vs1 ^ hs1) : ~hs1;
 
-//assign VGA_R  = VGA_EN ? 6'bZZZZZZ : vga_o[23:18];
-//assign VGA_G  = VGA_EN ? 6'bZZZZZZ : vga_o[15:10];
-//assign VGA_B  = VGA_EN ? 6'bZZZZZZ : vga_o[7:2];
+assign VGA_R  = VGA_EN ? 6'bZZZZZZ : vga_o[23:18];
+assign VGA_G  = VGA_EN ? 6'bZZZZZZ : vga_o[15:10];
+assign VGA_B  = VGA_EN ? 6'bZZZZZZ : vga_o[7:2];
 
-assign VGA_R  = r_out[7:2];
-assign VGA_G  = g_out[7:2];
-assign VGA_B  = b_out[7:2];
+
+// Bypass the VGA OSD block... TESTING! ElectronAsh.
+//assign VGA_R  = r_out[7:2];
+//assign VGA_G  = g_out[7:2];
+//assign VGA_B  = b_out[7:2];
 
 
 
@@ -880,12 +882,11 @@ wire  [1:0] led_disk;
 
 wire vs_emu, hs_emu;
 
-sync_fix sync_v(FPGA_CLK3_50, vs_emu, vs);
-sync_fix sync_h(FPGA_CLK3_50, hs_emu, hs);
+//sync_fix sync_v(FPGA_CLK3_50, vs_emu, vs);
+//sync_fix sync_h(FPGA_CLK3_50, hs_emu, hs);
 
-
-//assign vs = vs_emu;
-//assign hs = hs_emu;
+assign vs = vs_emu;
+assign hs = hs_emu;
 
 
 emu emu

@@ -258,8 +258,20 @@ module j_jerry
 	output [0:15] snd_r,
 	output snd_l_en,
 	output snd_r_en,
+	
+	output reg [15:0] dac_l,
+	output reg [15:0] dac_r,
+	
 	input sys_clk // Generated
 );
+
+
+always @(posedge sys_clk) begin
+	if (i2s1w) dac_l <= {dspwd_15, dspwd_14, dspwd_13, dspwd_12, dspwd_11, dspwd_10, dspwd_9, dspwd_8, dspwd_7, dspwd_6, dspwd_5, dspwd_4, dspwd_3, dspwd_2, dspwd_1, dspwd_0};
+	if (i2s2w) dac_r <= {dspwd_15, dspwd_14, dspwd_13, dspwd_12, dspwd_11, dspwd_10, dspwd_9, dspwd_8, dspwd_7, dspwd_6, dspwd_5, dspwd_4, dspwd_3, dspwd_2, dspwd_1, dspwd_0};
+end
+
+
 wire dsprd_0_out;
 wire dsprd_0_oe;
 wire dsprd_0_in;

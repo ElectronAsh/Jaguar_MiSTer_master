@@ -77,29 +77,48 @@ module jaguar
 	output	vblank
 );
 
-wire		rst;
-assign rst = ~xresetl;
+wire rst = ~xresetl;
 
 //assign aud_16_l = r_acc_l[22:7];
 //assign aud_16_r = r_acc_r[22:7];
 
-assign aud_16_l = r_aud_l;
-assign aud_16_r = r_aud_r;
+//assign aud_16_l = r_aud_l;
+//assign aud_16_r = r_aud_r;
+
+assign aud_16_l = dac_l;
+assign aud_16_r = dac_r;
 
 
 // TESTING !! ElectronAsh...
-wire xpclk = (clkdiv == 2'd0);
+wire xpclk = clkdiv[0];
 wire xvclk = xpclk;
-//wire xvclk = sys_clk;
 
-wire tlw = (clkdiv == 2'd2);
+wire tlw = !xpclk;
 
-reg [1:0] clkdiv = 2'b00;
+reg fx68k_enPhi1;
+reg fx68k_enPhi2;
+
+reg [1:0] clkdiv;
 always @(posedge sys_clk) begin
-	clkdiv <= clkdiv + 2'b01;
+	clkdiv <= clkdiv + 1;
 	
-	if (clkdiv == 2'b10) begin
-		clkdiv <= 2'b00;
+	fx68k_enPhi1 <= 0;
+	fx68k_enPhi2 <= 0;
+	
+	//if (clkdiv==0) begin
+	//	
+	//end
+
+	if (clkdiv==1) begin
+		fx68k_enPhi1 <= 1'b1;
+	end
+	
+	//if (clkdiv==2) begin
+	//
+	//end
+	
+	if (clkdiv==3) begin
+		fx68k_enPhi2 <= 1'b1;
 	end
 end
 
@@ -114,21 +133,19 @@ always @(posedge sys_clk)
 begin
 	clkdiv <= clkdiv + 3'b001;
 
-	if (clkdiv == 3'b101) begin
-		clkdiv <= 3'b000;
-	end
+	xpclk <= 1'b0;
+	xvclk <= 1'b0;
+	tlw <= 1'b0;
+	
+	if (clkdiv == 3'b101) clkdiv <= 3'b000;
 	
 	if ((clkdiv == 3'd0) || (clkdiv == 3'd3)) begin
 		xpclk <= 1'b1;
 		xvclk <= 1'b1;
-	end else begin
-		xpclk <= 1'b0;
-		xvclk <= 1'b0;
 	end
+
 	if ((clkdiv == 3'd2) || (clkdiv == 3'd5)) begin
 		tlw <= 1'b1;
-	end else begin
-		tlw <= 1'b0;
 	end
 end
 */
@@ -351,15 +368,17 @@ wire        j68_clk;          // CPU clock
 //wire        j68_rd_ena;       // Read strobe
 //wire        j68_wr_ena;       // Write strobe
 //wire        j68_data_ack;     // Data acknowledge
-reg	        j68_rd_ena = 1'b0;       // Read strobe
-reg	        j68_wr_ena = 1'b0;       // Write strobe
+//reg	        j68_rd_ena = 1'b0;       // Read strobe
+//reg	        j68_wr_ena = 1'b0;       // Write strobe
 wire        j68_data_ack;     // Data acknowledge
+
 wire        j68_rd_ena_int;       // Read strobe
 wire        j68_wr_ena_int;       // Write strobe
+
 reg	        j68_data_ack_int = 1'b0;     // Data acknowledge
 
 wire [1:0]  j68_byte_ena;     // Byte enable
-wire [31:0] j68_address;      // Address bus
+(*keep*) wire [31:0] j68_address;      // Address bus
 wire [15:0] j68_rd_data;      // Data bus in
 wire [15:0] j68_wr_data;      // Data bus out
 // 68000 control
@@ -612,6 +631,7 @@ assign dreql =
 		j_xdreql_out
 	: 
 		~(j68_rd_ena | j68_wr_ena);
+		
 assign xdreql_in = dreql;
 assign j_xdreql_in = dreql;
 reg dreql_dly;
@@ -911,6 +931,7 @@ assign j68_ipl_n = { 1'b1, xintl, 1'b1 };
 assign j68_data_ack = ~xdtackl & xba_in;
 
 // Bus sync (pclk)
+/*
 reg dtackack = 1'b1;
 wire j68rq;
 
@@ -938,6 +959,7 @@ begin
 		dtackack <= 1'b1;
 	end
 end
+*/
 
 // --- assign xdreql_in = xdreql_oe ? xdreql_out : ~(j68_rd_ena | j68_wr_ena);
 
@@ -1672,8 +1694,15 @@ j_jerry jerry_inst
 	.snd_r(snd_r),
 	.snd_l_en(snd_l_en),
 	.snd_r_en(snd_r_en),
+	
+	.dac_l( dac_l ),
+	.dac_r( dac_r ),
+	
 	.sys_clk(sys_clk)
 );
+
+  wire [15:0] dac_l;
+  wire [15:0] dac_r;
 
   wire [3:0]  w_dbg_reg_addr;
   wire [3:0]  w_dbg_reg_wren;
@@ -1704,7 +1733,114 @@ j_jerry jerry_inst
   assign DBG_IFETCH    = w_dbg_ifetch; 
 // `endif
 
+/*
+	.rst(j68_rst),
+	.clk(j68_clk),
+	.rd_ena(j68_rd_ena_int),
+	.wr_ena(j68_wr_ena_int),
+	.data_ack(j68_data_ack_int),
+	.byte_ena(j68_byte_ena),
+	
+	.address(j68_address),
+	.rd_data(j68_rd_data),
+	.wr_data(j68_wr_data),
+	
+	.fc(j68_fc),
+	.ipl_n(j68_ipl_n),
+*/
 
+
+(*keep*) wire fx68k_clk = j68_clk;
+(*keep*) wire fx68k_rst = j68_rst;
+
+(*keep*) wire fx68k_rw;
+(*keep*) wire fx68k_as_n;
+(*keep*) wire fx68k_lds_n;
+(*keep*) wire fx68k_uds_n;
+(*keep*) wire fx68k_e;
+(*keep*) wire fx68k_vma_n;
+
+(*keep*) wire [2:0] fx68k_fc;
+
+(*keep*) wire fx68k_dtack_n = ! (!xdtackl & xba_in);
+
+//(*keep*) wire fx68k_vpa_n = 1'b1;
+(*keep*) wire fx68k_vpa_n = ! (&fx68k_fc);
+
+(*keep*) wire [15:0] fx68k_din = j68_rd_data;
+
+(*keep*) wire [15:0] fx68k_dout;
+
+(*keep*) wire [23:1] fx68k_address;
+
+(*keep*) wire [2:0] fx68k_ipl_n;
+
+assign j68_wr_data = fx68k_dout;
+
+assign j68_fc[0] = fx68k_fc[0];
+assign j68_fc[1] = fx68k_fc[1];
+assign j68_fc[2] = fx68k_fc[2];
+
+assign j68_address = {fx68k_address, 1'b0};
+
+//assign j68_rd_ena_int = (!fx68k_as_n && fx68k_rw);
+//assign j68_wr_ena_int = (!fx68k_as_n && !fx68k_rw);
+assign j68_rd_ena = (!fx68k_as_n && fx68k_rw);
+assign j68_wr_ena = (!fx68k_as_n && !fx68k_rw);
+
+assign j68_byte_ena[0] = !fx68k_lds_n;
+assign j68_byte_ena[1] = !fx68k_uds_n;
+
+assign fx68k_ipl_n = j68_ipl_n;
+
+
+fx68k fx68k_inst
+(
+	.clk( fx68k_clk ) ,	// input  clk
+	
+	.extReset( fx68k_rst ) ,	// input  extReset
+	.pwrUp( fx68k_rst ) ,		// input  pwrUp
+	
+	.enPhi1( fx68k_enPhi1 ) ,	// input  enPhi1
+	.enPhi2( fx68k_enPhi2 ) ,	// input  enPhi2
+	
+	.eRWn( fx68k_rw ) ,		// output  eRWn
+	.ASn( fx68k_as_n ) ,		// output  ASn
+	.LDSn( fx68k_lds_n ) ,	// output  LDSn
+	.UDSn( fx68k_uds_n ) ,	// output  UDSn
+	.E( fx68k_e ) ,			// output  E
+	.VMAn( fx68k_vma_n ) ,	// output  VMAn
+	
+	.FC0( fx68k_fc[0] ) ,	// output  FC0
+	.FC1( fx68k_fc[1] ) ,	// output  FC1
+	.FC2( fx68k_fc[2] ) ,	// output  FC2
+	
+//	.BGn(BGn) ,				// output  BGn
+	
+//	.oRESETn(oRESETn) ,	// output  oRESETn
+//	.oHALTEDn(oHALTEDn) ,// output  oHALTEDn
+	
+	.DTACKn( fx68k_dtack_n ) ,	// input  DTACKn
+	
+	.VPAn( fx68k_vpa_n ) ,		// input  VPAn
+	
+	.BERRn(1'b1) ,		// input  BERRn
+	.BRn(1'b1) ,		// input  BRn
+	.BGACKn(1'b1) ,	// input  BGACKn
+	
+	.IPL0n( fx68k_ipl_n[0] ) ,// input  IPL0n
+	.IPL1n( fx68k_ipl_n[1] ) ,// input  IPL1n
+	.IPL2n( fx68k_ipl_n[2] ) ,// input  IPL2n
+	
+	.iEdb( fx68k_din ) ,		// input [15:0] iEdb
+	.oEdb( fx68k_dout ) ,	// output [15:0] oEdb
+	
+	.eab( fx68k_address ) 	// output [23:1] eab
+);
+
+
+
+/*
 j68 j68_inst
 (
 	.rst(j68_rst),
@@ -1734,6 +1870,8 @@ j68 j68_inst
   .dbg_ifetch(w_dbg_ifetch),
 	.dbg_irq_lvl()
 );
+*/
+
 
 // `ifndef verilator3
 // os_rom os_rom_inst
@@ -1822,10 +1960,10 @@ assign vga_g = {xg[7], xg[6], xg[5], xg[4], xg[3], xg[2], xg[1], xg[0]};
 assign vga_b = {xb[7], xb[6], xb[5], xb[4], xb[3], xb[2], xb[1], xb[0]};
 
 assign vga_vs_n = vs_o;
-assign vga_hs_n = (hc>=16'd4800 && hc<=16'd4950);
+assign vga_hs_n = (hc>=16'd4740 && hc<=16'd4820);
 assign vga_bl = 1'b0;
 
-(*keep*) wire my_h_de = (hc>=300) && (hc<=4700);
+(*keep*) wire my_h_de = (hc>=300) && (hc<=4680);
 (*keep*) wire my_v_de = (vc>2+17) && (vc<240+2+17);
 
 assign hblank = !my_h_de;
