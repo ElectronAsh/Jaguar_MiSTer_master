@@ -1,10 +1,10 @@
-Analysis & Synthesis Status : Successful - Tue Nov 05 20:57:05 2019
+Analysis & Synthesis Status : Successful - Wed Nov 06 13:31:24 2019
 Quartus Prime Version : 17.0.0 Build 595 04/25/2017 SJ Standard Edition
 Revision Name : Jaguar
 Top-level Entity Name : sys_top
 Family : Cyclone V
 Logic utilization (in ALMs) : N/A
-Total registers : 21329
+Total registers : 21309
 Total pins : 128
 Total virtual pins : 0
 Total block memory bits : 2,629,472

@@ -485,12 +485,12 @@ wire [7:0] vga_b;
 //assign VGA_HS = !vga_hs_n;
 //assign VGA_VS = !vga_vs_n;
 
-//assign VGA_HS = !(vga_hs_n ^ vga_vs_n);
-//assign VGA_VS = vga_vs_n;
+assign VGA_HS = vga_hs_n ^ vga_vs_n;
+assign VGA_VS = vga_vs_n;
 
-//assign VGA_R = vga_r;
-//assign VGA_G = vga_g;
-//assign VGA_B = vga_b;
+assign VGA_R = vga_r;
+assign VGA_G = vga_g;
+assign VGA_B = vga_b;
 
 
 assign CLK_VIDEO = clk_sys;
@@ -533,11 +533,11 @@ video_mixer #(.LINE_LENGTH(640), .HALF_DEPTH(0)) video_mixer
 	.HBlank(hblank),		// input HBlank
 	.VBlank(vblank),		// input VBlank
 	
-	.VGA_R( VGA_R ),		// output [7:0] VGA_R
-	.VGA_G( VGA_G ),		// output [7:0] VGA_G
-	.VGA_B( VGA_B ),		// output [7:0] VGA_B
-	.VGA_VS( VGA_VS ),	// output VGA_VS
-	.VGA_HS( VGA_HS ),	// output VGA_HS
+//	.VGA_R( VGA_R ),		// output [7:0] VGA_R
+//	.VGA_G( VGA_G ),		// output [7:0] VGA_G
+//	.VGA_B( VGA_B ),		// output [7:0] VGA_B
+//	.VGA_VS( VGA_VS ),	// output VGA_VS
+//	.VGA_HS( VGA_HS ),	// output VGA_HS
 	.VGA_DE( VGA_DE )		// output VGA_DE
 );
 

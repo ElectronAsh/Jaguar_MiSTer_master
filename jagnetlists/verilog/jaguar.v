@@ -90,10 +90,10 @@ assign aud_16_r = dac_r;
 
 
 // TESTING !! ElectronAsh...
-wire xpclk = clkdiv[0];
-wire xvclk = xpclk;
+wire xpclk = !clkdiv[0];
+wire xvclk = !clkdiv[0];
 
-wire tlw = !xpclk;
+wire tlw = clkdiv[0];
 
 reg fx68k_enPhi1;
 reg fx68k_enPhi2;
@@ -582,6 +582,7 @@ assign j_xresetil = xresetl;
 // --- assign xsiz_in[0] = (xba_in) ? ~j68_byte_ena[0] : xsiz_out[0];
 // --- assign xsiz_in[1] = (xba_in) ? ~j68_byte_ena[1] : xsiz_out[1];
 
+/*
 assign rw = 
 	(aen) ? 
 		xrw_out 
@@ -589,13 +590,22 @@ assign rw =
 		j_xrw_out
 	: 
 		~j68_wr_ena;
-assign xrw_in = rw;
-assign j_xrw_in = rw;
+*/
+	
+//assign xrw_in = rw;
+//assign j_xrw_in = rw;
+
+assign xrw_in = fx68k_rw;
+assign j_xrw_in = fx68k_rw;
+
+
+/*
 reg rw_dly;
 always @(posedge sys_clk)
 begin
 	rw_dly <= rw;
 end
+*/
 //assign xrw_in = (aen) ? xrw_out : rw_dly;
 //assign j_xrw_in = (j_aen) ? j_xrw_out : rw_dly;
 
@@ -607,6 +617,7 @@ assign siz[0] =
 		j_xsiz_out[0]
 	: 
 		~j68_byte_ena[0];
+		
 assign siz[1] =
 	(aen) ?
 		xsiz_out[1]
@@ -614,13 +625,16 @@ assign siz[1] =
 		j_xsiz_out[1]
 	: 
 		~j68_byte_ena[1];
+		
 assign xsiz_in = siz;
 assign j_xsiz_in = siz;
+/*
 reg [0:1] siz_dly;
 always @(posedge sys_clk)
 begin
 	siz_dly <= siz;
 end
+*/
 //assign xsiz_in = (aen) ? xsiz_out : siz_dly;
 //assign j_xsiz_in = (j_aen) ? j_xsiz_out : siz_dly;
 		
@@ -634,11 +648,14 @@ assign dreql =
 		
 assign xdreql_in = dreql;
 assign j_xdreql_in = dreql;
+
+/*
 reg dreql_dly;
 always @(posedge sys_clk)
 begin
 	dreql_dly <= dreql;
 end
+*/
 //assign xdreql_in = (aen) ? xdreql_out : dreql_dly;
 //assign j_xdreql_in = (j_aen) ? j_xdreql_out : dreql_dly;
 
@@ -1765,7 +1782,7 @@ j_jerry jerry_inst
 (*keep*) wire fx68k_dtack_n = ! (!xdtackl & xba_in);
 
 //(*keep*) wire fx68k_vpa_n = 1'b1;
-(*keep*) wire fx68k_vpa_n = ! (&fx68k_fc);
+(*keep*) wire fx68k_vpa_n = ! (fx68k_fc==7);
 
 (*keep*) wire [15:0] fx68k_din = j68_rd_data;
 
@@ -1959,8 +1976,8 @@ assign vga_r = {xr[7], xr[6], xr[5], xr[4], xr[3], xr[2], xr[1], xr[0]};
 assign vga_g = {xg[7], xg[6], xg[5], xg[4], xg[3], xg[2], xg[1], xg[0]};
 assign vga_b = {xb[7], xb[6], xb[5], xb[4], xb[3], xb[2], xb[1], xb[0]};
 
-assign vga_vs_n = vs_o;
-assign vga_hs_n = (hc>=16'd4740 && hc<=16'd4820);
+assign vga_vs_n = !(vc < 2);
+assign vga_hs_n = (hc>=16'd100 && hc<=16'd200);
 assign vga_bl = 1'b0;
 
 (*keep*) wire my_h_de = (hc>=300) && (hc<=4680);
