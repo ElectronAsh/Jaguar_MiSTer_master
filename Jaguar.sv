@@ -157,7 +157,6 @@ pll_jag pll_jag_inst
 (*keep*)wire clk_sys = clk_52m;
 
 
-
 wire [1:0] scale = status[3:2];
 
 `include "build_id.v"

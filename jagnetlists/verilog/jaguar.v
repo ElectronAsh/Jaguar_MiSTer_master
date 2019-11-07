@@ -89,6 +89,7 @@ wire xvclk = !clkdiv[0];
 
 wire tlw = clkdiv[0];
 
+
 reg fx68k_enPhi1;
 reg fx68k_enPhi2;
 
@@ -96,8 +97,8 @@ reg [1:0] clkdiv;
 always @(posedge sys_clk) begin
 	clkdiv <= clkdiv + 1;
 	
-	fx68k_enPhi1 <= 0;
-	fx68k_enPhi2 <= 0;
+	fx68k_enPhi1 <= 1'b0;
+	fx68k_enPhi2 <= 1'b0;
 	
 	if (clkdiv==0) begin
 		//fx68k_enPhi1 <= 1'b1;

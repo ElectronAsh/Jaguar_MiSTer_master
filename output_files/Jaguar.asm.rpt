@@ -1,5 +1,5 @@
 Assembler report for Jaguar
-Thu Nov 07 06:19:04 2019
+Thu Nov 07 08:20:53 2019
 Quartus Prime Version 17.0.0 Build 595 04/25/2017 SJ Standard Edition
 
 
@@ -40,7 +40,7 @@ agreement for further details.
 +---------------------------------------------------------------+
 ; Assembler Summary                                             ;
 +-----------------------+---------------------------------------+
-; Assembler Status      ; Successful - Thu Nov 07 06:19:04 2019 ;
+; Assembler Status      ; Successful - Thu Nov 07 08:20:53 2019 ;
 ; Revision Name         ; Jaguar                                ;
 ; Top-level Entity Name ; sys_top                               ;
 ; Family                ; Cyclone V                             ;
@@ -80,8 +80,8 @@ agreement for further details.
 +----------------+------------------------------------------------------------------------------+
 ; Option         ; Setting                                                                      ;
 +----------------+------------------------------------------------------------------------------+
-; JTAG usercode  ; 0x09E55CDA                                                                   ;
-; Checksum       ; 0x09E55CDA                                                                   ;
+; JTAG usercode  ; 0x09ED1474                                                                   ;
+; Checksum       ; 0x09ED1474                                                                   ;
 +----------------+------------------------------------------------------------------------------+
 
 
@@ -101,13 +101,13 @@ agreement for further details.
 Info: *******************************************************************
 Info: Running Quartus Prime Assembler
     Info: Version 17.0.0 Build 595 04/25/2017 SJ Standard Edition
-    Info: Processing started: Thu Nov 07 06:18:36 2019
+    Info: Processing started: Thu Nov 07 08:20:26 2019
 Info: Command: quartus_asm --read_settings_files=off --write_settings_files=off Jaguar -c Jaguar
 Info (115030): Assembler is generating device programming files
 Info: Quartus Prime Assembler was successful. 0 errors, 0 warnings
     Info: Peak virtual memory: 5214 megabytes
-    Info: Processing ended: Thu Nov 07 06:19:05 2019
-    Info: Elapsed time: 00:00:29
+    Info: Processing ended: Thu Nov 07 08:20:54 2019
+    Info: Elapsed time: 00:00:28
     Info: Total CPU time (on all processors): 00:00:28
 
 
