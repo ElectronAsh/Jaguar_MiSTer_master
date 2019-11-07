@@ -377,7 +377,7 @@ jaguar jaguar_inst
 	.dram_oe( dram_oe ) ,		// input [0:3] dram_oe
 	
 	.ram_rdy( ram_rdy ) ,		// input  ram_rdy
-	
+/*
 	.DBG_CPU_RDEN( DBG_CPU_RDEN ) ,	// output  DBG_CPU_RDEN
 	.DBG_CPU_WREN( DBG_CPU_WREN ) ,	// output  DBG_CPU_WREN
 	.DBG_CPU_DTACK( DBG_CPU_DTACK ) ,// output  DBG_CPU_DTACK
@@ -394,7 +394,7 @@ jaguar jaguar_inst
 	.DBG_SSP_REG( DBG_SSP_REG ) ,		// output [31:0] DBG_SSP_REG
 	.DBG_CYCLES( DBG_CYCLES ) ,		// output [31:0] DBG_CYCLES
 	.DBG_IFETCH( DBG_IFETCH ) ,		// output  DBG_IFETCH
-	
+*/
 	.os_rom_a( os_rom_a ) ,		// output [16:0] os_rom_a
 	.os_rom_ce_n( os_rom_ce_n ) ,	// output  os_rom_ce_n
 	.os_rom_oe_n( os_rom_oe_n ) ,	// output  os_rom_oe_n
@@ -427,22 +427,22 @@ jaguar jaguar_inst
 );
 /* verilator lint_on PINMISSING */
 
-wire DBG_CPU_RDEN/*synthesis keep*/;
-wire DBG_CPU_WREN/*synthesis keep*/;
-wire DBG_CPU_DTACK/*synthesis keep*/;
-wire [1:0] DBG_CPU_BENA/*synthesis keep*/;
-wire [31:0] DBG_CPU_ADDR/*synthesis keep*/;
-wire [15:0] DBG_CPU_RDATA/*synthesis keep*/;
-wire [15:0] DBG_CPU_WDATA/*synthesis keep*/;
-wire [3:0] DBG_REG_ADDR/*synthesis keep*/;
-wire [3:0] DBG_REG_WREN/*synthesis keep*/;
-wire [15:0] DBG_REG_DATA/*synthesis keep*/;
-wire [15:0] DBG_SR_REG/*synthesis keep*/;
-wire [31:0] DBG_PC_REG/*synthesis keep*/;
-wire [31:0] DBG_USP_REG/*synthesis keep*/;
-wire [31:0] DBG_SSP_REG/*synthesis keep*/;
-wire [31:0] DBG_CYCLES/*synthesis keep*/;
-wire DBG_IFETCH/*synthesis keep*/;
+//wire DBG_CPU_RDEN/*synthesis keep*/;
+//wire DBG_CPU_WREN/*synthesis keep*/;
+//wire DBG_CPU_DTACK/*synthesis keep*/;
+//wire [1:0] DBG_CPU_BENA/*synthesis keep*/;
+//wire [31:0] DBG_CPU_ADDR/*synthesis keep*/;
+//wire [15:0] DBG_CPU_RDATA/*synthesis keep*/;
+//wire [15:0] DBG_CPU_WDATA/*synthesis keep*/;
+//wire [3:0] DBG_REG_ADDR/*synthesis keep*/;
+//wire [3:0] DBG_REG_WREN/*synthesis keep*/;
+//wire [15:0] DBG_REG_DATA/*synthesis keep*/;
+//wire [15:0] DBG_SR_REG/*synthesis keep*/;
+//wire [31:0] DBG_PC_REG/*synthesis keep*/;
+//wire [31:0] DBG_USP_REG/*synthesis keep*/;
+//wire [31:0] DBG_SSP_REG/*synthesis keep*/;
+//wire [31:0] DBG_CYCLES/*synthesis keep*/;
+//wire DBG_IFETCH/*synthesis keep*/;
 
 wire fdram;
 
